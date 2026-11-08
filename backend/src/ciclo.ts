@@ -42,7 +42,7 @@ export function exigirPaso(rol: Fila, accion: AccionCiclo): void {
  * garantía: si dos personas publican a la vez, solo una lo logra y la otra recibe 409.
  */
 export async function darPaso(
-  db: Base, cuentaId: number, usuarioId: number, rolId: number, accion: AccionCiclo, detalle?: unknown,
+  db: Base, cuentaId: number, usuarioId: number | null, rolId: number, accion: AccionCiclo, detalle?: unknown,
 ): Promise<void> {
   const t = TRANSICIONES[accion];
   await transaccion(db, async (tx) => {
