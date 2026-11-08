@@ -3,7 +3,7 @@ import { consultar, ejecutar, esDuplicado, filaACamel, insertar, uno } from "./d
 import type { Base, Fila } from "./db.ts";
 import { buscarGrado } from "./escala.ts";
 import type { Grado } from "./escala.ts";
-import { ErrorApi } from "./validaciones.ts";
+import { ErrorApi, esId } from "./validaciones.ts";
 
 export interface Puesto {
   id: number;
@@ -47,6 +47,7 @@ export async function listarPuestos(db: Base): Promise<Puesto[]> {
 }
 
 export async function buscarPuesto(db: Base, id: number): Promise<Puesto | undefined> {
+  if (!esId(id)) return undefined; // el id viene del cuerpo de una petición: puede ser NaN o enorme
   const fila = await uno(db, "SELECT * FROM puestos WHERE id = ?", id);
   return fila ? aPuesto(db, fila) : undefined;
 }
@@ -158,7 +159,10 @@ export async function asignarResponsable(db: Base, id: number, empleadoId: unkno
   if (empleadoId === null || empleadoId === undefined || empleadoId === "") {
     await ejecutar(db, "UPDATE puestos SET responsable_id = NULL WHERE id = ?", id);
   } else {
-    const empleado = await uno(db, "SELECT id, nombres, activo, puesto_id FROM empleados WHERE id = ?", Number(empleadoId));
+    const idEmpleado = Number(empleadoId);
+    const empleado = esId(idEmpleado)
+      ? await uno(db, "SELECT id, nombres, activo, puesto_id FROM empleados WHERE id = ?", idEmpleado)
+      : undefined;
     if (!empleado) throw new ErrorApi(400, ["El empleado no existe."]);
     if (empleado.puesto_id !== id || empleado.activo !== 1) {
       throw new ErrorApi(400, [`${empleado.nombres} no puede ser responsable: debe ser un empleado activo que ocupe este puesto.`]);
