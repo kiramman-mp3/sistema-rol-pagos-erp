@@ -26,7 +26,7 @@ describe("migración 011: dinero, tasas y horas pasan a NUMERIC", () => {
     await cargarEmpleadosDemo(db);
     await generarRolesDemo(db);
     antes = await instantanea(db);
-    await migrar(db);
+    await migrar(db, 11); // solo esta migración: las posteriores pueden cambiar datos a propósito
   });
   after(() => db.cerrar());
 
@@ -80,7 +80,7 @@ describe("migración 011: dinero, tasas y horas pasan a NUMERIC", () => {
 
   it("migrar otra vez no hace nada", async () => {
     const antesDeRepetir = await instantanea(db);
-    await migrar(db);
+    await migrar(db, 11);
     assert.deepEqual(await instantanea(db), antesDeRepetir);
   });
 });
