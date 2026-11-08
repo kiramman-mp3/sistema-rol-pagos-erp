@@ -1,5 +1,7 @@
 import { Routes } from '@angular/router';
 
+import { sesionActiva } from './core/sesion';
+
 export const routes: Routes = [
   {
     path: '',
@@ -12,7 +14,13 @@ export const routes: Routes = [
     loadComponent: () => import('./informacion/informacion').then((m) => m.Informacion),
   },
   {
+    path: 'entrar',
+    title: 'Ingresar | Rol de pagos Ecuador',
+    loadComponent: () => import('./entrar/entrar').then((m) => m.Entrar),
+  },
+  {
     path: 'sistema',
+    canActivate: [sesionActiva],
     loadComponent: () => import('./sistema/shell').then((m) => m.Shell),
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'inicio' },

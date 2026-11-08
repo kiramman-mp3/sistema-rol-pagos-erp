@@ -1,8 +1,9 @@
 import { Component, inject } from '@angular/core';
-import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 
 import { Avisos } from '../core/avisos';
 import { ParametrosLey } from '../core/api';
+import { Sesion } from '../core/sesion';
 
 /** Barra superior, navegación y avisos de todas las pantallas del sistema. */
 @Component({
@@ -25,6 +26,9 @@ import { ParametrosLey } from '../core/api';
         <span class="empresa">
           <strong>{{ parametros()?.empresa?.nombre }}</strong>
           <a routerLink="/informacion">Información</a>
+          @if (sesion.protegida()) {
+            <button type="button" class="boton-texto salir" (click)="salir()">Salir</button>
+          }
         </span>
       </div>
     </header>
@@ -40,4 +44,10 @@ import { ParametrosLey } from '../core/api';
 export class Shell {
   protected readonly avisos = inject(Avisos);
   protected readonly parametros = inject(ParametrosLey).valor;
+  protected readonly sesion = inject(Sesion);
+  private readonly router = inject(Router);
+
+  protected salir() {
+    this.sesion.salir().subscribe(() => void this.router.navigateByUrl('/entrar'));
+  }
 }
