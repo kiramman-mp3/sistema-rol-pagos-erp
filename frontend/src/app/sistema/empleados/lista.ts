@@ -94,6 +94,7 @@ import type { Empleado } from '../../core/modelos';
                   <span class="estado" [class.estado-activo]="e.activo" [class.estado-inactivo]="!e.activo">
                     {{ e.activo ? 'Activo' : 'Inactivo' }}
                   </span>
+                  @if (e.fechaSalida) { <span class="secundario">Salida: {{ fecha(e.fechaSalida) }}</span> }
                 </td>
                 <td class="num">
                   @if (porEliminar() === e.id) {
