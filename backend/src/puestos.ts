@@ -1,7 +1,7 @@
 /** Orgánico funcional: puestos con su función, responsabilidad, sector y referencia salarial. */
 import { consultar, ejecutar, esDuplicado, filaACamel, insertar, uno } from "./db.ts";
 import type { Base, Fila } from "./db.ts";
-import { buscarGrado } from "./escala.ts";
+import { buscarGrado, listarEscala } from "./escala.ts";
 import type { Grado } from "./escala.ts";
 import { ErrorApi, esId } from "./validaciones.ts";
 
@@ -28,28 +28,54 @@ export interface Persona {
   nombres: string;
 }
 
-const aPuesto = async (db: Base, f: Fila): Promise<Puesto> => {
-  const { responsableId, ...base } = filaACamel(f) as unknown as Puesto & { responsableId: number | null };
-  const ocupantes = (await consultar(
-    db, "SELECT id, nombres FROM empleados WHERE puesto_id = ? AND activo = 1 ORDER BY nombres", f.id,
-  )).map((o) => ({ id: Number(o.id), nombres: String(o.nombres) }));
-  return {
-    ...base,
-    referencia: base.escalaId === null ? null : ((await buscarGrado(db, base.escalaId)) ?? null),
-    empleados: Number((await uno(db, "SELECT COUNT(*) AS n FROM empleados WHERE puesto_id = ?", f.id))?.n ?? 0),
-    responsable: ocupantes.find((o) => o.id === responsableId) ?? null,
-    ocupantes,
-  };
-};
+const aPersona = (f: Fila): Persona => ({ id: Number(f.id), nombres: String(f.nombres) });
 
+/** Arma el puesto con lo que ya se consultó: sus ocupantes activos, cuántos empleados lo ocupan y su grado. */
+function armarPuesto(f: Fila, ocupantes: Persona[], empleados: number, referencia: Grado | null): Puesto {
+  const { responsableId, ...base } = filaACamel(f) as unknown as Puesto & { responsableId: number | null };
+  return { ...base, referencia, empleados, responsable: ocupantes.find((o) => o.id === responsableId) ?? null, ocupantes };
+}
+
+/** Todos los puestos con cuatro consultas, sin importar cuántos haya (no una o tres por puesto). */
 export async function listarPuestos(db: Base): Promise<Puesto[]> {
-  return Promise.all((await consultar(db, "SELECT * FROM puestos ORDER BY id")).map((f) => aPuesto(db, f)));
+  const filas = await consultar(db, "SELECT * FROM puestos ORDER BY id");
+  const ocupantes = new Map<number, Persona[]>();
+  for (const o of await consultar(
+    db, "SELECT id, nombres, puesto_id FROM empleados WHERE puesto_id IS NOT NULL AND activo = 1 ORDER BY nombres",
+  )) {
+    const puestoId = Number(o.puesto_id);
+    ocupantes.set(puestoId, [...(ocupantes.get(puestoId) ?? []), aPersona(o)]);
+  }
+  const totales = new Map(
+    (await consultar(db, "SELECT puesto_id, COUNT(*) AS n FROM empleados WHERE puesto_id IS NOT NULL GROUP BY puesto_id"))
+      .map((t) => [Number(t.puesto_id), Number(t.n)]),
+  );
+  const grados = new Map((await listarEscala(db)).map((g) => [g.id, g]));
+  return filas.map((f) => armarPuesto(
+    f, ocupantes.get(Number(f.id)) ?? [], totales.get(Number(f.id)) ?? 0,
+    f.escala_id === null ? null : (grados.get(Number(f.escala_id)) ?? null),
+  ));
 }
 
 export async function buscarPuesto(db: Base, id: number): Promise<Puesto | undefined> {
   if (!esId(id)) return undefined; // el id viene del cuerpo de una petición: puede ser NaN o enorme
   const fila = await uno(db, "SELECT * FROM puestos WHERE id = ?", id);
-  return fila ? aPuesto(db, fila) : undefined;
+  if (!fila) return undefined;
+  const ocupantes = (await consultar(
+    db, "SELECT id, nombres FROM empleados WHERE puesto_id = ? AND activo = 1 ORDER BY nombres", id,
+  )).map(aPersona);
+  const empleados = Number((await uno(db, "SELECT COUNT(*) AS n FROM empleados WHERE puesto_id = ?", id))?.n ?? 0);
+  const referencia = fila.escala_id === null ? null : ((await buscarGrado(db, Number(fila.escala_id))) ?? null);
+  return armarPuesto(fila, ocupantes, empleados, referencia);
+}
+
+/** ¿Algún puesto del orgánico tiene como referencia un grado de la escala de este régimen? */
+export async function hayPuestosDelRegimen(db: Base, regimen: string): Promise<boolean> {
+  return (await uno(
+    db,
+    "SELECT 1 AS ok FROM puestos p JOIN escala_salarial e ON e.id = p.escala_id WHERE e.regimen = ? LIMIT 1",
+    regimen,
+  )) !== undefined;
 }
 
 interface DatosPuesto {
