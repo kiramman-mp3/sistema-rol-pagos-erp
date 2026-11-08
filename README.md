@@ -61,6 +61,8 @@ Para el área de talento humano o contabilidad de una empresa pequeña o mediana
 *   **Dinero exacto:** todo se calcula con `decimal.js`, se redondea a centavos en cada rubro y se guarda en columnas `NUMERIC`, sin errores de coma flotante.
 *   **Conciliación con el IESS:** materia gravada, aportes personal y patronal y fondos de reserva por empleado, descargables en CSV.
 *   **Boleta y CSV:** boleta individual imprimible en una hoja y exportación del rol para Excel.
+*   **Ciclo del rol:** cada rol pasa por calculado, validado, aprobado, publicado y pagado. Un rol publicado es inmutable: no se recalcula, no se edita y no se elimina, y la base también lo impide.
+*   **Auditoría:** cada paso del rol (quién, qué y cuándo) queda en un registro que solo admite inserciones.
 *   **Cédula validada:** dígito verificador (módulo 10) y provincia.
 *   **Una cuenta por empresa:** la empresa se registra con su RUC (validado con su dígito verificador) y un correo. Sus empleados, roles, novedades, orgánico, escala y reglas de ley son solo de su cuenta: ninguna otra empresa los ve ni los toca.
 *   **Reglas propias, con plantilla de partida:** cada cuenta nueva recibe una copia de los regímenes, los parámetros anuales, la escala y el orgánico de ejemplo. Los edita sin afectar a las demás, y la página de inicio pública usa la plantilla.
@@ -96,9 +98,11 @@ graph TD
     Rutas --> Motor["calculos.ts · motor de cálculo (funciones puras)"]
     Rutas --> Reglas["regimenes.ts · parametros.ts · escala.ts · puestos.ts · cuentas.ts"]
     Rutas --> IESS["iess.ts · conciliación"]
+    Rutas --> Ciclo["ciclo.ts · estados, validación · auditoria.ts · registro"]
 
     Reglas --> DB["db.ts · consultas, transacciones y migraciones"]
     Rutas --> DB
+    Ciclo --> DB
     DB -->|DATABASE_URL| Supabase[("PostgreSQL · Supabase")]
     DB -->|sin DATABASE_URL, y en pruebas| PGlite[("PGlite · en memoria o en backend/data")]
 ```
@@ -117,6 +121,8 @@ rol-pagos-ecuador/
 │   │   ├── escala.ts          # Escala salarial
 │   │   ├── puestos.ts         # Orgánico funcional
 │   │   ├── iess.ts            # Cuadro de conciliación con el IESS
+│   │   ├── ciclo.ts           # Ciclo del rol: estados, pasos y revisión de errores bloqueantes
+│   │   ├── auditoria.ts       # Registro de auditoría (solo inserciones)
 │   │   ├── demo.ts            # Empleados y roles de ejemplo (los usa el seed)
 │   │   ├── db.ts              # PostgreSQL sin ORM (pg, o PGlite) y ejecutor de migraciones
 │   │   ├── auth.ts            # Contraseña (scrypt), sesión firmada con la cuenta y límite de intentos
@@ -124,7 +130,7 @@ rol-pagos-ecuador/
 │   │   ├── seed.ts            # Script: crea una cuenta de ejemplo y la llena
 │   │   ├── usuario.ts         # Script: lista las cuentas y agrega usuarios a una cuenta
 │   │   ├── rutas/             # auth, cuenta, empleados, roles, parámetros, regímenes, escala y puestos
-│   │   ├── migraciones/       # Esquema versionado: 001 a 013 (SQL numerado)
+│   │   ├── migraciones/       # Esquema versionado: 001 a 014 (SQL numerado)
 │   │   ├── validaciones.ts    # Cédula, RUC, correo, números y fechas
 │   │   ├── server.ts          # Arranque local
 │   │   └── vercel.ts          # Entrada del backend en Vercel
@@ -250,8 +256,8 @@ El backend no arranca en Vercel sin `DATABASE_URL` y `SESION_SECRETO`. Las empre
 4. **Parámetros (`/sistema/parametros`)**: tres pestañas. *Año*: SBU y tabla del impuesto a la renta, con la opción de agregar un año nuevo copiando otro. *Regímenes laborales*: aportes, recargos, topes, vacaciones y beneficios de cada uno. *Escala salarial*: los grados de cada régimen.
 5. **Empleados**: alta con cédula validada (módulo 10), régimen, grado de la escala, beneficios, horas extras y fecha de salida opcional. Un clic carga seis empleados de ejemplo que cubren los tres regímenes.
 6. **Roles de pago**: se elige el mes en un calendario de doce meses que muestra cuál ya tiene rol y se digitan las novedades (horas suplementarias, extraordinarias, de sábado, domingo o feriado, y nocturnas; comisiones; anticipos). Quien no recibe horas extras tiene esas columnas deshabilitadas.
-7. **Generar**: el backend calcula a cada empleado activo con las reglas de su régimen y guarda una foto en `roles_detalle`. Avisa, sin bloquear, si alguien pasa el tope mensual de horas.
-8. **Rol**: dos ecuaciones (`ingresos − descuentos = neto` e `ingresos + provisiones = costo empleador`), la planilla por empleado, el costo empleador aparte y la **conciliación con el IESS**.
+7. **Generar**: el backend calcula a cada empleado activo con las reglas de su régimen y guarda una foto en `roles_detalle`. Avisa, sin bloquear, si alguien pasa el tope mensual de horas. El rol nace «calculado».
+8. **Rol**: dos ecuaciones (`ingresos − descuentos = neto` e `ingresos + provisiones = costo empleador`), la planilla por empleado, el costo empleador aparte y la **conciliación con el IESS**. Arriba, el **ciclo del rol**: un botón con el paso que sigue (validar, aprobar, publicar, marcar como pagado) y el historial de quién lo hizo.
 9. **Boleta individual** imprimible en una hoja, y **descarga en CSV** del rol y de los aportes al IESS.
 
 ---
@@ -293,11 +299,16 @@ El backend no arranca en Vercel sin `DATABASE_URL` y `SESION_SECRETO`. Las empre
 | `POST /api/empleados/demo` | Carga los 12 empleados de ejemplo en la cuenta (sin roles de pago) |
 | `GET /api/roles` | Historial de roles |
 | `GET /api/roles/periodo/:anio/:mes` | Empleados del mes, su régimen y las novedades ya digitadas |
-| `POST /api/roles/generar` | Calcula y guarda el rol (reemplaza el del mes) y devuelve los avisos |
+| `POST /api/roles/generar` | Calcula y guarda el rol en estado «calculado» (reemplaza el del mes) y devuelve los avisos. Si el del mes está publicado o pagado: `409` |
 | `GET /api/roles/:id` | Rol con su detalle por empleado |
 | `GET /api/roles/:id/csv` | Exportación para Excel |
 | `GET /api/roles/:id/iess`, `GET /api/roles/:id/iess.csv` | Aportes por empleado para conciliar con el IESS |
-| `DELETE /api/roles/:id` | Elimina el rol |
+| `POST /api/roles/:id/validar` | Revisa el rol. Responde `{ valido, estado, errores, avisos }`: sin errores pasa a «validado»; con errores no avanza (y uno validado vuelve a «calculado») |
+| `POST /api/roles/:id/aprobar` | «validado» a «aprobado» |
+| `POST /api/roles/:id/publicar` | «aprobado» a «publicado». Vuelve a revisar el rol y, si hay errores bloqueantes, responde `409` con ellos |
+| `POST /api/roles/:id/pagar` | «publicado» a «pagado» |
+| `GET /api/roles/:id/historial` | Pasos del rol en la auditoría: acción, usuario, detalle y fecha |
+| `DELETE /api/roles/:id` | Elimina el rol, salvo que esté publicado o pagado (`409`) |
 
 Toda la API exige sesión, salvo `GET /api/parametros`, `POST /api/simulacion` y `/api/auth/*`, que usa la página de inicio; sin sesión responde `401`. Con sesión, **todo** se filtra por la cuenta: lo de otra empresa responde `404`, igual que si no existiera. Los registros desde una misma IP están limitados a cinco cada 15 minutos (`429`). Tras cinco contraseñas incorrectas desde una misma IP, el inicio de sesión responde `429` durante 15 minutos. Los identificadores de la ruta (`/empleados/:id`) deben ser enteros positivos: si no, `400`.
 
@@ -392,6 +403,30 @@ Cada empresa es una **cuenta** (`cuentas`: nombre y RUC) con sus **usuarios** (`
 
 ---
 
+## 🔄 Ciclo del Rol
+
+```text
+calculado --validar--> validado --aprobar--> aprobado --publicar--> publicado --pagar--> pagado
+```
+
+| Paso | Qué exige | Qué pasa |
+|---|---|---|
+| Generar | Nada | El rol nace «calculado». Recalcularlo lo reemplaza y lo deja otra vez «calculado», sin aprobación |
+| Validar | «calculado» o «validado» | Revisa el rol con los datos de hoy. Pasa a «validado» solo si no hay errores bloqueantes |
+| Aprobar | «validado» | Registra la aprobación |
+| Publicar | «aprobado» y sin errores bloqueantes | Vuelve a revisar el rol, porque los datos pudieron cambiar desde que se validó. Desde aquí el rol es inmutable |
+| Pagar | «publicado» | Registra que los pagos se ejecutaron |
+
+**Errores bloqueantes:** el rol no tiene empleados; los parámetros de ley del año no existen y se usaron los de otro; alguien que debería estar en el período no está en el rol; un neto es negativo; la cabecera no cuadra con la suma del detalle. **Avisos** (no bloquean): un neto de $0 o ingresos mayores al doble del sueldo base.
+
+**Inmutabilidad.** La API responde `409` si se intenta recalcular o eliminar un rol publicado o pagado, y la migración 014 lo refuerza en la base con disparadores: un rol publicado solo admite pasar a «pagado», y su detalle no se modifica. Cada paso es un `UPDATE` condicionado al estado anterior, así que si dos personas publican a la vez, solo una lo logra y la otra recibe `409`.
+
+**Auditoría.** `audit_logs` guarda la cuenta, el usuario (con su correo), la acción, el rol y un detalle en JSON. Un disparador impide modificar o borrar sus filas. Los roles del seed quedan registrados como hechos por «sistema».
+
+**Roles que ya existían.** La migración 014 los deja en «calculado»: siguen siendo editables hasta que se validen, aprueben y publiquen.
+
+---
+
 ## 🗄️ Migraciones
 
 El esquema vive en `backend/src/migraciones/NNN_nombre.sql`. Las aplicadas quedan en la tabla `esquema_migraciones`, así que abrir la misma base dos veces no repite nada; cada una corre en una transacción con un candado, para que dos instancias que arrancan a la vez no la apliquen dos veces. Para cambiar el esquema se agrega el siguiente archivo numerado; no se edita uno ya aplicado.
@@ -411,6 +446,7 @@ El esquema vive en `backend/src/migraciones/NNN_nombre.sql`. Las aplicadas queda
 | 011 | Dinero, tasas y horas en columnas `NUMERIC` (decimal exacto) en lugar de coma flotante |
 | 012 | Notas del régimen LOSEP: aporte IESS confirmado, recargo nocturno por confirmar |
 | 013 | Cuentas y usuarios; `cuenta_id` en empleados, roles, regímenes, parámetros, escala y puestos; los únicos (cédula, nombre del puesto, grado, mes del rol) pasan a ser por cuenta; la función `copiar_plantilla` |
+| 014 | Estado del rol (`calculado` a `pagado`) con sus fechas; tabla `audit_logs` de solo inserción; disparadores que protegen los roles publicados |
 
 Los roles ya generados guardan una foto del régimen, de las tasas y de la modalidad con que se calcularon: si luego se editan las reglas, el historial no cambia.
 
@@ -438,7 +474,9 @@ Verifica todas las cifras con la norma y con el IESS antes de usar el sistema en
 
 ### Simplificaciones declaradas
 
-- Un usuario por cuenta, sin roles ni invitaciones. El límite de intentos de contraseña y de registros vive en memoria: en Vercel cada instancia lleva su propia cuenta, así que frena el abuso pero no lo impide.
+- Un usuario por cuenta, sin roles ni invitaciones: la misma persona valida, aprueba, publica y marca el pago, sin separación de funciones. Cada paso queda registrado con su correo.
+- Un rol publicado no tiene reliquidación: si hay un error, ese mes no se puede corregir ni con un ajuste vinculado (el sistema solo guarda un rol por mes).
+- El límite de intentos de contraseña y de registros vive en memoria: en Vercel cada instancia lleva su propia cuenta, así que frena el abuso pero no lo impide.
 - No hay recuperación de contraseña ni verificación del correo: el sistema no envía correos. Quien pierde la contraseña no puede recuperar la cuenta sin acceso a la base (`usuario` agrega un usuario nuevo, pero no cambia la contraseña de uno existente).
 - El RUC se valida por su forma y su dígito verificador, no contra el SRI: cualquiera puede registrar un RUC que no es suyo.
 - Las sesiones no se guardan en el servidor: una sesión firmada vale hasta que vence (8 horas) o se cambia `SESION_SECRETO`; no hay forma de cerrarla desde otro lado.
@@ -464,7 +502,9 @@ Verifica todas las cifras con la norma y con el IESS antes de usar el sistema en
 - [x] Cuentas por empresa: registro, inicio de sesión con correo y datos aislados por cuenta.
 - [x] Fecha de salida del empleado y roles de meses pasados que respetan quién estaba en nómina.
 - [x] Dinero exacto también en la base de datos (`NUMERIC`).
-- [ ] Varios usuarios por empresa, con roles.
+- [x] Ciclo del rol (calculado, validado, aprobado, publicado, pagado), roles publicados inmutables y auditoría de cada paso.
+- [ ] Varios usuarios por empresa, con roles y permisos (aprobar y publicar solo con permiso especial).
+- [ ] Reliquidación de un rol publicado con un ajuste vinculado al original.
 - [ ] Recuperar la contraseña y verificar el correo.
 - [ ] Eliminar o exportar una cuenta completa.
 - [ ] Gastos personales deducibles y rebajas del impuesto a la renta.
@@ -479,7 +519,7 @@ Lista de contribuidores que han aportado commits al desarrollo de este repositor
 
 | Nombre | Commits |
 | :--- | :--- |
-| **kiramman-mp3** | 194 |
+| **kiramman-mp3** | 202 |
 
 ---
 
