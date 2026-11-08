@@ -4,7 +4,9 @@ import { join } from "node:path";
 import express from "express";
 import type { ErrorRequestHandler } from "express";
 
+import type { ConfigAuth } from "./auth.ts";
 import type { Base } from "./db.ts";
+import { exigirSesion, rutasAuth } from "./rutas/auth.ts";
 import { rutasEmpleados } from "./rutas/empleados.ts";
 import { rutasEscala } from "./rutas/escala.ts";
 import { rutasParametros } from "./rutas/parametros.ts";
@@ -16,12 +18,32 @@ import { ErrorApi } from "./validaciones.ts";
 interface Opciones {
   /** Carpeta con el build de Angular; si existe, se sirve desde aquí. */
   carpetaFrontend?: string;
+  /** Con esto, toda la API (salvo la simulación y los parámetros públicos) exige iniciar sesión. */
+  auth?: ConfigAuth | null;
+  /** Detrás de un proxy (Vercel): la IP y el https del cliente vienen en las cabeceras X-Forwarded-*. */
+  confiarEnProxy?: boolean;
 }
 
-export function crearApp(db: Base, { carpetaFrontend }: Opciones = {}) {
+export function crearApp(db: Base, { carpetaFrontend, auth = null, confiarEnProxy = false }: Opciones = {}) {
   const app = express();
   app.disable("x-powered-by");
+  if (confiarEnProxy) app.set("trust proxy", 1);
+  app.use((_req, res, next) => {
+    res.set({
+      "X-Content-Type-Options": "nosniff",
+      "X-Frame-Options": "DENY",
+      "Referrer-Policy": "same-origin",
+    });
+    next();
+  });
+  app.use("/api", (_req, res, next) => {
+    res.set("Cache-Control", "no-store");
+    next();
+  });
   app.use(express.json({ limit: "100kb" }));
+
+  app.use("/api/auth", rutasAuth(auth));
+  if (auth) app.use("/api", exigirSesion(auth));
 
   app.use("/api/empleados", rutasEmpleados(db));
   app.use("/api/roles", rutasRoles(db));
