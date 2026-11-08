@@ -2,7 +2,7 @@
 import { consultar, ejecutar, esDuplicado, filaACamel, insertar, uno } from "./db.ts";
 import type { Base, Fila } from "./db.ts";
 import { buscarRegimen } from "./regimenes.ts";
-import { aDecimal, ErrorApi } from "./validaciones.ts";
+import { aDecimal, ErrorApi, esId } from "./validaciones.ts";
 
 export interface Grado {
   id: number;
@@ -27,6 +27,7 @@ export async function listarEscala(db: Base, regimen?: string): Promise<Grado[]>
 }
 
 export async function buscarGrado(db: Base, id: number): Promise<Grado | undefined> {
+  if (!esId(id)) return undefined; // el id viene del cuerpo de una petición: puede ser NaN o enorme
   const fila = await uno(db, "SELECT * FROM escala_salarial WHERE id = ?", id);
   return fila ? aGrado(fila) : undefined;
 }

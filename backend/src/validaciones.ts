@@ -13,6 +13,20 @@ export class ErrorApi extends Error {
   }
 }
 
+/** El mayor `id` que cabe en una columna INTEGER de Postgres. */
+const ID_MAXIMO = 2_147_483_647;
+
+/** ¿Es un número que puede ser el `id` de una fila? */
+export const esId = (valor: unknown): valor is number =>
+  typeof valor === "number" && Number.isInteger(valor) && valor > 0 && valor <= ID_MAXIMO;
+
+/** El `id` de una ruta (`/empleados/:id`): un entero positivo, o un 400. Evita que `abc` llegue a la base como NaN. */
+export function leerId(texto: string): number {
+  const id = /^\d{1,10}$/.test(texto) ? Number(texto) : NaN;
+  if (!esId(id)) throw new ErrorApi(400, ["Identificador inválido."]);
+  return id;
+}
+
 /** Algoritmo módulo 10 del Registro Civil (personas naturales). */
 export function cedulaValida(cedula: string): boolean {
   if (!/^\d{10}$/.test(cedula)) return false;

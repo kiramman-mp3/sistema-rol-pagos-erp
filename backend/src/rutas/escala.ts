@@ -2,7 +2,7 @@ import { Router } from "express";
 
 import { actualizarGrado, buscarGrado, crearGrado, eliminarGrado, listarEscala } from "../escala.ts";
 import type { Base } from "../db.ts";
-import { ErrorApi } from "../validaciones.ts";
+import { ErrorApi, leerId } from "../validaciones.ts";
 
 export function rutasEscala(db: Base): Router {
   const router = Router();
@@ -14,7 +14,7 @@ export function rutasEscala(db: Base): Router {
   });
 
   router.get("/:id", async (req, res) => {
-    const grado = await buscarGrado(db, Number(req.params.id));
+    const grado = await buscarGrado(db, leerId(req.params.id));
     if (!grado) throw new ErrorApi(404, ["El grado no existe."]);
     res.json(grado);
   });
@@ -24,11 +24,11 @@ export function rutasEscala(db: Base): Router {
   });
 
   router.put("/:id", async (req, res) => {
-    res.json(await actualizarGrado(db, Number(req.params.id), req.body ?? {}));
+    res.json(await actualizarGrado(db, leerId(req.params.id), req.body ?? {}));
   });
 
   router.delete("/:id", async (req, res) => {
-    await eliminarGrado(db, Number(req.params.id));
+    await eliminarGrado(db, leerId(req.params.id));
     res.status(204).end();
   });
 
