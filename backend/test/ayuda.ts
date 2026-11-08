@@ -1,6 +1,7 @@
 import type { AddressInfo } from "node:net";
 
 import { crearApp } from "../src/app.ts";
+import type { ConfigAuth } from "../src/auth.ts";
 import { abrirBase } from "../src/db.ts";
 
 export interface Cliente {
@@ -9,6 +10,8 @@ export interface Cliente {
   put: (ruta: string, cuerpo?: unknown) => Promise<Respuesta>;
   patch: (ruta: string, cuerpo?: unknown) => Promise<Respuesta>;
   del: (ruta: string) => Promise<Respuesta>;
+  /** Desde aquí, todas las peticiones llevan esta cookie (`null` la quita). */
+  usarCookie: (cookie: string | null) => void;
   cerrar: () => Promise<void>;
 }
 
@@ -18,21 +21,29 @@ export interface Respuesta {
   json: any;
   texto: string;
   tipo: string;
+  /** cabeceras de la respuesta */
+  cabeceras: Headers;
+  /** `nombre=valor` de la cookie que puso la respuesta, sin atributos */
+  cookie: string | null;
 }
 
 /** Levanta la API en un puerto libre con una base Postgres en memoria (PGlite), para una prueba. */
-export async function iniciar(): Promise<Cliente> {
+export async function iniciar(opciones: { auth?: ConfigAuth } = {}): Promise<Cliente> {
   const db = await abrirBase(":memory:");
-  const app = crearApp(db);
+  const app = crearApp(db, { auth: opciones.auth ?? null });
   const servidor = await new Promise<ReturnType<typeof app.listen>>((resolver) => {
     const s = app.listen(0, () => resolver(s));
   });
   const base = `http://127.0.0.1:${(servidor.address() as AddressInfo).port}`;
 
+  let cookieActual: string | null = null;
   const pedir = async (metodo: string, ruta: string, cuerpo?: unknown): Promise<Respuesta> => {
     const r = await fetch(base + ruta, {
       method: metodo,
-      headers: cuerpo === undefined ? {} : { "Content-Type": "application/json" },
+      headers: {
+        ...(cuerpo === undefined ? {} : { "Content-Type": "application/json" }),
+        ...(cookieActual ? { Cookie: cookieActual } : {}),
+      },
       body: cuerpo === undefined ? undefined : JSON.stringify(cuerpo),
     });
     const texto = await r.text();
@@ -42,7 +53,10 @@ export async function iniciar(): Promise<Cliente> {
     } catch {
       /* respuestas que no son JSON (CSV, 204) */
     }
-    return { status: r.status, json, texto, tipo: r.headers.get("content-type") ?? "" };
+    return {
+      status: r.status, json, texto, tipo: r.headers.get("content-type") ?? "", cabeceras: r.headers,
+      cookie: r.headers.getSetCookie()[0]?.split(";")[0] ?? null,
+    };
   };
 
   return {
@@ -51,6 +65,9 @@ export async function iniciar(): Promise<Cliente> {
     put: (ruta, cuerpo = {}) => pedir("PUT", ruta, cuerpo),
     patch: (ruta, cuerpo) => pedir("PATCH", ruta, cuerpo),
     del: (ruta) => pedir("DELETE", ruta),
+    usarCookie: (cookie) => {
+      cookieActual = cookie;
+    },
     cerrar: async () => {
       servidor.close();
       await db.cerrar();
