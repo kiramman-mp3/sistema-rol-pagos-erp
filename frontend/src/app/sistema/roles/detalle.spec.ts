@@ -20,6 +20,7 @@ const BASE = {
 
 const ROL = {
   id: 1, anio: 2026, mes: 10, generadoEn: '2026-10-20T10:00:00', numEmpleados: 2,
+  estado: 'calculado', validadoEn: null, aprobadoEn: null, publicadoEn: null, pagadoEn: null,
   totalIngresos: 4140.11, totalDescuentos: 400, totalNeto: 3740.11, totalProvisiones: 700, totalCosto: 4840.11,
   detalle: [
     { ...BASE, id: 1, nombres: 'Ana Mensual' },
@@ -66,18 +67,23 @@ describe('DetalleRol', () => {
     http = TestBed.inject(HttpTestingController);
   });
 
-  const abrir = async () => {
+  const abrirConEstado = async (estado = 'calculado', historial: unknown[] = []) => {
     const fixture = TestBed.createComponent(DetalleRol);
     fixture.componentRef.setInput('id', '1');
     fixture.detectChanges();
     TestBed.tick();
     http.expectOne('/api/parametros').flush(PARAMETROS);
-    http.expectOne('/api/roles/1').flush(ROL);
+    http.expectOne('/api/roles/1').flush({ ...ROL, estado });
     http.expectOne('/api/roles/1/iess').flush(IESS);
+    http.expectOne('/api/roles/1/historial').flush(historial);
     await fixture.whenStable();
     fixture.detectChanges();
-    return fixture.nativeElement as HTMLElement;
+    return fixture;
   };
+
+  const abrir = async () => (await abrirConEstado()).nativeElement as HTMLElement;
+
+  const botones = (el: HTMLElement) => [...el.querySelectorAll('button')].map((b) => b.textContent?.trim());
 
   const filas = (el: HTMLElement) => [...el.querySelectorAll('section')].map((s) => [...s.querySelectorAll('tbody tr')]);
 
@@ -121,6 +127,60 @@ describe('DetalleRol', () => {
     expect(mensual).toContain('$370.80');
     expect(acumula).toContain('$149.94'); // fondos que se depositan en el IESS
     expect(iess.querySelector('tfoot')!.textContent).toContain('$741.60');
+  });
+
+  it('un rol calculado ofrece validar, recalcular y eliminar', async () => {
+    const el = await abrir();
+    expect(el.querySelector('h1')!.textContent).toContain('Calculado');
+    expect(botones(el)).toContain('Validar el rol');
+    expect(botones(el)).toContain('Eliminar rol');
+    expect([...el.querySelectorAll('a')].some((a) => a.textContent?.includes('Recalcular'))).toBe(true);
+  });
+
+  it('valida el rol y muestra los errores que lo bloquean', async () => {
+    const fixture = await abrirConEstado();
+    const el = fixture.nativeElement as HTMLElement;
+    [...el.querySelectorAll('button')].find((b) => b.textContent?.includes('Validar el rol'))!.click();
+    http.expectOne('/api/roles/1/validar').flush({
+      valido: false, estado: 'calculado', errores: ['Ana Mensual: el neto a pagar es negativo (-5).'], avisos: [],
+    });
+    await new Promise((resolver) => setTimeout(resolver));
+    TestBed.tick();
+    http.expectOne('/api/roles/1').flush({ ...ROL, estado: 'calculado' });
+    http.expectOne('/api/roles/1/historial').flush([]);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(el.querySelector('.revision')!.textContent).toContain('el neto a pagar es negativo');
+  });
+
+  it('publicar pide confirmación antes de enviar nada', async () => {
+    const fixture = await abrirConEstado('aprobado');
+    const el = fixture.nativeElement as HTMLElement;
+    [...el.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Publicar')!.click();
+    fixture.detectChanges();
+    http.expectNone('/api/roles/1/publicar');
+    expect(el.textContent).toContain('Ya no se podrá recalcular ni eliminar');
+
+    [...el.querySelectorAll('button')].find((b) => b.textContent?.includes('Sí, publicar'))!.click();
+    http.expectOne('/api/roles/1/publicar').flush({ ...ROL, estado: 'publicado' });
+  });
+
+  it('un rol publicado no se recalcula ni se elimina; solo falta pagarlo', async () => {
+    const el = (await abrirConEstado('publicado', [
+      { accion: 'rol.publicado', usuario: 'ana@empresa.com', detalle: null, creadoEn: '2026-10-21T09:30:00' },
+    ])).nativeElement as HTMLElement;
+    expect(botones(el)).not.toContain('Eliminar rol');
+    expect([...el.querySelectorAll('a')].some((a) => a.textContent?.includes('Recalcular'))).toBe(false);
+    expect(el.textContent).toContain('ya no se recalcula ni se elimina');
+    expect(botones(el)).toContain('Marcar como pagado');
+    expect(el.querySelector('.historial')!.textContent).toContain('Publicado por ana@empresa.com');
+  });
+
+  it('un rol pagado termina el ciclo', async () => {
+    const el = (await abrirConEstado('pagado')).nativeElement as HTMLElement;
+    expect(el.textContent).toContain('El rol está pagado: el ciclo terminó.');
+    expect(el.querySelector('.ciclo li.actual')!.textContent).toContain('Pagado');
+    expect(el.querySelectorAll('.ciclo li.hecho').length).toBe(4);
   });
 
   it('ofrece descargar los aportes para compararlos con el comprobante del IESS', async () => {

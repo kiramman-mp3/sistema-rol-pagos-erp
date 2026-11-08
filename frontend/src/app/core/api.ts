@@ -9,6 +9,8 @@ import type {
   Parametros,
   Puesto,
   Regimen,
+  RevisionRol,
+  RolCabecera,
   ResultadoSimulacion,
   TramoIr,
 } from './modelos';
@@ -71,6 +73,18 @@ export class Api {
   }
   eliminarRol(id: number) {
     return this.http.delete<void>(`/api/roles/${id}`);
+  }
+  validarRol(id: number) {
+    return this.http.post<RevisionRol>(`/api/roles/${id}/validar`, {});
+  }
+  aprobarRol(id: number) {
+    return this.http.post<RolCabecera>(`/api/roles/${id}/aprobar`, {});
+  }
+  publicarRol(id: number) {
+    return this.http.post<RolCabecera>(`/api/roles/${id}/publicar`, {});
+  }
+  pagarRol(id: number) {
+    return this.http.post<RolCabecera>(`/api/roles/${id}/pagar`, {});
   }
 
   guardarParametros(anio: number, datos: { sbu: number; tablaIr: TramoIr[]; fuente: string }) {
