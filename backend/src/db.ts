@@ -69,10 +69,14 @@ const tiposPg = {
   },
 };
 
+// Igual que con pg: bigint (COUNT, SUM) y numeric (dinero) salen como números, no como texto.
+const PARSERS_PGLITE = { 20: Number, 1700: Number };
+
 function baseDePglite(db: PGlite): Base {
   const sobre = (cliente: Pick<PGlite, "query" | "exec">, transaccionar: Base["transaccion"]): Base => ({
     async consultar(sql, params) {
-      const r = await cliente.query<Fila>(aPlaceholders(sql), params);
+      // Los parsers van en cada consulta: la opción del constructor de PGlite no los aplica.
+      const r = await cliente.query<Fila>(aPlaceholders(sql), params, { parsers: PARSERS_PGLITE });
       return { filas: r.rows, afectadas: r.affectedRows ?? 0 };
     },
     async ejecutarScript(sql) {
@@ -121,9 +125,10 @@ export function opcionesSsl(entorno: Record<string, string | undefined>): pg.Cli
 
 /**
  * Abre la base y deja el esquema al día. `destino` es una URL `postgres://…` (Supabase),
- * `:memory:` (pruebas) o una carpeta donde PGlite guarda los datos.
+ * `:memory:` (pruebas) o una carpeta donde PGlite guarda los datos. `hasta` detiene las migraciones
+ * en esa versión: solo lo usan las pruebas que comprueban una migración con datos anteriores a ella.
  */
-export async function abrirBase(destino: string): Promise<Base> {
+export async function abrirBase(destino: string, { hasta }: { hasta?: number } = {}): Promise<Base> {
   let db: Base;
   if (esBaseRemota(destino)) {
     db = baseDePg(new pg.Pool({
@@ -133,15 +138,12 @@ export async function abrirBase(destino: string): Promise<Base> {
     }));
   } else {
     const { PGlite: Motor } = await import("@electric-sql/pglite");
-    db = baseDePglite(new Motor(destino === ":memory:" ? undefined : destino, {
-      parsers: PARSERS_PGLITE,
-    }));
+    db = baseDePglite(new Motor(destino === ":memory:" ? undefined : destino));
   }
-  await migrar(db);
+  await migrar(db, hasta);
   return db;
 }
 
-const PARSERS_PGLITE = { 20: Number, 1700: Number };
 
 interface Migracion {
   version: number;
@@ -166,11 +168,12 @@ function leerMigraciones(): Migracion[] {
  * misma base dos veces no repite nada. Cada una corre en una transacción con un candado: si dos
  * instancias arrancan a la vez, la segunda espera y ve que ya está hecha.
  */
-export async function migrar(db: Base) {
+export async function migrar(db: Base, hasta = Infinity) {
   await db.ejecutarScript(
     "CREATE TABLE IF NOT EXISTS esquema_migraciones (version INTEGER PRIMARY KEY, nombre TEXT NOT NULL)",
   );
   for (const m of leerMigraciones()) {
+    if (m.version > hasta) break; // solo las pruebas de una migración piden detenerse antes
     if (m.version <= (await versionEsquema(db))) continue;
     try {
       await db.transaccion(async (tx) => {
