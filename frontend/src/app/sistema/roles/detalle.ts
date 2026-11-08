@@ -9,6 +9,7 @@ import { Avisos } from '../../core/avisos';
 import { Sesion } from '../../core/sesion';
 import type { Permiso } from '../../core/sesion';
 import { DineroPipe, sumar } from '../../core/dinero.pipe';
+import { DesgloseCalculo } from './desglose';
 import { claseEstado, esInmutable, ESTADOS_ROL, etiquetaEstado } from '../../core/estado-rol';
 import { etiquetaRegimen } from '../../core/regimen';
 import type {
@@ -48,7 +49,7 @@ const TEXTO_EVENTO: Record<string, string> = {
 
 @Component({
   selector: 'app-detalle-rol',
-  imports: [RouterLink, DineroPipe, PercentPipe],
+  imports: [RouterLink, DineroPipe, PercentPipe, DesgloseCalculo],
   styles: `
     .volver { margin-left: -.5rem; }
     h1 .insignia { vertical-align: middle; margin-left: .4rem; font-family: var(--cuerpo); letter-spacing: 0; }
@@ -330,6 +331,12 @@ const TEXTO_EVENTO: Record<string, string> = {
                       {{ d.cargo }}@if (d.diasTrabajados < 30) {, {{ d.diasTrabajados }} días trabajados}
                     </span>
                     <span class="secundario">{{ regimen(d) }}</span>
+                    @if (d.tieneTraza) {
+                      <button class="boton-texto no-imprimir" type="button" [attr.aria-expanded]="calculoAbierto() === d.cedula"
+                              (click)="alternarCalculo(d.cedula)">
+                        {{ calculoAbierto() === d.cedula ? 'Ocultar el cálculo' : 'Cómo se calculó' }}
+                      </button>
+                    }
                   </td>
                   <td class="num corte">{{ d.sueldo | dinero }}</td>
                   <td class="num">{{ horasExtra(d) | dinero }}</td>
@@ -345,6 +352,11 @@ const TEXTO_EVENTO: Record<string, string> = {
                   <td class="num"><strong>{{ d.totalDescuentos | dinero }}</strong></td>
                   <td class="num c-neto corte">{{ d.netoPagar | dinero }}</td>
                 </tr>
+                @if (calculoAbierto() === d.cedula) {
+                  <tr class="no-imprimir">
+                    <td colspan="11"><app-desglose-calculo [rolId]="r.id" [cedula]="d.cedula" /></td>
+                  </tr>
+                }
               }
             </tbody>
             <tfoot>
@@ -530,6 +542,12 @@ export class DetalleRol {
   protected readonly confirmandoPublicar = signal(false);
   protected readonly trabajando = signal(false);
   protected readonly revision = signal<RevisionRol | null>(null);
+
+  /** Cédula del empleado cuyo desglose está abierto. */
+  protected readonly calculoAbierto = signal<string | null>(null);
+  protected alternarCalculo(cedula: string) {
+    this.calculoAbierto.update((actual) => (actual === cedula ? null : cedula));
+  }
 
   protected readonly camposAjuste = CAMPOS_AJUSTE;
   protected readonly reliquidando = signal(false);
