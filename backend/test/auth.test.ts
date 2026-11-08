@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
+import { createHmac } from "node:crypto";
 import { describe, it } from "node:test";
 
 import {
-  authDeEntorno, crearSesion, DURACION_SESION_MS, hashClave, leerSesion, LimiteIntentos, textosIguales,
-  verificarClave,
+  crearSesion, DURACION_SESION_MS, hashClave, leerSesion, LimiteIntentos, secretoAleatorio, secretoDeEntorno,
+  textosIguales, verificarClave,
 } from "../src/auth.ts";
 
 const SECRETO = "s".repeat(40);
@@ -35,26 +36,39 @@ describe("contraseñas", () => {
 });
 
 describe("sesión firmada", () => {
-  it("devuelve el usuario mientras no venza", () => {
-    const token = crearSesion("ana", SECRETO, 1_000);
-    assert.deepEqual(leerSesion(token, SECRETO, 2_000), { usuario: "ana", vence: 1_000 + DURACION_SESION_MS });
+  it("devuelve el usuario y su cuenta mientras no venza", () => {
+    const token = crearSesion(7, 3, SECRETO, 1_000);
+    assert.deepEqual(leerSesion(token, SECRETO, 2_000), { usuarioId: 7, cuentaId: 3, vence: 1_000 + DURACION_SESION_MS });
   });
 
   it("vence a las 8 horas", () => {
-    const token = crearSesion("ana", SECRETO, 0);
+    const token = crearSesion(1, 1, SECRETO, 0);
     assert.notEqual(leerSesion(token, SECRETO, DURACION_SESION_MS - 1), null);
     assert.equal(leerSesion(token, SECRETO, DURACION_SESION_MS), null);
   });
 
   it("rechaza un token alterado, de otro secreto o mal formado", () => {
-    const token = crearSesion("ana", SECRETO, 0);
+    const token = crearSesion(1, 1, SECRETO, 0);
     const [datos, firma] = token.split(".");
-    const otroUsuario = Buffer.from(JSON.stringify({ u: "root", e: DURACION_SESION_MS })).toString("base64url");
-    assert.equal(leerSesion(`${otroUsuario}.${firma}`, SECRETO, 1), null);
+    // cambiar la cuenta sin volver a firmar: la firma ya no corresponde
+    const otraCuenta = Buffer.from(JSON.stringify({ u: 1, c: 2, e: DURACION_SESION_MS })).toString("base64url");
+    assert.equal(leerSesion(`${otraCuenta}.${firma}`, SECRETO, 1), null);
     assert.equal(leerSesion(`${datos}.${firma}x`, SECRETO, 1), null);
     assert.equal(leerSesion(token, "o".repeat(40), 1), null);
     for (const malo of [undefined, "", "sin-punto", "a.b.c", ".", "a."]) {
       assert.equal(leerSesion(malo, SECRETO, 1), null, String(malo));
+    }
+  });
+
+  it("rechaza una sesión firmada con datos que no son ids, aunque la firma sea válida", () => {
+    const firmada = (carga: object) => {
+      const datos = Buffer.from(JSON.stringify(carga)).toString("base64url");
+      return `${datos}.${createHmac("sha256", SECRETO).update(datos).digest("base64url")}`;
+    };
+    const vence = Date.now() + 1000;
+    assert.notEqual(leerSesion(firmada({ u: 1, c: 1, e: vence }), SECRETO), null);
+    for (const malo of [{ u: "1", c: 1, e: vence }, { u: 1, c: -1, e: vence }, { u: 1, e: vence }, { u: 1.5, c: 1, e: vence }]) {
+      assert.equal(leerSesion(firmada(malo), SECRETO), null, JSON.stringify(malo));
     }
   });
 });
@@ -79,23 +93,22 @@ describe("límite de intentos", () => {
   });
 });
 
-describe("configuración desde el entorno", () => {
-  const completo = { ADMIN_USUARIO: "admin", ADMIN_CLAVE_HASH: "scrypt.x", SESION_SECRETO: SECRETO };
-
-  it("sin variables, la autenticación queda apagada", () => {
-    assert.equal(authDeEntorno({}), null);
+describe("secreto de las sesiones desde el entorno", () => {
+  it("sin la variable devuelve null: quien arranca decide qué hacer", () => {
+    assert.equal(secretoDeEntorno({}), null);
+    assert.equal(secretoDeEntorno({ SESION_SECRETO: "   " }), null);
   });
 
-  it("con las tres, devuelve la configuración", () => {
-    assert.deepEqual(authDeEntorno(completo), { usuario: "admin", claveHash: "scrypt.x", secreto: SECRETO });
+  it("con la variable devuelve el secreto", () => {
+    assert.equal(secretoDeEntorno({ SESION_SECRETO: SECRETO }), SECRETO);
   });
 
-  it("con alguna sola es un error que dice cuál falta", () => {
-    assert.throws(() => authDeEntorno({ ADMIN_USUARIO: "admin" }), /ADMIN_CLAVE_HASH y SESION_SECRETO/);
-    assert.throws(() => authDeEntorno({ ...completo, SESION_SECRETO: "" }), /SESION_SECRETO/);
+  it("exige al menos 32 caracteres", () => {
+    assert.throws(() => secretoDeEntorno({ SESION_SECRETO: "corto" }), /32 caracteres/);
   });
 
-  it("exige un secreto de al menos 32 caracteres", () => {
-    assert.throws(() => authDeEntorno({ ...completo, SESION_SECRETO: "corto" }), /32 caracteres/);
+  it("el secreto temporal de trabajo local es largo y distinto cada vez", () => {
+    assert.ok(secretoAleatorio().length >= 32);
+    assert.notEqual(secretoAleatorio(), secretoAleatorio());
   });
 });

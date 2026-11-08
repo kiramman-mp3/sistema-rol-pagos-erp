@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 
 import { ErrorApi, leerId } from "../src/validaciones.ts";
-import { EMPLEADO, iniciar } from "./ayuda.ts";
+import { EMPLEADO, iniciar, NIVEL_E2_CT, puesto } from "./ayuda.ts";
 import type { Cliente } from "./ayuda.ts";
 
 describe("leerId", () => {
@@ -67,11 +67,11 @@ describe("identificadores inválidos en la API", () => {
       assert.equal(empleado.status, 400, `puestoId ${JSON.stringify(malo)}`);
       const grado = await api.post("/api/empleados", { ...EMPLEADO, escalaId: malo });
       assert.equal(grado.status, 400, `escalaId ${JSON.stringify(malo)}`);
-      const puesto = await api.post("/api/puestos", {
-        nombre: "X", funcion: "f", responsabilidad: "r", sector: "s", escalaId: 33, superiorId: malo,
+      const nuevo = await api.post("/api/puestos", {
+        nombre: "X", funcion: "f", responsabilidad: "r", sector: "s", escalaId: NIVEL_E2_CT, superiorId: malo,
       });
-      assert.equal(puesto.status, 400, `superiorId ${JSON.stringify(malo)}`);
-      const responsable = await api.patch("/api/puestos/1/responsable", { empleadoId: malo });
+      assert.equal(nuevo.status, 400, `superiorId ${JSON.stringify(malo)}`);
+      const responsable = await api.patch(`/api/puestos/${puesto(1)}/responsable`, { empleadoId: malo });
       assert.equal(responsable.status, 400, `empleadoId ${JSON.stringify(malo)}`);
     }
   });
