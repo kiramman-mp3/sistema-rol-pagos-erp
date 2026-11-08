@@ -7,10 +7,12 @@ import type {
   EntradaSimulacion,
   Grado,
   Parametros,
+  DatosCuenta,
   Puesto,
   Regimen,
   RevisionRol,
   RolCabecera,
+  UsuarioCuenta,
   ResultadoSimulacion,
   TramoIr,
 } from './modelos';
@@ -74,6 +76,19 @@ export class Api {
   eliminarRol(id: number) {
     return this.http.delete<void>(`/api/roles/${id}`);
   }
+  crearUsuario(datos: { email: string; clave: string; rol: UsuarioCuenta['rol'] }) {
+    return this.http.post<UsuarioCuenta>('/api/usuarios', datos);
+  }
+  cambiarUsuario(id: number, datos: { rol?: UsuarioCuenta['rol']; clave?: string }) {
+    return this.http.patch<UsuarioCuenta>(`/api/usuarios/${id}`, datos);
+  }
+  eliminarUsuario(id: number) {
+    return this.http.delete<void>(`/api/usuarios/${id}`);
+  }
+  guardarCuenta(datos: { empresa: string; ruc: string; separarFunciones: boolean }) {
+    return this.http.put<DatosCuenta>('/api/cuenta', datos);
+  }
+
   validarRol(id: number) {
     return this.http.post<RevisionRol>(`/api/roles/${id}/validar`, {});
   }

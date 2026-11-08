@@ -1,6 +1,6 @@
 import { Routes } from '@angular/router';
 
-import { sesionActiva } from './core/sesion';
+import { conPermiso, sesionActiva } from './core/sesion';
 
 export const routes: Routes = [
   {
@@ -60,6 +60,12 @@ export const routes: Routes = [
         path: 'parametros',
         title: 'Parámetros | Rol de pagos',
         loadComponent: () => import('./sistema/parametros/parametros').then((m) => m.PaginaParametros),
+      },
+      {
+        path: 'usuarios',
+        title: 'Usuarios | Rol de pagos',
+        canActivate: [conPermiso('usuarios')],
+        loadComponent: () => import('./sistema/usuarios/usuarios').then((m) => m.Usuarios),
       },
       {
         path: 'roles',

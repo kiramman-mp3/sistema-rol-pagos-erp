@@ -22,6 +22,9 @@ import { Sesion } from '../core/sesion';
           <a routerLink="/sistema/roles" routerLinkActive ariaCurrentWhenActive="page">Roles de pago</a>
           <a routerLink="/sistema/organico" routerLinkActive ariaCurrentWhenActive="page">Orgánico</a>
           <a routerLink="/sistema/parametros" routerLinkActive ariaCurrentWhenActive="page">Parámetros</a>
+          @if (sesion.puede('usuarios')) {
+            <a routerLink="/sistema/usuarios" routerLinkActive ariaCurrentWhenActive="page">Usuarios</a>
+          }
         </nav>
         <span class="empresa">
           <strong>{{ parametros()?.empresa?.nombre }}</strong>
@@ -32,6 +35,12 @@ import { Sesion } from '../core/sesion';
     </header>
 
     <main class="pagina">
+      @if (sesion.rol() && !sesion.puede('editar')) {
+        <div class="aviso aviso-warning no-imprimir" role="status">
+          Entraste como <strong>{{ sesion.rol() }}</strong>:
+          {{ sesion.puede('aprobar') ? 'puedes consultar, validar, aprobar y publicar roles, pero no cambiar datos.' : 'solo puedes consultar.' }}
+        </div>
+      }
       @for (aviso of avisos.lista(); track aviso.id) {
         <div class="aviso aviso-{{ aviso.tipo }} no-imprimir" role="status">{{ aviso.texto }}</div>
       }

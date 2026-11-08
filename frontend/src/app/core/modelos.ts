@@ -296,3 +296,23 @@ export interface Persona {
   id: number;
   nombres: string;
 }
+
+/** Un usuario de la cuenta. */
+export interface UsuarioCuenta {
+  id: number;
+  email: string;
+  rol: 'administrador' | 'aprobador' | 'lector';
+  creadoEn: string;
+}
+
+export interface ListaUsuarios {
+  roles: UsuarioCuenta['rol'][];
+  usuarios: UsuarioCuenta[];
+}
+
+/** La empresa de la sesión y su configuración. */
+export interface DatosCuenta {
+  nombre: string;
+  ruc: string;
+  separarFunciones: boolean;
+}
