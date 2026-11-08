@@ -148,7 +148,6 @@ export async function abrirBase(destino: string, { hasta }: { hasta?: number } =
 interface Migracion {
   version: number;
   nombre: string;
-  sql: string;
 }
 
 /** Archivos NNN_nombre.sql, en orden. El número es la versión del esquema. */
@@ -156,12 +155,10 @@ function leerMigraciones(): Migracion[] {
   return readdirSync(CARPETA_MIGRACIONES)
     .filter((archivo) => /^\d{3}_.+\.sql$/.test(archivo))
     .sort()
-    .map((archivo) => ({
-      version: Number(archivo.slice(0, 3)),
-      nombre: archivo,
-      sql: readFileSync(new URL(archivo, CARPETA_MIGRACIONES), "utf8"),
-    }));
+    .map((archivo) => ({ version: Number(archivo.slice(0, 3)), nombre: archivo }));
 }
+
+const leerSql = (m: Migracion) => readFileSync(new URL(m.nombre, CARPETA_MIGRACIONES), "utf8");
 
 /**
  * Aplica las migraciones pendientes. Las aplicadas quedan en `esquema_migraciones`, así que abrir la
@@ -172,14 +169,15 @@ export async function migrar(db: Base, hasta = Infinity) {
   await db.ejecutarScript(
     "CREATE TABLE IF NOT EXISTS esquema_migraciones (version INTEGER PRIMARY KEY, nombre TEXT NOT NULL)",
   );
-  for (const m of leerMigraciones()) {
-    if (m.version > hasta) break; // solo las pruebas de una migración piden detenerse antes
-    if (m.version <= (await versionEsquema(db))) continue;
+  // Con el esquema al día (lo normal en cada arranque) basta esta consulta: no se lee ningún archivo SQL.
+  const aplicada = await versionEsquema(db);
+  // `hasta` solo lo piden las pruebas de una migración, para detenerse antes de ella.
+  for (const m of leerMigraciones().filter((m) => m.version > aplicada && m.version <= hasta)) {
     try {
       await db.transaccion(async (tx) => {
         await tx.consultar("SELECT pg_advisory_xact_lock(727274)", []);
         if (m.version <= (await versionEsquema(tx))) return;
-        await tx.ejecutarScript(m.sql);
+        await tx.ejecutarScript(leerSql(m));
         await tx.consultar("INSERT INTO esquema_migraciones (version, nombre) VALUES (?, ?)", [m.version, m.nombre]);
       });
     } catch (error) {

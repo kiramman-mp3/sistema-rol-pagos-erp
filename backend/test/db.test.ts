@@ -129,3 +129,36 @@ describe("destino de la base", () => {
     assert.ok(!r.stderr.includes("secreto"));
   });
 });
+
+describe("arranque con el esquema al día", () => {
+  it("migrar hace solo dos consultas cuando no hay nada pendiente", async () => {
+    const db = await abrirBase(":memory:");
+    try {
+      let consultas = 0;
+      const contada: typeof db = {
+        ...db,
+        consultar: (sql, params) => (consultas++, db.consultar(sql, params)),
+        ejecutarScript: (sql) => (consultas++, db.ejecutarScript(sql)),
+        transaccion: (trabajo) => (consultas++, db.transaccion(trabajo)),
+      };
+      await migrar(contada);
+      assert.equal(consultas, 2); // crear la tabla de control si falta y leer la versión
+      assert.equal(await versionEsquema(db), ULTIMA);
+    } finally {
+      await db.cerrar();
+    }
+  });
+
+  it("aplica solo las migraciones pendientes", async () => {
+    const db = await abrirBase(":memory:", { hasta: 3 });
+    try {
+      assert.equal(await versionEsquema(db), 3);
+      await migrar(db, 5);
+      assert.equal(await versionEsquema(db), 5);
+      await migrar(db);
+      assert.equal(await versionEsquema(db), ULTIMA);
+    } finally {
+      await db.cerrar();
+    }
+  });
+});
