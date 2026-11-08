@@ -108,6 +108,19 @@ describe('FormularioEmpleado', () => {
     expect(envio.request.body.categoriaLoep).toBeNull();
   });
 
+  it('sin fecha de salida envía nulo y con ella envía la fecha', async () => {
+    const { fixture, el } = await abrir();
+    llenarBase(el);
+    fixture.detectChanges();
+    el.querySelector('form')!.dispatchEvent(new Event('submit'));
+    expect(http.expectOne('/api/empleados').request.body.fechaSalida).toBeNull();
+
+    escribir(el, 'fechaSalida', '2026-10-15');
+    fixture.detectChanges();
+    el.querySelector('form')!.dispatchEvent(new Event('submit'));
+    expect(http.expectOne('/api/empleados').request.body.fechaSalida).toBe('2026-10-15');
+  });
+
   it('con LOEP exige la categoría y la envía cuando se elige', async () => {
     const { fixture, el } = await abrir();
     llenarBase(el);

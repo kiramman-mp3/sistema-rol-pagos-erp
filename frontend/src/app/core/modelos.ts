@@ -7,6 +7,8 @@ export interface Empleado {
   cargo: string;
   sueldoBase: number;
   fechaIngreso: string;
+  /** null = sigue en la empresa; en su mes se pagan solo los días hasta ella y luego sale del rol */
+  fechaSalida: string | null;
   tipoContrato: string;
   /** Código del régimen: CODIGO_TRABAJO, LOSEP o LOEP */
   regimen: string;

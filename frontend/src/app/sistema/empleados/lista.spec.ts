@@ -8,7 +8,7 @@ import { ListaEmpleados } from './lista';
 
 const ANA: Empleado = {
   id: 1, cedula: '1801234566', nombres: 'Ana Prueba', cargo: 'Analista', sueldoBase: 1000,
-  fechaIngreso: '2024-01-10', tipoContrato: 'Indefinido', regimen: 'CODIGO_TRABAJO', categoriaLoep: null, escalaId: null, puestoId: null,
+  fechaIngreso: '2024-01-10', fechaSalida: null, tipoContrato: 'Indefinido', regimen: 'CODIGO_TRABAJO', categoriaLoep: null, escalaId: null, puestoId: null,
   pagoDecimoTercero: null, pagoDecimoCuarto: null, pagoFondosReserva: null, recibeHorasExtras: null,
   activo: true,
 };
@@ -33,6 +33,13 @@ describe('ListaEmpleados', () => {
     fixture.detectChanges();
     return { fixture, el: fixture.nativeElement as HTMLElement };
   };
+
+  it('muestra la fecha de salida de quien ya se fue', async () => {
+    const { el } = await cargar([ANA, { ...ANA, id: 2, nombres: 'Luis Inactivo', activo: false, fechaSalida: '2026-09-10' }]);
+    const filas = el.querySelectorAll('tbody tr');
+    expect(filas[0].textContent).not.toContain('Salida');
+    expect(filas[1].textContent).toContain('Salida:');
+  });
 
   it('lista a los empleados con su sueldo y estado', async () => {
     const { el } = await cargar([ANA, { ...ANA, id: 2, nombres: 'Luis Inactivo', activo: false }]);
