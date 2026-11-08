@@ -8,15 +8,16 @@
 [![Deploy](https://img.shields.io/badge/Deploy-Vercel-000000?style=flat-square&logo=vercel&logoColor=white)](https://vercel.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
 
-**Rol de Pagos Ecuador** es un sistema de nómina para Ecuador cuyas reglas de ley se **parametrizan** desde la propia aplicación: régimen laboral, salario básico, escala salarial, décimos, fondos de reserva, horas extras y aportes al IESS. Una API en **Express**, una aplicación en **Angular**, una página de inicio pública y, detrás del botón **Ingresar al sistema**, el sistema completo.
+**Rol de Pagos Ecuador** es un sistema de nómina para Ecuador cuyas reglas de ley se **parametrizan** desde la propia aplicación: régimen laboral, salario básico, escala salarial, décimos, fondos de reserva, horas extras y aportes al IESS. Una API en **Express**, una aplicación en **Angular**, una página de inicio pública y, detrás del botón **Registrar mi empresa**, el sistema completo: cada empresa crea su cuenta y todos sus datos (empleados, roles, orgánico, escala y reglas de ley) son solo suyos.
 
 Se hizo como práctica de la guía APE, que pide un rol de pagos parametrizable: escoger el régimen laboral (Código del Trabajo, LOSEP o LOEP), el salario básico, la escala salarial, si el trabajador recibe décimo tercero, décimo cuarto y horas extras, y ver si el IESS, que se hace a mano en Excel, se puede automatizar.
 
 > [!TIP]
-> **¿Quieres verlo funcionando?** No necesitas instalar ninguna base de datos: con dos comandos queda corriendo en `http://localhost:3000`, con 12 empleados y nueve meses de roles de ejemplo.
+> **¿Quieres verlo funcionando?** No necesitas instalar ninguna base de datos: con dos comandos queda corriendo en `http://localhost:3000`. El seed crea la cuenta `demo@empresa.com` con 12 empleados y nueve meses de roles de ejemplo; entras con ese correo y la contraseña que pongas.
 > ```bash
-> npm run instalar && npm --prefix backend run seed && npm start
+> npm run instalar && npm --prefix backend run seed -- demo@empresa.com --clave "una-clave-larga" && npm start
 > ```
+> Sin el seed también sirve: abre la página y usa **Registrar mi empresa**.
 
 ---
 
@@ -26,7 +27,7 @@ Se hizo como práctica de la guía APE, que pide un rol de pagos parametrizable:
 En muchas empresas el rol de pagos se arma a mano en Excel: hay que acordarse de qué recargo lleva cada tipo de hora extra, de qué décimos se pagan cada mes y cuáles se acumulan, de la tabla del impuesto a la renta del año y de qué aportes corresponden al régimen de cada persona. Un cambio de ley obliga a revisar todas las fórmulas. **Rol de Pagos Ecuador** guarda esas reglas como datos que se editan en pantalla, así que un cambio normativo es un cambio de parámetros y no de código.
 
 ### ¿Qué hace?
-Para cada mes, la persona encargada anota las novedades (horas extras, comisiones, anticipos) y el sistema:
+Cada empresa se registra con su nombre, su RUC, un correo y una contraseña, y trabaja en su propia cuenta. Para cada mes, la persona encargada anota las novedades (horas extras, comisiones, anticipos) y el sistema:
 1. Calcula a cada empleado activo con las reglas de **su** régimen: aporte personal al IESS, impuesto a la renta, décimos, fondos de reserva y vacaciones.
 2. Entrega el neto a pagar y el costo total para la empresa (ingresos + provisiones).
 3. Genera la **boleta individual** imprimible y la descarga en **CSV** del rol y de los aportes.
@@ -35,7 +36,7 @@ Para cada mes, la persona encargada anota las novedades (horas extras, comisione
 Los roles ya generados guardan una foto de las reglas con que se calcularon: si luego se editan los parámetros, el historial no cambia.
 
 ### ¿Para quién está pensado?
-Para el área de talento humano o contabilidad de una empresa pequeña o mediana, y para quien necesite estudiar cómo se compone un rol de pagos ecuatoriano: el motor de cálculo son funciones puras, con pruebas, y cada regla cita su fuente.
+Para el área de talento humano o contabilidad de una empresa pequeña o mediana (cada una registra la suya), y para quien necesite estudiar cómo se compone un rol de pagos ecuatoriano: el motor de cálculo son funciones puras, con pruebas, y cada regla cita su fuente.
 
 ---
 
@@ -61,7 +62,9 @@ Para el área de talento humano o contabilidad de una empresa pequeña o mediana
 *   **Conciliación con el IESS:** materia gravada, aportes personal y patronal y fondos de reserva por empleado, descargables en CSV.
 *   **Boleta y CSV:** boleta individual imprimible en una hoja y exportación del rol para Excel.
 *   **Cédula validada:** dígito verificador (módulo 10) y provincia.
-*   **Acceso con contraseña:** un administrador entra con usuario y contraseña; la sesión dura 8 horas y la API privada responde `401` sin ella. La contraseña se guarda como hash `scrypt`, nunca en claro.
+*   **Una cuenta por empresa:** la empresa se registra con su RUC (validado con su dígito verificador) y un correo. Sus empleados, roles, novedades, orgánico, escala y reglas de ley son solo de su cuenta: ninguna otra empresa los ve ni los toca.
+*   **Reglas propias, con plantilla de partida:** cada cuenta nueva recibe una copia de los regímenes, los parámetros anuales, la escala y el orgánico de ejemplo. Los edita sin afectar a las demás, y la página de inicio pública usa la plantilla.
+*   **Acceso con contraseña:** se entra con correo y contraseña; la sesión dura 8 horas y la API privada responde `401` sin ella. La contraseña se guarda como hash `scrypt`, nunca en claro.
 *   **Fecha de salida:** quien se va cobra solo los días hasta su salida y deja de entrar a los roles siguientes; los meses anteriores no cambian.
 *   **Sin dependencias de CDN:** las tipografías van incluidas en el proyecto.
 
@@ -82,15 +85,16 @@ Para el área de talento humano o contabilidad de una empresa pequeña o mediana
 
 ## 📐 Arquitectura
 
-El motor de cálculo no sabe nada de la base de datos: recibe las reglas ya armadas y devuelve el resultado. Las rutas leen las reglas de la base, llaman al motor y guardan el rol.
+El motor de cálculo no sabe nada de la base de datos: recibe las reglas ya armadas y devuelve el resultado. Las rutas leen las reglas de la base, llaman al motor y guardan el rol. La sesión lleva la cuenta de quien entró y cada consulta se filtra por ella.
 
 ```mermaid
 graph TD
     Web["Angular 22 · frontend/"] -->|HTTP /api| App["app.ts · Express 5"]
-    App --> Rutas["rutas/ · auth, empleados, roles, parámetros, regímenes, escala, puestos"]
+    App --> Sesion["exigirSesion · la cuenta de la sesión"]
+    Sesion --> Rutas["rutas/ · auth, cuenta, empleados, roles, parámetros, regímenes, escala, puestos"]
 
     Rutas --> Motor["calculos.ts · motor de cálculo (funciones puras)"]
-    Rutas --> Reglas["regimenes.ts · parametros.ts · escala.ts · puestos.ts"]
+    Rutas --> Reglas["regimenes.ts · parametros.ts · escala.ts · puestos.ts · cuentas.ts"]
     Rutas --> IESS["iess.ts · conciliación"]
 
     Reglas --> DB["db.ts · consultas, transacciones y migraciones"]
@@ -115,17 +119,20 @@ rol-pagos-ecuador/
 │   │   ├── iess.ts            # Cuadro de conciliación con el IESS
 │   │   ├── demo.ts            # Empleados y roles de ejemplo (los usa el seed)
 │   │   ├── db.ts              # PostgreSQL sin ORM (pg, o PGlite) y ejecutor de migraciones
-│   │   ├── auth.ts            # Contraseña (scrypt), sesión firmada y límite de intentos
-│   │   ├── generarClave.ts    # Script que genera ADMIN_CLAVE_HASH y SESION_SECRETO
-│   │   ├── rutas/             # auth, empleados, roles, parámetros, regímenes, escala y puestos
-│   │   ├── migraciones/       # Esquema versionado: 001 a 012 (SQL numerado)
-│   │   ├── validaciones.ts    # Cédula, números y fechas
+│   │   ├── auth.ts            # Contraseña (scrypt), sesión firmada con la cuenta y límite de intentos
+│   │   ├── cuentas.ts         # Registro de empresas, usuarios y datos de la empresa
+│   │   ├── seed.ts            # Script: crea una cuenta de ejemplo y la llena
+│   │   ├── usuario.ts         # Script: lista las cuentas y agrega usuarios a una cuenta
+│   │   ├── rutas/             # auth, cuenta, empleados, roles, parámetros, regímenes, escala y puestos
+│   │   ├── migraciones/       # Esquema versionado: 001 a 013 (SQL numerado)
+│   │   ├── validaciones.ts    # Cédula, RUC, correo, números y fechas
 │   │   ├── server.ts          # Arranque local
 │   │   └── vercel.ts          # Entrada del backend en Vercel
 │   └── test/                  # node:test, incluida la API completa
 ├── frontend/                  # Angular 22
 │   ├── src/app/landing/       # Página de inicio con el simulador
 │   ├── src/app/entrar/        # Inicio de sesión
+│   ├── src/app/registro/      # Registro de una empresa
 │   ├── src/app/informacion/   # Acerca de, investigación y fuentes
 │   ├── src/app/sistema/       # Shell, inicio del mes, empleados, orgánico, roles y parámetros
 │   ├── src/app/core/          # Cliente de la API, sesión, avisos, pipe de dinero, modelos y fuentes
@@ -168,30 +175,24 @@ rol-pagos-ecuador/
 
     El esquema se crea y se actualiza solo al arrancar (ver Migraciones, más abajo).
 
-4.  **Activar el inicio de sesión.** Genera el hash de la contraseña y un secreto para firmar las sesiones:
+4.  **Definir el secreto de las sesiones.** Las empresas se registran e inician sesión desde la página; el servidor firma cada sesión con `SESION_SECRETO` (al menos 32 caracteres). Genera uno y defínelo antes de arrancar:
     ```bash
-    npm --prefix backend run clave -- "una contraseña de al menos 12 caracteres"
-    # o, para que no quede en el historial del terminal:  echo "la contraseña" | npm --prefix backend run clave
+    export SESION_SECRETO="$(node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))")"
     ```
-    Con lo que imprime, define las tres variables antes de arrancar:
-    ```bash
-    export ADMIN_USUARIO='admin'
-    export ADMIN_CLAVE_HASH='scrypt.16384.8.1.…'
-    export SESION_SECRETO='…'      # al menos 32 caracteres
-    ```
-    Sin ninguna de las tres y con la base local (PGlite), la API queda abierta y el servidor lo avisa: solo sirve para trabajar en tu máquina. Con `DATABASE_URL` el servidor **no arranca** sin ellas. Si defines solo algunas, también falla. Nunca guardes estos valores en el repositorio.
+    Sin él y con la base local (PGlite), el servidor inventa uno temporal y avisa: las sesiones se cierran al reiniciar, y sirve para trabajar en tu máquina. Con `DATABASE_URL` el servidor **no arranca** sin `SESION_SECRETO`. Cambiar el secreto cierra todas las sesiones abiertas. Nunca lo guardes en el repositorio.
 
     | Variable | Para qué sirve |
     |---|---|
     | `DATABASE_URL` | Cadena de conexión de Postgres (Supabase). Sin ella se usa PGlite |
     | `DATABASE_SSL_CA` | Certificado de la autoridad de la base (el texto PEM o la ruta del archivo). Supabase firma con su propia CA (`prod-ca-2021.crt`, en *Database Settings*): sin él, la conexión se rechaza |
     | `DATABASE_SSL_INSECURE` | `1` desactiva la verificación del certificado. Solo como salida de emergencia: permite que un intermediario lea la conexión |
-    | `ADMIN_USUARIO`, `ADMIN_CLAVE_HASH`, `SESION_SECRETO` | Inicio de sesión del administrador |
+    | `SESION_SECRETO` | Firma las sesiones. Obligatorio con una base remota |
 
-5.  **Cargar los datos de ejemplo** (opcional): 12 empleados y los roles de enero a septiembre de 2026.
+5.  **Cargar los datos de ejemplo** (opcional): crea la cuenta de una empresa de ejemplo, con 12 empleados y los roles de enero a septiembre de 2026. Con tu correo y una contraseña de al menos 10 caracteres:
     ```bash
-    npm --prefix backend run seed
+    npm --prefix backend run seed -- demo@empresa.com --clave "una-clave-larga"
     ```
+    Una empresa real no necesita el seed: se registra desde la página.
 
 ---
 
@@ -219,9 +220,10 @@ npm run dev
 | `npm run build` | Compila el frontend |
 | `npm test` | Pruebas del backend (Node) y del frontend (Vitest) |
 | `npm run lint` | Tipos y ESLint de ambos proyectos |
-| `npm --prefix backend run seed` | Llena una base vacía con 12 empleados y los roles de enero a septiembre de 2026 |
-| `npm --prefix backend run seed -- --reiniciar` | Igual, pero antes borra empleados, roles y novedades de la base y empieza de cero. Contra un servidor Postgres exige además `--confirmo-produccion` y muestra cuántos datos se perderían |
-| `npm --prefix backend run clave -- "contraseña"` | Imprime `ADMIN_CLAVE_HASH` y un `SESION_SECRETO` nuevo |
+| `npm --prefix backend run seed -- correo --clave "contraseña"` | Crea la cuenta «Empresa Demo S.A.» con ese correo (si no existe) y la llena con 12 empleados y los roles de enero a septiembre de 2026. Con un correo que ya existe y sin datos, solo la llena |
+| `npm --prefix backend run seed -- correo --reiniciar` | Antes borra los empleados, roles y novedades **de esa cuenta** (las demás no se tocan) y empieza de cero. Contra un servidor Postgres exige además `--confirmo-produccion` |
+| `npm --prefix backend run usuario -- --listar` | Muestra cada cuenta con su empresa, sus usuarios y cuántos empleados tiene |
+| `npm --prefix backend run usuario -- correo "contraseña" --cuenta 2` | Agrega un usuario a una cuenta que ya existe |
 
 ---
 
@@ -232,21 +234,19 @@ El proyecto se despliega en **Vercel** como un solo proyecto con dos servicios (
 ```bash
 vercel env add DATABASE_URL production --sensitive       # cadena del pooler de Supabase
 vercel env add DATABASE_SSL_CA production --sensitive    # certificado de Supabase (prod-ca-2021.crt)
-vercel env add ADMIN_USUARIO production
-vercel env add ADMIN_CLAVE_HASH production --sensitive   # de `npm --prefix backend run clave`
-vercel env add SESION_SECRETO production --sensitive     # de la misma salida
+vercel env add SESION_SECRETO production --sensitive     # al menos 32 caracteres aleatorios
 vercel deploy --prod
 ```
 
-El backend no arranca en Vercel sin `DATABASE_URL`, `ADMIN_USUARIO`, `ADMIN_CLAVE_HASH` y `SESION_SECRETO`: no se publica una API sin inicio de sesión. Si la conexión a la base se rechaza por el certificado, define `DATABASE_SSL_CA`.
+El backend no arranca en Vercel sin `DATABASE_URL` y `SESION_SECRETO`. Las empresas no se configuran en la plataforma: se registran desde la página y quedan guardadas en la base. Si la conexión a la base se rechaza por el certificado, define `DATABASE_SSL_CA`.
 
 ---
 
 ## 🧭 Recorrido
 
-1. **Página de inicio (`/`)**: explica el sistema y tiene un simulador que calcula un sueldo en vivo con el motor real. Se elige el régimen y si los décimos se pagan, se acumulan o no se reciben.
+1. **Página de inicio (`/`)**: explica el sistema, lleva a **Registrar mi empresa** (`/registro`) o a **Ingresar** (`/entrar`) y tiene un simulador que calcula un sueldo en vivo con el motor real. Se elige el régimen y si los décimos se pagan, se acumulan o no se reciben.
 2. **Información (`/informacion`)**: de qué trata el proyecto, lo que encontró la investigación y los enlaces de todas las fuentes.
-3. **Inicio del mes (`/sistema/inicio`)**: la primera pantalla al ingresar; `/sistema` pide usuario y contraseña en `/entrar` y, al entrar, vuelve a donde se iba. El botón **Salir** cierra la sesión. Muestra en cuatro pasos (equipo, novedades, rol generado, pagos e IESS) en qué punto está el mes y ofrece el botón de lo que sigue.
+3. **Inicio del mes (`/sistema/inicio`)**: la primera pantalla al ingresar; `/sistema` pide correo y contraseña en `/entrar` y, al entrar, vuelve a donde se iba. Quien aún no tiene cuenta la crea en `/registro` (nombre de la empresa, RUC, correo y contraseña de al menos 10 caracteres) y entra directo. El botón **Salir** cierra la sesión; la barra muestra el nombre de la empresa de la cuenta. Muestra en cuatro pasos (equipo, novedades, rol generado, pagos e IESS) en qué punto está el mes y ofrece el botón de lo que sigue.
 4. **Parámetros (`/sistema/parametros`)**: tres pestañas. *Año*: SBU y tabla del impuesto a la renta, con la opción de agregar un año nuevo copiando otro. *Regímenes laborales*: aportes, recargos, topes, vacaciones y beneficios de cada uno. *Escala salarial*: los grados de cada régimen.
 5. **Empleados**: alta con cédula validada (módulo 10), régimen, grado de la escala, beneficios, horas extras y fecha de salida opcional. Un clic carga seis empleados de ejemplo que cubren los tres regímenes.
 6. **Roles de pago**: se elige el mes en un calendario de doce meses que muestra cuál ya tiene rol y se digitan las novedades (horas suplementarias, extraordinarias, de sábado, domingo o feriado, y nocturnas; comisiones; anticipos). Quien no recibe horas extras tiene esas columnas deshabilitadas.
@@ -275,8 +275,10 @@ El backend no arranca en Vercel sin `DATABASE_URL`, `ADMIN_USUARIO`, `ADMIN_CLAV
 
 | Método y ruta | Uso |
 |---|---|
-| `GET /api/auth/yo`, `POST /api/auth/entrar`, `POST /api/auth/salir` | Estado de la sesión, inicio y cierre de sesión (`usuario`, `clave`) |
-| `GET /api/parametros?anio=` | Reglas de ley del año, tabla del IR, regímenes y datos de la empresa |
+| `POST /api/auth/registro` | Crea la cuenta de una empresa y abre la sesión (`empresa`, `ruc`, `email`, `clave`). Correo repetido: `409` |
+| `GET /api/auth/yo`, `POST /api/auth/entrar`, `POST /api/auth/salir` | Estado de la sesión, inicio (`email`, `clave`) y cierre de sesión |
+| `GET /api/cuenta`, `PUT /api/cuenta` | Nombre y RUC de la empresa de la sesión (`empresa`, `ruc`) |
+| `GET /api/parametros?anio=` | Reglas de ley del año, tabla del IR, regímenes y datos de la empresa. Con sesión, los de la cuenta; sin ella, los de la plantilla |
 | `PUT /api/parametros/:anio` | Crea o actualiza el SBU y la tabla del IR de un año |
 | `POST /api/simulacion` | Calcula un rol de ejemplo sin guardar nada (`regimen`, `categoriaLoep`, `decimos`) |
 | `GET /api/regimenes`, `GET /api/regimenes/:codigo` | Regímenes con todas sus reglas |
@@ -288,7 +290,7 @@ El backend no arranca en Vercel sin `DATABASE_URL`, `ADMIN_USUARIO`, `ADMIN_CLAV
 | `GET/POST /api/empleados` | Lista y alta |
 | `GET/PUT/DELETE /api/empleados/:id` | Consulta, edición y baja |
 | `PATCH /api/empleados/:id/estado` | Activa o desactiva. Al desactivar registra la salida (`fechaSalida` del cuerpo, o hoy); al activar la borra |
-| `POST /api/empleados/demo` | Carga los 12 empleados de ejemplo (sin roles de pago) |
+| `POST /api/empleados/demo` | Carga los 12 empleados de ejemplo en la cuenta (sin roles de pago) |
 | `GET /api/roles` | Historial de roles |
 | `GET /api/roles/periodo/:anio/:mes` | Empleados del mes, su régimen y las novedades ya digitadas |
 | `POST /api/roles/generar` | Calcula y guarda el rol (reemplaza el del mes) y devuelve los avisos |
@@ -297,7 +299,7 @@ El backend no arranca en Vercel sin `DATABASE_URL`, `ADMIN_USUARIO`, `ADMIN_CLAV
 | `GET /api/roles/:id/iess`, `GET /api/roles/:id/iess.csv` | Aportes por empleado para conciliar con el IESS |
 | `DELETE /api/roles/:id` | Elimina el rol |
 
-Toda la API exige sesión, salvo `GET /api/parametros`, `POST /api/simulacion` y `/api/auth/*`, que usa la página de inicio; sin sesión responde `401`. Tras cinco contraseñas incorrectas desde una misma IP, el inicio de sesión responde `429` durante 15 minutos. Los identificadores de la ruta (`/empleados/:id`) deben ser enteros positivos: si no, `400`.
+Toda la API exige sesión, salvo `GET /api/parametros`, `POST /api/simulacion` y `/api/auth/*`, que usa la página de inicio; sin sesión responde `401`. Con sesión, **todo** se filtra por la cuenta: lo de otra empresa responde `404`, igual que si no existiera. Los registros desde una misma IP están limitados a cinco cada 15 minutos (`429`). Tras cinco contraseñas incorrectas desde una misma IP, el inicio de sesión responde `429` durante 15 minutos. Los identificadores de la ruta (`/empleados/:id`) deben ser enteros positivos: si no, `400`.
 
 Los errores de validación responden `400` con `{ "errores": [...] }`; una cédula o un grado repetidos responden `409`.
 
@@ -364,11 +366,29 @@ En el formulario del empleado, si el régimen aplicado tiene puestos, el puesto 
 
 El seed carga 12 empleados con la estructura del orgánico: Johan Gabriel Rodríguez (gerente), José Gabriel Manzano (administrador), David Barragán y Andrea Paola Villavicencio (supervisores de instalaciones), Maybeline Navarro, Santiago Andrés Cevallos y Karen Michelle Salazar (operaciones de instalaciones) y Pedro Pablo Guamán, Luis Fernando Tipán y Mayra Alejandra Chicaiza (auxiliares de guardalmacén), más Lucía Estefanía Mora (LOSEP) y Daniela Alejandra Ruiz (LOEP servidora) para mostrar los otros regímenes. Cada uno cobra al menos el mínimo del nivel de su puesto.
 
-`npm run seed` también genera los roles de pago de **enero a septiembre de 2026**, dejando octubre para generarlo a mano. Los empleados aparecen en los roles desde su fecha de ingreso (Mayra desde marzo; Pedro, que ingresó el 16 de octubre, en ninguno). El personal de campo tiene horas extras y algún anticipo descontado, siempre los mismos valores para que la demostración sea repetible. Las cédulas son válidas pero inventadas.
+El seed también genera los roles de pago de **enero a septiembre de 2026**, dejando octubre para generarlo a mano. Los empleados aparecen en los roles desde su fecha de ingreso (Mayra desde marzo; Pedro, que ingresó el 16 de octubre, en ninguno). El personal de campo tiene horas extras y algún anticipo descontado, siempre los mismos valores para que la demostración sea repetible. Las cédulas son válidas pero inventadas.
 
 ### Conciliación con el IESS
 
 El IESS no recibe un archivo de aportes: arma la planilla en su portal a partir de los avisos de entrada y salida y las novedades que declara el empleador, y el comprobante se puede descargar en Excel. Lo que sí se automatiza es el cálculo, y por eso cada rol trae un cuadro con la materia gravada y los aportes personal y patronal de cada empleado, más los fondos de reserva que se depositan en el IESS (los que el trabajador acumula) y los que ya se pagaron en el rol. Se descarga en CSV y sirve para contrastar, línea por línea, con el comprobante del portal. La materia gravada no incluye los décimos ni los fondos pagados en el rol.
+
+---
+
+## 🏢 Cuentas por Empresa
+
+Cada empresa es una **cuenta** (`cuentas`: nombre y RUC) con sus **usuarios** (`usuarios`: correo único y hash `scrypt`). Hoy cada cuenta nace con un usuario, el que la registra; la tabla deja lugar a más.
+
+| Qué | Cómo se aísla |
+|---|---|
+| Empleados, roles, orgánico, escala, regímenes y parámetros anuales | Llevan `cuenta_id`; toda consulta lo filtra con la cuenta de la sesión |
+| Novedades y detalle de los roles | Cuelgan de un empleado o de un rol, que ya son de la cuenta |
+| Cédula, nombre del puesto, grado de la escala y mes del rol | Únicos **por cuenta**: dos empresas pueden tener la misma cédula o el mismo puesto |
+| Referencias entre tablas (puesto o grado de un empleado, superior de un puesto) | Se validan contra la misma cuenta: no se puede apuntar a lo de otra empresa |
+| Sesión | La cookie firmada lleva el usuario y su cuenta; no se puede cambiar sin invalidar la firma |
+
+**Plantilla de ley.** La cuenta con `plantilla = TRUE` (id 1) no es de ninguna empresa: guarda las reglas de partida (regímenes, parámetros anuales, escala y orgánico de ejemplo). Al registrarse una empresa, la función SQL `copiar_plantilla(cuenta)` le copia todo en la misma transacción, reenlazando por clave natural (régimen y grado; nombre del puesto). A partir de ahí, cada empresa edita lo suyo. La página de inicio pública (sin sesión) lee la plantilla.
+
+**Datos de antes de las cuentas.** Si la base ya tenía empleados o roles, la migración 013 los pasa a una cuenta llamada «Empresa anterior», con su copia del orgánico y la escala, y **sin usuarios**. Para entrar a ella se agrega uno con `npm --prefix backend run usuario -- correo "contraseña" --cuenta 2` (el id lo da `--listar`). Con la base vacía no se crea ninguna: la primera nace al registrarse una empresa.
 
 ---
 
@@ -390,6 +410,7 @@ El esquema vive en `backend/src/migraciones/NNN_nombre.sql`. Las aplicadas queda
 | 010 | Fecha de salida del empleado |
 | 011 | Dinero, tasas y horas en columnas `NUMERIC` (decimal exacto) en lugar de coma flotante |
 | 012 | Notas del régimen LOSEP: aporte IESS confirmado, recargo nocturno por confirmar |
+| 013 | Cuentas y usuarios; `cuenta_id` en empleados, roles, regímenes, parámetros, escala y puestos; los únicos (cédula, nombre del puesto, grado, mes del rol) pasan a ser por cuenta; la función `copiar_plantilla` |
 
 Los roles ya generados guardan una foto del régimen, de las tasas y de la modalidad con que se calcularon: si luego se editan las reglas, el historial no cambia.
 
@@ -417,10 +438,13 @@ Verifica todas las cifras con la norma y con el IESS antes de usar el sistema en
 
 ### Simplificaciones declaradas
 
-- Un solo usuario administrador, sin roles ni varios usuarios. El límite de intentos de contraseña vive en memoria: en Vercel cada instancia lleva su propia cuenta, así que frena la adivinanza pero no la impide.
+- Un usuario por cuenta, sin roles ni invitaciones. El límite de intentos de contraseña y de registros vive en memoria: en Vercel cada instancia lleva su propia cuenta, así que frena el abuso pero no lo impide.
+- No hay recuperación de contraseña ni verificación del correo: el sistema no envía correos. Quien pierde la contraseña no puede recuperar la cuenta sin acceso a la base (`usuario` agrega un usuario nuevo, pero no cambia la contraseña de uno existente).
+- El RUC se valida por su forma y su dígito verificador, no contra el SRI: cualquiera puede registrar un RUC que no es suyo.
+- Las sesiones no se guardan en el servidor: una sesión firmada vale hasta que vence (8 horas) o se cambia `SESION_SECRETO`; no hay forma de cerrarla desde otro lado.
+- No hay eliminación ni exportación de una cuenta completa desde la aplicación.
 - Sin gastos personales deducibles ni rebajas del impuesto a la renta.
 - Sin préstamos del IESS, vacaciones gozadas ni liquidaciones (finiquito) por salida: la fecha de salida solo prorratea el último mes.
-- Una sola empresa; su nombre y RUC están en `backend/src/config.ts`.
 - Los topes de horas extras avisan pero no bloquean: la LOSEP dice que si se obliga a trabajar sobre el límite, igual se pagan.
 - Los puestos del nivel jerárquico superior de la LOSEP no cobran horas extras: se marca «No las recibe» en ese empleado. No se incluye la escala oficial de ese nivel.
 
@@ -437,13 +461,14 @@ Verifica todas las cifras con la norma y con el IESS antes de usar el sistema en
 - [x] Conciliación con el IESS, boleta imprimible y CSV.
 - [x] Migraciones versionadas y base PostgreSQL en Supabase.
 - [x] Despliegue en Vercel.
-- [x] Inicio de sesión de un administrador.
+- [x] Cuentas por empresa: registro, inicio de sesión con correo y datos aislados por cuenta.
 - [x] Fecha de salida del empleado y roles de meses pasados que respetan quién estaba en nómina.
 - [x] Dinero exacto también en la base de datos (`NUMERIC`).
-- [ ] Varios usuarios con roles.
+- [ ] Varios usuarios por empresa, con roles.
+- [ ] Recuperar la contraseña y verificar el correo.
+- [ ] Eliminar o exportar una cuenta completa.
 - [ ] Gastos personales deducibles y rebajas del impuesto a la renta.
 - [ ] Préstamos del IESS, vacaciones gozadas y liquidaciones por salida.
-- [ ] Varias empresas en una misma instalación.
 - [ ] Confirmar con las normas vigentes los datos marcados «por confirmar».
 
 ---
@@ -454,7 +479,7 @@ Lista de contribuidores que han aportado commits al desarrollo de este repositor
 
 | Nombre | Commits |
 | :--- | :--- |
-| **kiramman-mp3** | 183 |
+| **kiramman-mp3** | 194 |
 
 ---
 
