@@ -50,60 +50,69 @@ describe('Entrar', () => {
     harness = await RouterTestingHarness.create();
   });
 
-  afterEach(() => http.verify());
+  afterEach(() => {
+    // Entrar o salir vuelve a pedir las reglas de la cuenta: aquí no interesan.
+    TestBed.tick();
+    http.match('/api/parametros');
+    http.verify();
+  });
 
   const abrir = async (url = '/entrar') => {
     await harness.navigateByUrl(url);
     // Al abrirse pregunta si ya hay sesión.
-    http.expectOne('/api/auth/yo').flush({ autenticado: false, usuario: null, protegida: true });
+    http.expectOne('/api/auth/yo').flush({ autenticado: false, email: null, empresa: null });
     harness.detectChanges();
     return harness.routeNativeElement as HTMLElement;
   };
 
-  const escribir = (el: HTMLElement, usuario: string, clave: string) => {
+  const escribir = (el: HTMLElement, email: string, clave: string) => {
     const poner = (id: string, valor: string) => {
       const campo = el.querySelector<HTMLInputElement>(`#${id}`)!;
       campo.value = valor;
       campo.dispatchEvent(new Event('input'));
     };
-    poner('usuario', usuario);
+    poner('email', email);
     poner('clave', clave);
     el.querySelector('form')!.dispatchEvent(new Event('submit'));
   };
 
   it('con los datos correctos entra y vuelve a la pantalla que se pidió', async () => {
     const el = await abrir('/entrar?volver=%2Fsistema%2Fempleados');
-    escribir(el, 'admin', 'secreta');
+    escribir(el, 'ana@empresa.com', 'secreta');
     const r = http.expectOne('/api/auth/entrar');
-    expect(r.request.body).toEqual({ usuario: 'admin', clave: 'secreta' });
-    r.flush({ autenticado: true, usuario: 'admin', protegida: true });
+    expect(r.request.body).toEqual({ email: 'ana@empresa.com', clave: 'secreta' });
+    r.flush({ autenticado: true, email: 'ana@empresa.com', empresa: { nombre: 'Casa Demo', ruc: '1790010937001' } });
+    TestBed.tick();
+    http.match('/api/parametros').forEach((r) => r.flush({}));
     await harness.fixture.whenStable();
     expect(router.url).toBe('/sistema/empleados');
   });
 
   it('no vuelve a una dirección de fuera del sistema', async () => {
     const el = await abrir('/entrar?volver=https%3A%2F%2Fmalo.com');
-    escribir(el, 'admin', 'secreta');
-    http.expectOne('/api/auth/entrar').flush({ autenticado: true, usuario: 'admin', protegida: true });
+    escribir(el, 'ana@empresa.com', 'secreta');
+    http.expectOne('/api/auth/entrar').flush({ autenticado: true, email: 'ana@empresa.com', empresa: { nombre: 'Casa Demo', ruc: '1790010937001' } });
+    TestBed.tick();
+    http.match('/api/parametros').forEach((r) => r.flush({}));
     await harness.fixture.whenStable();
     expect(router.url).toBe('/sistema');
   });
 
   it('con datos incorrectos muestra el mensaje del servidor y vacía la contraseña', async () => {
     const el = await abrir();
-    escribir(el, 'admin', 'mala');
+    escribir(el, 'ana@empresa.com', 'mala');
     http
       .expectOne('/api/auth/entrar')
-      .flush({ errores: ['Usuario o contraseña incorrectos.'] }, { status: 401, statusText: 'Unauthorized' });
+      .flush({ errores: ['Correo o contraseña incorrectos.'] }, { status: 401, statusText: 'Unauthorized' });
     harness.detectChanges();
-    expect(el.querySelector('[role="alert"]')?.textContent).toContain('Usuario o contraseña incorrectos.');
+    expect(el.querySelector('[role="alert"]')?.textContent).toContain('Correo o contraseña incorrectos.');
     expect(el.querySelector<HTMLInputElement>('#clave')!.value).toBe('');
     expect(router.url).toBe('/entrar');
   });
 
   it('si el servidor bloquea por demasiados intentos, muestra su aviso', async () => {
     const el = await abrir();
-    escribir(el, 'admin', 'mala');
+    escribir(el, 'ana@empresa.com', 'mala');
     http
       .expectOne('/api/auth/entrar')
       .flush({ errores: ['Demasiados intentos fallidos. Vuelve a intentar en 15 minutos.'] }, { status: 429, statusText: 'Too Many Requests' });
@@ -116,12 +125,12 @@ describe('Entrar', () => {
     el.querySelector('form')!.dispatchEvent(new Event('submit'));
     harness.detectChanges();
     http.expectNone('/api/auth/entrar');
-    expect(el.querySelector('[role="alert"]')?.textContent).toContain('Escribe el usuario y la contraseña');
+    expect(el.querySelector('[role="alert"]')?.textContent).toContain('Escribe el correo y la contraseña');
   });
 
   it('si ya hay sesión, salta el formulario', async () => {
     await harness.navigateByUrl('/entrar?volver=%2Fsistema%2Fempleados');
-    http.expectOne('/api/auth/yo').flush({ autenticado: true, usuario: 'admin', protegida: true });
+    http.expectOne('/api/auth/yo').flush({ autenticado: true, email: 'ana@empresa.com', empresa: { nombre: 'Casa Demo', ruc: '1790010937001' } });
     await harness.fixture.whenStable();
     expect(router.url).toBe('/sistema/empleados');
   });

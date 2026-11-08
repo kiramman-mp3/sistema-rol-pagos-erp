@@ -26,9 +26,7 @@ import { Sesion } from '../core/sesion';
         <span class="empresa">
           <strong>{{ parametros()?.empresa?.nombre }}</strong>
           <a routerLink="/informacion">Información</a>
-          @if (sesion.protegida()) {
-            <button type="button" class="boton-texto salir" (click)="salir()">Salir</button>
-          }
+          <button type="button" class="boton-texto salir" (click)="salir()">Salir</button>
         </span>
       </div>
     </header>

@@ -7,8 +7,8 @@ import { RouterTestingHarness } from '@angular/router/testing';
 
 import { Sesion, sesionActiva, sesionVencida } from './sesion';
 
-const ESTADO = { autenticado: true, usuario: 'admin', protegida: true };
-const SIN_SESION = { autenticado: false, usuario: null, protegida: true };
+const ESTADO = { autenticado: true, email: 'ana@empresa.com', empresa: { nombre: 'Casa Demo', ruc: '1790010937001' } };
+const SIN_SESION = { autenticado: false, email: null, empresa: null };
 
 @Component({ template: '' })
 class Vacio {}
@@ -34,7 +34,12 @@ describe('sesión', () => {
     sesion = TestBed.inject(Sesion);
   });
 
-  afterEach(() => http.verify());
+  afterEach(() => {
+    // Entrar o salir vuelve a pedir las reglas de la cuenta: aquí no interesan.
+    TestBed.tick();
+    http.match('/api/parametros');
+    http.verify();
+  });
 
   describe('guard', () => {
     const intentarEntrar = async (respuesta: object | null, error = false) => {
@@ -50,7 +55,8 @@ describe('sesión', () => {
     it('con sesión válida deja entrar al sistema', async () => {
       await intentarEntrar(ESTADO);
       expect(router.url).toBe('/sistema/inicio');
-      expect(sesion.usuario()).toBe('admin');
+      expect(sesion.email()).toBe('ana@empresa.com');
+      expect(sesion.empresa()?.nombre).toBe('Casa Demo');
     });
 
     it('sin sesión lleva al inicio de sesión y recuerda a dónde volver', async () => {
@@ -63,12 +69,6 @@ describe('sesión', () => {
       expect(router.url).toContain('/entrar');
     });
 
-    it('en un servidor sin inicio de sesión deja entrar', async () => {
-      await intentarEntrar({ autenticado: true, usuario: null, protegida: false });
-      expect(router.url).toBe('/sistema/inicio');
-      expect(sesion.protegida()).toBe(false);
-    });
-
     it('con la sesión ya conocida no vuelve a preguntar', async () => {
       sesion.autenticado.set(true);
       await (await RouterTestingHarness.create()).navigateByUrl('/sistema/inicio');
@@ -77,24 +77,42 @@ describe('sesión', () => {
   });
 
   describe('servicio', () => {
-    it('entrar envía las credenciales y guarda quién es', () => {
-      sesion.entrar('admin', 'secreta').subscribe();
+    it('entrar envía las credenciales, guarda quién es y vuelve a pedir las reglas de su cuenta', () => {
+      sesion.entrar('ana@empresa.com', 'secreta').subscribe();
       const r = http.expectOne('/api/auth/entrar');
       expect(r.request.method).toBe('POST');
-      expect(r.request.body).toEqual({ usuario: 'admin', clave: 'secreta' });
+      expect(r.request.body).toEqual({ email: 'ana@empresa.com', clave: 'secreta' });
       r.flush(ESTADO);
       expect(sesion.autenticado()).toBe(true);
-      expect(sesion.usuario()).toBe('admin');
-      expect(sesion.protegida()).toBe(true);
+      expect(sesion.email()).toBe('ana@empresa.com');
+      expect(sesion.empresa()).toEqual({ nombre: 'Casa Demo', ruc: '1790010937001' });
+      TestBed.tick();
+      http.match('/api/parametros'); // las reglas se piden de nuevo: son de la cuenta que entró
+    });
+
+    it('registrar crea la cuenta y deja la sesión abierta', () => {
+      const datos = { empresa: 'Casa Demo', ruc: '1790010937001', email: 'ana@empresa.com', clave: 'una-clave-larga' };
+      sesion.registrar(datos).subscribe();
+      const r = http.expectOne('/api/auth/registro');
+      expect(r.request.method).toBe('POST');
+      expect(r.request.body).toEqual(datos);
+      r.flush(ESTADO);
+      expect(sesion.autenticado()).toBe(true);
+      expect(sesion.empresa()?.nombre).toBe('Casa Demo');
+      TestBed.tick();
+      http.match('/api/parametros');
     });
 
     it('salir avisa al servidor y olvida la sesión', () => {
       sesion.autenticado.set(true);
-      sesion.usuario.set('admin');
+      sesion.email.set('ana@empresa.com');
       sesion.salir().subscribe();
       http.expectOne('/api/auth/salir').flush(null, { status: 204, statusText: 'No Content' });
       expect(sesion.autenticado()).toBe(false);
-      expect(sesion.usuario()).toBeNull();
+      expect(sesion.email()).toBeNull();
+      expect(sesion.empresa()).toBeNull();
+      TestBed.tick();
+      http.match('/api/parametros');
     });
   });
 
@@ -121,10 +139,10 @@ describe('sesión', () => {
 
     it('un 401 al iniciar sesión no redirige: el error lo muestra el formulario', async () => {
       await router.navigateByUrl('/entrar');
-      sesion.entrar('admin', 'mala').subscribe({ error: () => undefined });
+      sesion.entrar('ana@empresa.com', 'mala').subscribe({ error: () => undefined });
       http
         .expectOne('/api/auth/entrar')
-        .flush({ errores: ['Usuario o contraseña incorrectos.'] }, { status: 401, statusText: 'Unauthorized' });
+        .flush({ errores: ['Correo o contraseña incorrectos.'] }, { status: 401, statusText: 'Unauthorized' });
       await esperarNavegacion();
       expect(router.url).toBe('/entrar');
     });

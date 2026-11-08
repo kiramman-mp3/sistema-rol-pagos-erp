@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { EMPLEADO, iniciar, NIVEL_E2_CT } from "./ayuda.ts";
+import { EMPLEADO, iniciar, NIVEL_E2_CT, puesto } from "./ayuda.ts";
 import type { Cliente } from "./ayuda.ts";
 
 async function conApi(prueba: (api: Cliente) => Promise<void>) {
@@ -130,9 +130,9 @@ describe("empleados y escala salarial", () => {
   it("en un nivel de mínimo el sueldo puede ser mayor, pero no menor", () =>
     conApi(async (api) => {
       const b1 = await gradoDe(api, 2, "CODIGO_TRABAJO"); // B1, mínimo $495
-      const mayor = await api.post("/api/empleados", { ...EMPLEADO, puestoId: 2, sueldoBase: 900, escalaId: b1.id });
+      const mayor = await api.post("/api/empleados", { ...EMPLEADO, puestoId: puesto(2), sueldoBase: 900, escalaId: b1.id });
       assert.equal(mayor.status, 201);
-      const menor = await api.post("/api/empleados", { ...EMPLEADO, puestoId: 2, cedula: "1702345677", sueldoBase: 490, escalaId: b1.id });
+      const menor = await api.post("/api/empleados", { ...EMPLEADO, puestoId: puesto(2), cedula: "1702345677", sueldoBase: 490, escalaId: b1.id });
       assert.equal(menor.status, 400);
       assert.match(menor.json.errores[0], /es menor al mínimo del nivel B1: Supervisión general \(\$495\)/);
     }));
