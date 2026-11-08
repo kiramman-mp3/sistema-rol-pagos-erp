@@ -108,6 +108,12 @@ export class Api {
   guardarRegimen(codigo: string, datos: Record<string, unknown>) {
     return this.http.put<Regimen>(`/api/regimenes/${codigo}`, datos);
   }
+  versionesRegimen(codigo: string) {
+    return this.http.get<Regimen[]>(`/api/regimenes/${codigo}/versiones`);
+  }
+  eliminarVersionRegimen(codigo: string, desde: string) {
+    return this.http.delete<void>(`/api/regimenes/${codigo}/versiones/${desde}`);
+  }
   crearGrado(datos: DatosGrado) {
     return this.http.post<Grado>('/api/escala', datos);
   }

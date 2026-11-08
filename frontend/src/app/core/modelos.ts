@@ -58,6 +58,8 @@ export type Modalidad = 'no' | 'mensual' | 'acumulado';
 /** Reglas de un régimen laboral. Los porcentajes son fracciones (0.0945 = 9.45%). */
 export interface Regimen {
   codigo: string;
+  /** Primer día (AAAA-MM-DD) en que rige esta versión de las reglas. */
+  vigenteDesde: string;
   nombre: string;
   descripcion: string;
   baseLegal: string;
