@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 
-import { abrirBase, aPlaceholders, consultar, migrar, opcionesSsl, uno, versionEsquema } from "../src/db.ts";
+import { abrirBase, aPlaceholders, consultar, descripcionDeDestino, esBaseRemota, migrar, opcionesSsl, uno, versionEsquema } from "../src/db.ts";
 
 const ULTIMA = readdirSync(new URL("../src/migraciones/", import.meta.url))
   .filter((f) => f.endsWith(".sql"))
@@ -99,5 +100,32 @@ describe("TLS hacia el servidor", () => {
   it("solo deja de verificar con DATABASE_SSL_INSECURE=1", () => {
     assert.deepEqual(opcionesSsl({ DATABASE_SSL_INSECURE: "1" }), { rejectUnauthorized: false });
     assert.deepEqual(opcionesSsl({ DATABASE_SSL_INSECURE: "true" }), { rejectUnauthorized: true });
+  });
+});
+
+describe("destino de la base", () => {
+  it("distingue un servidor Postgres de PGlite", () => {
+    assert.equal(esBaseRemota("postgresql://u:p@host:6543/postgres"), true);
+    assert.equal(esBaseRemota("postgres://u:p@host/db"), true);
+    assert.equal(esBaseRemota(":memory:"), false);
+    assert.equal(esBaseRemota("C:/datos/pglite"), false);
+  });
+
+  it("describe la URL sin usuario ni contraseña", () => {
+    const texto = descripcionDeDestino("postgresql://postgres.abc:secreto@aws-0.pooler.supabase.com:6543/postgres");
+    assert.equal(texto, "aws-0.pooler.supabase.com:6543/postgres");
+    assert.ok(!texto.includes("secreto"));
+  });
+
+  it("el seed se niega a reiniciar un servidor sin confirmación y no se conecta", () => {
+    const r = spawnSync(
+      process.execPath,
+      [fileURLToPath(new URL("../src/seed.ts", import.meta.url)), "--reiniciar"],
+      { env: { ...process.env, DATABASE_URL: "postgresql://u:secreto@127.0.0.1:1/x" }, encoding: "utf8" },
+    );
+    assert.equal(r.status, 1);
+    assert.match(r.stderr, /--confirmo-produccion/);
+    assert.match(r.stderr, /127\.0\.0\.1:1\/x/);
+    assert.ok(!r.stderr.includes("secreto"));
   });
 });

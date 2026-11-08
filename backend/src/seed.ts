@@ -4,20 +4,37 @@
  *
  *   npm --prefix backend run seed                 base vacía (o la que ya tenga datos: no la toca)
  *   npm --prefix backend run seed -- --reiniciar  borra empleados, roles y novedades y empieza de cero
+ *                                                 (contra Supabase pide además --confirmo-produccion)
  *
  * Con DATABASE_URL en el entorno carga la base de Supabase; sin ella, la de PGlite en backend/data.
  */
 import { fileURLToPath } from "node:url";
 
-import { abrirBase, ejecutar, uno } from "./db.ts";
+import { abrirBase, descripcionDeDestino, ejecutar, esBaseRemota, uno } from "./db.ts";
 import { ANIO_DEMO, cargarEmpleadosDemo, generarRolesDemo, MESES_DEMO } from "./demo.ts";
 
 const aqui = (ruta: string) => fileURLToPath(new URL(ruta, import.meta.url));
 const destino = process.env.DATABASE_URL ?? process.env.DATABASE ?? aqui("../data/pglite");
 const reiniciar = process.argv.includes("--reiniciar");
 
+// Contra un servidor Postgres (Supabase) --reiniciar borra datos reales: exige una confirmación explícita.
+if (reiniciar && esBaseRemota(destino) && !process.argv.includes("--confirmo-produccion")) {
+  console.error(
+    `--reiniciar borraría empleados, roles y novedades de ${descripcionDeDestino(destino)}.\n` +
+      "Si es lo que quieres, repite el comando con --confirmo-produccion.",
+  );
+  process.exit(1);
+}
+
 const db = await abrirBase(destino);
 if (reiniciar) {
+  if (esBaseRemota(destino)) {
+    const contar = async (tabla: string) => Number((await uno(db, `SELECT COUNT(*) AS n FROM ${tabla}`))?.n ?? 0);
+    console.log(
+      `Borrando de ${descripcionDeDestino(destino)}: ${await contar("empleados")} empleados, ` +
+        `${await contar("roles_cabecera")} roles.`,
+    );
+  }
   // Los roles arrastran su detalle; los empleados sueltan puesto y responsable por las claves foráneas.
   await ejecutar(db, "DELETE FROM roles_cabecera");
   await ejecutar(db, "DELETE FROM novedades");
