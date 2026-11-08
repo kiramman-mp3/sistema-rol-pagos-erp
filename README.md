@@ -57,10 +57,12 @@ Para el área de talento humano o contabilidad de una empresa pequeña o mediana
 *   **Escala salarial y orgánico funcional:** el sueldo sale del grado elegido (exacto en la LOSEP, mínimo en el Código del Trabajo) y cada puesto del orgánico lleva su función, su responsable y su nivel de referencia.
 *   **Décimos y fondos a la medida:** por empleado, cada beneficio se paga cada mes en el rol, se acumula o no se recibe.
 *   **Horas extras por tipo:** suplementarias, extraordinarias, de sábado, domingo y feriado, y nocturnas, con el recargo y el tope de cada régimen. Los topes avisan, sin bloquear.
-*   **Dinero exacto:** todo se calcula con `decimal.js` y se redondea a centavos en cada rubro.
+*   **Dinero exacto:** todo se calcula con `decimal.js`, se redondea a centavos en cada rubro y se guarda en columnas `NUMERIC`, sin errores de coma flotante.
 *   **Conciliación con el IESS:** materia gravada, aportes personal y patronal y fondos de reserva por empleado, descargables en CSV.
 *   **Boleta y CSV:** boleta individual imprimible en una hoja y exportación del rol para Excel.
 *   **Cédula validada:** dígito verificador (módulo 10) y provincia.
+*   **Acceso con contraseña:** un administrador entra con usuario y contraseña; la sesión dura 8 horas y la API privada responde `401` sin ella. La contraseña se guarda como hash `scrypt`, nunca en claro.
+*   **Fecha de salida:** quien se va cobra solo los días hasta su salida y deja de entrar a los roles siguientes; los meses anteriores no cambian.
 *   **Sin dependencias de CDN:** las tipografías van incluidas en el proyecto.
 
 ---
@@ -85,7 +87,7 @@ El motor de cálculo no sabe nada de la base de datos: recibe las reglas ya arma
 ```mermaid
 graph TD
     Web["Angular 22 · frontend/"] -->|HTTP /api| App["app.ts · Express 5"]
-    App --> Rutas["rutas/ · empleados, roles, parámetros, regímenes, escala, puestos"]
+    App --> Rutas["rutas/ · auth, empleados, roles, parámetros, regímenes, escala, puestos"]
 
     Rutas --> Motor["calculos.ts · motor de cálculo (funciones puras)"]
     Rutas --> Reglas["regimenes.ts · parametros.ts · escala.ts · puestos.ts"]
@@ -113,17 +115,20 @@ rol-pagos-ecuador/
 │   │   ├── iess.ts            # Cuadro de conciliación con el IESS
 │   │   ├── demo.ts            # Empleados y roles de ejemplo (los usa el seed)
 │   │   ├── db.ts              # PostgreSQL sin ORM (pg, o PGlite) y ejecutor de migraciones
-│   │   ├── rutas/             # empleados, roles, parámetros, regímenes, escala y puestos
-│   │   ├── migraciones/       # Esquema versionado: 001 a 009 (SQL numerado)
+│   │   ├── auth.ts            # Contraseña (scrypt), sesión firmada y límite de intentos
+│   │   ├── generarClave.ts    # Script que genera ADMIN_CLAVE_HASH y SESION_SECRETO
+│   │   ├── rutas/             # auth, empleados, roles, parámetros, regímenes, escala y puestos
+│   │   ├── migraciones/       # Esquema versionado: 001 a 012 (SQL numerado)
 │   │   ├── validaciones.ts    # Cédula, números y fechas
 │   │   ├── server.ts          # Arranque local
 │   │   └── vercel.ts          # Entrada del backend en Vercel
 │   └── test/                  # node:test, incluida la API completa
 ├── frontend/                  # Angular 22
 │   ├── src/app/landing/       # Página de inicio con el simulador
+│   ├── src/app/entrar/        # Inicio de sesión
 │   ├── src/app/informacion/   # Acerca de, investigación y fuentes
 │   ├── src/app/sistema/       # Shell, inicio del mes, empleados, orgánico, roles y parámetros
-│   ├── src/app/core/          # Cliente de la API, avisos, pipe de dinero, modelos y fuentes
+│   ├── src/app/core/          # Cliente de la API, sesión, avisos, pipe de dinero, modelos y fuentes
 │   └── src/styles.css         # Sistema visual global
 ├── docs/capturas/             # Capturas de pantalla de este README
 ├── vercel.json                # Servicios de Vercel: frontend y backend
@@ -163,7 +168,27 @@ rol-pagos-ecuador/
 
     El esquema se crea y se actualiza solo al arrancar (ver Migraciones, más abajo).
 
-4.  **Cargar los datos de ejemplo** (opcional): 12 empleados y los roles de enero a septiembre de 2026.
+4.  **Activar el inicio de sesión.** Genera el hash de la contraseña y un secreto para firmar las sesiones:
+    ```bash
+    npm --prefix backend run clave -- "una contraseña de al menos 12 caracteres"
+    # o, para que no quede en el historial del terminal:  echo "la contraseña" | npm --prefix backend run clave
+    ```
+    Con lo que imprime, define las tres variables antes de arrancar:
+    ```bash
+    export ADMIN_USUARIO='admin'
+    export ADMIN_CLAVE_HASH='scrypt.16384.8.1.…'
+    export SESION_SECRETO='…'      # al menos 32 caracteres
+    ```
+    Sin ninguna de las tres y con la base local (PGlite), la API queda abierta y el servidor lo avisa: solo sirve para trabajar en tu máquina. Con `DATABASE_URL` el servidor **no arranca** sin ellas. Si defines solo algunas, también falla. Nunca guardes estos valores en el repositorio.
+
+    | Variable | Para qué sirve |
+    |---|---|
+    | `DATABASE_URL` | Cadena de conexión de Postgres (Supabase). Sin ella se usa PGlite |
+    | `DATABASE_SSL_CA` | Certificado de la autoridad de la base (el texto PEM o la ruta del archivo). Supabase firma con su propia CA (`prod-ca-2021.crt`, en *Database Settings*): sin él, la conexión se rechaza |
+    | `DATABASE_SSL_INSECURE` | `1` desactiva la verificación del certificado. Solo como salida de emergencia: permite que un intermediario lea la conexión |
+    | `ADMIN_USUARIO`, `ADMIN_CLAVE_HASH`, `SESION_SECRETO` | Inicio de sesión del administrador |
+
+5.  **Cargar los datos de ejemplo** (opcional): 12 empleados y los roles de enero a septiembre de 2026.
     ```bash
     npm --prefix backend run seed
     ```
@@ -195,7 +220,8 @@ npm run dev
 | `npm test` | Pruebas del backend (Node) y del frontend (Vitest) |
 | `npm run lint` | Tipos y ESLint de ambos proyectos |
 | `npm --prefix backend run seed` | Llena una base vacía con 12 empleados y los roles de enero a septiembre de 2026 |
-| `npm --prefix backend run seed -- --reiniciar` | Igual, pero antes borra empleados, roles y novedades de la base y empieza de cero |
+| `npm --prefix backend run seed -- --reiniciar` | Igual, pero antes borra empleados, roles y novedades de la base y empieza de cero. Contra un servidor Postgres exige además `--confirmo-produccion` y muestra cuántos datos se perderían |
+| `npm --prefix backend run clave -- "contraseña"` | Imprime `ADMIN_CLAVE_HASH` y un `SESION_SECRETO` nuevo |
 
 ---
 
@@ -204,9 +230,15 @@ npm run dev
 El proyecto se despliega en **Vercel** como un solo proyecto con dos servicios (`vercel.json`): el frontend Angular y el backend Express, que atiende `/api/*`. La base es la de Supabase.
 
 ```bash
-vercel env add DATABASE_URL production --sensitive   # cadena del pooler de Supabase
+vercel env add DATABASE_URL production --sensitive       # cadena del pooler de Supabase
+vercel env add DATABASE_SSL_CA production --sensitive    # certificado de Supabase (prod-ca-2021.crt)
+vercel env add ADMIN_USUARIO production
+vercel env add ADMIN_CLAVE_HASH production --sensitive   # de `npm --prefix backend run clave`
+vercel env add SESION_SECRETO production --sensitive     # de la misma salida
 vercel deploy --prod
 ```
+
+El backend no arranca en Vercel sin `DATABASE_URL`, `ADMIN_USUARIO`, `ADMIN_CLAVE_HASH` y `SESION_SECRETO`: no se publica una API sin inicio de sesión. Si la conexión a la base se rechaza por el certificado, define `DATABASE_SSL_CA`.
 
 ---
 
@@ -214,9 +246,9 @@ vercel deploy --prod
 
 1. **Página de inicio (`/`)**: explica el sistema y tiene un simulador que calcula un sueldo en vivo con el motor real. Se elige el régimen y si los décimos se pagan, se acumulan o no se reciben.
 2. **Información (`/informacion`)**: de qué trata el proyecto, lo que encontró la investigación y los enlaces de todas las fuentes.
-3. **Inicio del mes (`/sistema/inicio`)**: la primera pantalla al ingresar. Muestra en cuatro pasos (equipo, novedades, rol generado, pagos e IESS) en qué punto está el mes y ofrece el botón de lo que sigue.
+3. **Inicio del mes (`/sistema/inicio`)**: la primera pantalla al ingresar; `/sistema` pide usuario y contraseña en `/entrar` y, al entrar, vuelve a donde se iba. El botón **Salir** cierra la sesión. Muestra en cuatro pasos (equipo, novedades, rol generado, pagos e IESS) en qué punto está el mes y ofrece el botón de lo que sigue.
 4. **Parámetros (`/sistema/parametros`)**: tres pestañas. *Año*: SBU y tabla del impuesto a la renta, con la opción de agregar un año nuevo copiando otro. *Regímenes laborales*: aportes, recargos, topes, vacaciones y beneficios de cada uno. *Escala salarial*: los grados de cada régimen.
-5. **Empleados**: alta con cédula validada (módulo 10), régimen, grado de la escala, beneficios y horas extras. Un clic carga seis empleados de ejemplo que cubren los tres regímenes.
+5. **Empleados**: alta con cédula validada (módulo 10), régimen, grado de la escala, beneficios, horas extras y fecha de salida opcional. Un clic carga seis empleados de ejemplo que cubren los tres regímenes.
 6. **Roles de pago**: se elige el mes en un calendario de doce meses que muestra cuál ya tiene rol y se digitan las novedades (horas suplementarias, extraordinarias, de sábado, domingo o feriado, y nocturnas; comisiones; anticipos). Quien no recibe horas extras tiene esas columnas deshabilitadas.
 7. **Generar**: el backend calcula a cada empleado activo con las reglas de su régimen y guarda una foto en `roles_detalle`. Avisa, sin bloquear, si alguien pasa el tope mensual de horas.
 8. **Rol**: dos ecuaciones (`ingresos − descuentos = neto` e `ingresos + provisiones = costo empleador`), la planilla por empleado, el costo empleador aparte y la **conciliación con el IESS**.
@@ -243,6 +275,7 @@ vercel deploy --prod
 
 | Método y ruta | Uso |
 |---|---|
+| `GET /api/auth/yo`, `POST /api/auth/entrar`, `POST /api/auth/salir` | Estado de la sesión, inicio y cierre de sesión (`usuario`, `clave`) |
 | `GET /api/parametros?anio=` | Reglas de ley del año, tabla del IR, regímenes y datos de la empresa |
 | `PUT /api/parametros/:anio` | Crea o actualiza el SBU y la tabla del IR de un año |
 | `POST /api/simulacion` | Calcula un rol de ejemplo sin guardar nada (`regimen`, `categoriaLoep`, `decimos`) |
@@ -254,7 +287,7 @@ vercel deploy --prod
 | `PATCH /api/puestos/:id/responsable` | Asigna o quita al responsable de un puesto |
 | `GET/POST /api/empleados` | Lista y alta |
 | `GET/PUT/DELETE /api/empleados/:id` | Consulta, edición y baja |
-| `PATCH /api/empleados/:id/estado` | Activa o desactiva |
+| `PATCH /api/empleados/:id/estado` | Activa o desactiva. Al desactivar registra la salida (`fechaSalida` del cuerpo, o hoy); al activar la borra |
 | `POST /api/empleados/demo` | Carga los 12 empleados de ejemplo (sin roles de pago) |
 | `GET /api/roles` | Historial de roles |
 | `GET /api/roles/periodo/:anio/:mes` | Empleados del mes, su régimen y las novedades ya digitadas |
@@ -263,6 +296,8 @@ vercel deploy --prod
 | `GET /api/roles/:id/csv` | Exportación para Excel |
 | `GET /api/roles/:id/iess`, `GET /api/roles/:id/iess.csv` | Aportes por empleado para conciliar con el IESS |
 | `DELETE /api/roles/:id` | Elimina el rol |
+
+Toda la API exige sesión, salvo `GET /api/parametros`, `POST /api/simulacion` y `/api/auth/*`, que usa la página de inicio; sin sesión responde `401`. Tras cinco contraseñas incorrectas desde una misma IP, el inicio de sesión responde `429` durante 15 minutos. Los identificadores de la ruta (`/empleados/:id`) deben ser enteros positivos: si no, `400`.
 
 Los errores de validación responden `400` con `{ "errores": [...] }`; una cédula o un grado repetidos responden `409`.
 
@@ -274,8 +309,8 @@ Todo lo que fija la ley está en la base de datos y se edita desde **Parámetros
 
 | | Código del Trabajo | LOSEP |
 |---|---|---|
-| Aporte personal al IESS | 9,45 % | 11,45 % (**por confirmar**) |
-| Aporte patronal al IESS | 11,15 % | 9,15 % (**por confirmar**) |
+| Aporte personal al IESS | 9,45 % | 11,45 % (confirmado en el cuadro del IESS) |
+| Aporte patronal al IESS | 11,15 % | 9,15 % (confirmado en el cuadro del IESS) |
 | Horas suplementarias | +50 %, referencia de 48 al mes (art. 55) | +25 %, hasta 60 al mes (art. 114) |
 | Horas extraordinarias (24h00 a 06h00) | +100 % (art. 55) | +60 %, hasta 60 al mes (art. 114) |
 | Sábado, domingo y feriado | +100 % | +100 % |
@@ -296,7 +331,8 @@ La **LOEP** no tiene tasas propias: sus servidores de carrera se rigen por la LO
 | Décimo cuarto | SBU ÷ 12 |
 | Vacaciones (provisión) | ingreso aportable × días de vacaciones ÷ 360 (15 días = 1/24, art. 71) |
 | Fondos de reserva | 8,33 % del aportable desde el mes 13 |
-| Mes de ingreso | sueldo y décimo cuarto proporcionales a los días (base 30) |
+| Mes de ingreso y de salida | sueldo y décimo cuarto proporcionales a los días (base 30): desde el día de ingreso o hasta el día de salida, nunca menos de un día |
+| Quién entra al rol de un mes | quien ingresó antes de que termine y no salió antes de que empiece; un inactivo sin fecha de salida queda fuera de todos |
 
 ### Décimos y fondos: no, mensual o acumulado
 
@@ -351,6 +387,9 @@ El esquema vive en `backend/src/migraciones/NNN_nombre.sql`. Las aplicadas queda
 | 007 | Escala salarial del sector privado (niveles con sueldo mínimo) |
 | 008 | Orgánico funcional: puestos y su nivel de referencia |
 | 009 | Responsable de cada puesto |
+| 010 | Fecha de salida del empleado |
+| 011 | Dinero, tasas y horas en columnas `NUMERIC` (decimal exacto) en lugar de coma flotante |
+| 012 | Notas del régimen LOSEP: aporte IESS confirmado, recargo nocturno por confirmar |
 
 Los roles ya generados guardan una foto del régimen, de las tasas y de la modalidad con que se calcularon: si luego se editan las reglas, el historial no cambia.
 
@@ -368,9 +407,9 @@ Las tipografías (Bricolage Grotesque y Figtree) van incluidas en `frontend/publ
 
 | Dato | Por qué | Qué hace el sistema |
 |---|---|---|
-| Aporte al IESS de los servidores públicos | Las fuentes se contradicen (11,45 % y 9,15 % frente a 9,45 % y 11,15 %) y no se pudo leer la Resolución CD 501 ni la Disposición Transitoria 16 que varias citan | Usa 11,45 % y 9,15 % para la LOSEP; se edita en Parámetros |
+| Aporte al IESS de los servidores públicos | El cuadro «Tasas de aportación» del IESS lo confirma (11,45 % personal y 9,15 % patronal), pero es un documento antiguo y la Resolución CD 501 es un escaneo que no se pudo leer; un sitio comercial publica otras cifras | Usa 11,45 % y 9,15 % para la LOSEP; revisa la resolución vigente; se edita en Parámetros |
 | Escala salarial del sector público | No se encontró la escala oficial vigente de 20 grados | Carga una escala de ejemplo editable |
-| Recargo nocturno de la LOSEP | El art. 114 no lo menciona | Asume el 25 % del Código del Trabajo; editable |
+| Recargo nocturno de la LOSEP | El art. 114 no lo menciona y no se encontró otra norma que lo fije para servidores públicos | Asume el 25 % del Código del Trabajo (art. 49); editable |
 | Reformas de la LOSEP posteriores a 2016 | La copia leída es de 2016 | Revisa el texto vigente antes de usarlo en una nómina real |
 | Formato de carga masiva del IESS | No se encontró un formato público de archivo | Entrega un cuadro de conciliación, no un archivo de carga |
 
@@ -378,9 +417,9 @@ Verifica todas las cifras con la norma y con el IESS antes de usar el sistema en
 
 ### Simplificaciones declaradas
 
-- Sin autenticación: el botón de la landing entra directo al sistema.
+- Un solo usuario administrador, sin roles ni varios usuarios. El límite de intentos de contraseña vive en memoria: en Vercel cada instancia lleva su propia cuenta, así que frena la adivinanza pero no la impide.
 - Sin gastos personales deducibles ni rebajas del impuesto a la renta.
-- Sin préstamos del IESS, vacaciones gozadas ni liquidaciones por salida.
+- Sin préstamos del IESS, vacaciones gozadas ni liquidaciones (finiquito) por salida: la fecha de salida solo prorratea el último mes.
 - Una sola empresa; su nombre y RUC están en `backend/src/config.ts`.
 - Los topes de horas extras avisan pero no bloquean: la LOSEP dice que si se obliga a trabajar sobre el límite, igual se pagan.
 - Los puestos del nivel jerárquico superior de la LOSEP no cobran horas extras: se marca «No las recibe» en ese empleado. No se incluye la escala oficial de ese nivel.
@@ -398,7 +437,10 @@ Verifica todas las cifras con la norma y con el IESS antes de usar el sistema en
 - [x] Conciliación con el IESS, boleta imprimible y CSV.
 - [x] Migraciones versionadas y base PostgreSQL en Supabase.
 - [x] Despliegue en Vercel.
-- [ ] Autenticación y roles de usuario.
+- [x] Inicio de sesión de un administrador.
+- [x] Fecha de salida del empleado y roles de meses pasados que respetan quién estaba en nómina.
+- [x] Dinero exacto también en la base de datos (`NUMERIC`).
+- [ ] Varios usuarios con roles.
 - [ ] Gastos personales deducibles y rebajas del impuesto a la renta.
 - [ ] Préstamos del IESS, vacaciones gozadas y liquidaciones por salida.
 - [ ] Varias empresas en una misma instalación.
@@ -412,7 +454,7 @@ Lista de contribuidores que han aportado commits al desarrollo de este repositor
 
 | Nombre | Commits |
 | :--- | :--- |
-| **kiramman-mp3** | 151 |
+| **kiramman-mp3** | 183 |
 
 ---
 
