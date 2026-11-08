@@ -134,7 +134,7 @@ rol-pagos-ecuador/
 │   │   ├── seed.ts            # Script: crea una cuenta de ejemplo y la llena
 │   │   ├── usuario.ts         # Script: lista las cuentas y agrega usuarios a una cuenta
 │   │   ├── rutas/             # auth, cuenta, empleados, roles, parámetros, regímenes, escala y puestos
-│   │   ├── migraciones/       # Esquema versionado: 001 a 017 (SQL numerado)
+│   │   ├── migraciones/       # Esquema versionado: 001 a 018 (SQL numerado)
 │   │   ├── validaciones.ts    # Cédula, RUC, correo, números y fechas
 │   │   ├── server.ts          # Arranque local
 │   │   └── vercel.ts          # Entrada del backend en Vercel
@@ -312,6 +312,7 @@ El backend no arranca en Vercel sin `DATABASE_URL` y `SESION_SECRETO`. Las empre
 | `GET /api/roles/periodo/:anio/:mes` | Empleados del mes, su régimen y las novedades ya digitadas |
 | `POST /api/roles/generar` | Calcula y guarda el rol en estado «calculado» (reemplaza el del mes) y devuelve los avisos. Si el del mes está publicado o pagado: `409` |
 | `GET /api/roles/:id` | Rol con su detalle por empleado. Un ajuste trae además su `origen`; un rol publicado o pagado trae sus `ajustes`, el `consolidado` del mes (rol más ajustes publicados) y cómo quedó cada empleado (`vigente`) |
+| `GET /api/roles/:id/traza/:cedula` | Cómo se calculó cada valor de un empleado en ese rol: contexto (régimen, versión de reglas, parámetros) y pasos con fórmula, números y resultado. `404` si la persona no está en el rol o el rol es anterior al desglose. Lo pueden ver los tres roles de usuario |
 | `POST /api/roles/:id/reliquidar` | Crea un ajuste de un rol publicado o pagado. Cuerpo: `motivo` (5 a 500 caracteres) y `cambios`, una lista por `cedula` con `sueldoBase`, horas, `comisiones` u `otrosDescuentos`. Responde `201`. Si el rol no está publicado, ya hay un ajuste abierto o el rol es un ajuste: `409`. Si nada cambia: `400`. Solo administrador |
 | `GET /api/roles/:id/csv` | Exportación para Excel |
 | `GET /api/roles/:id/iess`, `GET /api/roles/:id/iess.csv` | Aportes por empleado para conciliar con el IESS |
@@ -501,6 +502,22 @@ Un rol publicado o pagado no se toca nunca. Si después se descubre un error (co
 
 ---
 
+## 🔍 Cómo se calculó
+
+Cada valor del rol puede explicarse: de dónde salió, con qué fórmula y con qué números. Al calcular, el motor (`calcularRolConTraza`) devuelve el resultado y, junto a él, una lista de pasos; el rol guarda esa lista por empleado.
+
+| Concepto | Cómo funciona |
+|---|---|
+| Qué guarda | `roles_detalle.traza`: un contexto (régimen, versión de reglas «vigentes desde», año de los parámetros y SBU) y los pasos. Cada paso lleva concepto, fórmula, detalle con los números, resultado y, si aplica, la fuente (por ejemplo «Código del Trabajo art. 71») |
+| Coherencia | El resultado de cada paso es el mismo valor que se guardó en el rol; una prueba lo comprueba para varios regímenes y modalidades. Las horas, comisiones y otros descuentos solo aparecen si valen más que cero |
+| Rol publicado | La traza se guarda al calcular, así que no cambia si después se edita una regla |
+| Ajuste | Explica el cálculo completo del mes con los cambios, no la diferencia que guarda el ajuste |
+| En la pantalla | En el detalle del rol, cada empleado tiene **Cómo se calculó**: una tabla con concepto, cómo se calcula, sus números y el resultado. No se imprime |
+
+**Roles anteriores.** Los roles calculados antes de la migración 018 no tienen desglose: el botón no aparece y el endpoint responde `404`. Se vuelve a calcular el mes (si aún no está publicado) para obtenerlo.
+
+---
+
 ## 🗄️ Migraciones
 
 El esquema vive en `backend/src/migraciones/NNN_nombre.sql`. Las aplicadas quedan en la tabla `esquema_migraciones`, así que abrir la misma base dos veces no repite nada; cada una corre en una transacción con un candado, para que dos instancias que arrancan a la vez no la apliquen dos veces. Para cambiar el esquema se agrega el siguiente archivo numerado; no se edita uno ya aplicado.
@@ -524,6 +541,7 @@ El esquema vive en `backend/src/migraciones/NNN_nombre.sql`. Las aplicadas queda
 | 015 | Rol de cada usuario (`administrador`, `aprobador`, `lector`; los existentes quedan administradores), `separar_funciones` en la cuenta y `generado_por` en cada rol |
 | 016 | Vigencia de las reglas: `regimenes.vigente_desde` (clave `cuenta_id`, `codigo`, `vigente_desde`; las filas existentes quedan desde `2000-01-01`) y `copiar_plantilla` copia todas las versiones |
 | 017 | Reliquidación: `tipo`, `rol_origen_id` y `motivo` en el rol; un solo rol ordinario por mes y un solo ajuste sin publicar por rol; disparador que valida el origen del ajuste |
+| 018 | Desglose del cálculo: `roles_detalle.traza` (JSON, vacío en los roles anteriores) |
 
 Los roles ya generados guardan una foto del régimen, de las tasas y de la modalidad con que se calcularon: si luego se editan las reglas, el historial no cambia.
 
@@ -584,6 +602,7 @@ Verifica todas las cifras con la norma y con el IESS antes de usar el sistema en
 - [x] Ciclo del rol (calculado, validado, aprobado, publicado, pagado), roles publicados inmutables y auditoría de cada paso.
 - [x] Varios usuarios por empresa con roles (administrador, aprobador, lector), permisos exigidos por el servidor y separación de funciones opcional.
 - [x] Reliquidación de un rol publicado con un ajuste vinculado al original, que guarda solo la diferencia y recorre el mismo ciclo.
+- [x] Desglose del cálculo: de dónde salió cada valor del rol, con su fórmula, sus números y su fuente.
 - [ ] Recuperar la contraseña y verificar el correo.
 - [ ] Eliminar o exportar una cuenta completa.
 - [ ] Gastos personales deducibles y rebajas del impuesto a la renta.
@@ -598,7 +617,7 @@ Lista de contribuidores que han aportado commits al desarrollo de este repositor
 
 | Nombre | Commits |
 | :--- | :--- |
-| **kiramman-mp3** | 228 |
+| **kiramman-mp3** | 237 |
 
 ---
 
