@@ -63,6 +63,7 @@ Para el área de talento humano o contabilidad de una empresa pequeña o mediana
 *   **Boleta y CSV:** boleta individual imprimible en una hoja y exportación del rol para Excel.
 *   **Ciclo del rol:** cada rol pasa por calculado, validado, aprobado, publicado y pagado. Un rol publicado es inmutable: no se recalcula, no se edita y no se elimina, y la base también lo impide.
 *   **Auditoría:** cada paso del rol (quién, qué y cuándo) queda en un registro que solo admite inserciones.
+*   **Usuarios con roles:** cada cuenta tiene varios usuarios, con rol de administrador, aprobador o lector. El administrador agrega y quita usuarios, cambia sus roles y les define la contraseña; el servidor niega con `403` lo que el rol no permite. Opcionalmente, quien generó un rol no puede aprobarlo ni publicarlo (separación de funciones).
 *   **Cédula validada:** dígito verificador (módulo 10) y provincia.
 *   **Una cuenta por empresa:** la empresa se registra con su RUC (validado con su dígito verificador) y un correo. Sus empleados, roles, novedades, orgánico, escala y reglas de ley son solo de su cuenta: ninguna otra empresa los ve ni los toca.
 *   **Reglas propias, con plantilla de partida:** cada cuenta nueva recibe una copia de los regímenes, los parámetros anuales, la escala y el orgánico de ejemplo. Los edita sin afectar a las demás, y la página de inicio pública usa la plantilla.
@@ -123,6 +124,7 @@ rol-pagos-ecuador/
 │   │   ├── iess.ts            # Cuadro de conciliación con el IESS
 │   │   ├── ciclo.ts           # Ciclo del rol: estados, pasos y revisión de errores bloqueantes
 │   │   ├── auditoria.ts       # Registro de auditoría (solo inserciones)
+│   │   ├── permisos.ts        # Roles de usuario y qué permiso exige cada ruta
 │   │   ├── demo.ts            # Empleados y roles de ejemplo (los usa el seed)
 │   │   ├── db.ts              # PostgreSQL sin ORM (pg, o PGlite) y ejecutor de migraciones
 │   │   ├── auth.ts            # Contraseña (scrypt), sesión firmada con la cuenta y límite de intentos
@@ -130,7 +132,7 @@ rol-pagos-ecuador/
 │   │   ├── seed.ts            # Script: crea una cuenta de ejemplo y la llena
 │   │   ├── usuario.ts         # Script: lista las cuentas y agrega usuarios a una cuenta
 │   │   ├── rutas/             # auth, cuenta, empleados, roles, parámetros, regímenes, escala y puestos
-│   │   ├── migraciones/       # Esquema versionado: 001 a 014 (SQL numerado)
+│   │   ├── migraciones/       # Esquema versionado: 001 a 015 (SQL numerado)
 │   │   ├── validaciones.ts    # Cédula, RUC, correo, números y fechas
 │   │   ├── server.ts          # Arranque local
 │   │   └── vercel.ts          # Entrada del backend en Vercel
@@ -140,7 +142,7 @@ rol-pagos-ecuador/
 │   ├── src/app/entrar/        # Inicio de sesión
 │   ├── src/app/registro/      # Registro de una empresa
 │   ├── src/app/informacion/   # Acerca de, investigación y fuentes
-│   ├── src/app/sistema/       # Shell, inicio del mes, empleados, orgánico, roles y parámetros
+│   ├── src/app/sistema/       # Shell, inicio del mes, empleados, orgánico, roles, parámetros y usuarios
 │   ├── src/app/core/          # Cliente de la API, sesión, avisos, pipe de dinero, modelos y fuentes
 │   └── src/styles.css         # Sistema visual global
 ├── docs/capturas/             # Capturas de pantalla de este README
@@ -229,7 +231,7 @@ npm run dev
 | `npm --prefix backend run seed -- correo --clave "contraseña"` | Crea la cuenta «Empresa Demo S.A.» con ese correo (si no existe) y la llena con 12 empleados y los roles de enero a septiembre de 2026. Con un correo que ya existe y sin datos, solo la llena |
 | `npm --prefix backend run seed -- correo --reiniciar` | Antes borra los empleados, roles y novedades **de esa cuenta** (las demás no se tocan) y empieza de cero. Contra un servidor Postgres exige además `--confirmo-produccion` |
 | `npm --prefix backend run usuario -- --listar` | Muestra cada cuenta con su empresa, sus usuarios y cuántos empleados tiene |
-| `npm --prefix backend run usuario -- correo "contraseña" --cuenta 2` | Agrega un usuario a una cuenta que ya existe |
+| `npm --prefix backend run usuario -- correo "contraseña" --cuenta 2 --rol aprobador` | Agrega un usuario a una cuenta que ya existe, con ese rol (`administrador` si no se indica `--rol`) |
 
 ---
 
@@ -259,6 +261,7 @@ El backend no arranca en Vercel sin `DATABASE_URL` y `SESION_SECRETO`. Las empre
 7. **Generar**: el backend calcula a cada empleado activo con las reglas de su régimen y guarda una foto en `roles_detalle`. Avisa, sin bloquear, si alguien pasa el tope mensual de horas. El rol nace «calculado».
 8. **Rol**: dos ecuaciones (`ingresos − descuentos = neto` e `ingresos + provisiones = costo empleador`), la planilla por empleado, el costo empleador aparte y la **conciliación con el IESS**. Arriba, el **ciclo del rol**: un botón con el paso que sigue (validar, aprobar, publicar, marcar como pagado) y el historial de quién lo hizo.
 9. **Boleta individual** imprimible en una hoja, y **descarga en CSV** del rol y de los aportes al IESS.
+10. **Usuarios (`/sistema/usuarios`)**, solo para administradores: agregar personas con su rol, cambiar roles y contraseñas, eliminar usuarios y activar la separación de funciones. Quien entra como aprobador o lector ve un aviso con lo que puede hacer.
 
 ---
 
@@ -282,8 +285,12 @@ El backend no arranca en Vercel sin `DATABASE_URL` y `SESION_SECRETO`. Las empre
 | Método y ruta | Uso |
 |---|---|
 | `POST /api/auth/registro` | Crea la cuenta de una empresa y abre la sesión (`empresa`, `ruc`, `email`, `clave`). Correo repetido: `409` |
-| `GET /api/auth/yo`, `POST /api/auth/entrar`, `POST /api/auth/salir` | Estado de la sesión, inicio (`email`, `clave`) y cierre de sesión |
-| `GET /api/cuenta`, `PUT /api/cuenta` | Nombre y RUC de la empresa de la sesión (`empresa`, `ruc`) |
+| `GET /api/auth/yo`, `POST /api/auth/entrar`, `POST /api/auth/salir` | Estado de la sesión (con el `rol` y los `permisos` de quien entró), inicio (`email`, `clave`) y cierre de sesión |
+| `GET /api/cuenta`, `PUT /api/cuenta` | Nombre, RUC y `separarFunciones` de la empresa de la sesión (`empresa`, `ruc`, `separarFunciones` opcional) |
+| `GET /api/usuarios` | Usuarios de la cuenta y los roles posibles. Solo administrador |
+| `POST /api/usuarios` | Agrega un usuario (`email`, `clave`, `rol`). Correo en uso: `409` |
+| `PATCH /api/usuarios/:id` | Cambia el `rol`, la `clave` o ambos. Si deja a la cuenta sin administradores: `409` |
+| `DELETE /api/usuarios/:id` | Elimina un usuario, que pierde el acceso al instante. No se puede eliminar uno mismo ni al último administrador (`409`) |
 | `GET /api/parametros?anio=` | Reglas de ley del año, tabla del IR, regímenes y datos de la empresa. Con sesión, los de la cuenta; sin ella, los de la plantilla |
 | `PUT /api/parametros/:anio` | Crea o actualiza el SBU y la tabla del IR de un año |
 | `POST /api/simulacion` | Calcula un rol de ejemplo sin guardar nada (`regimen`, `categoriaLoep`, `decimos`) |
@@ -310,7 +317,7 @@ El backend no arranca en Vercel sin `DATABASE_URL` y `SESION_SECRETO`. Las empre
 | `GET /api/roles/:id/historial` | Pasos del rol en la auditoría: acción, usuario, detalle y fecha |
 | `DELETE /api/roles/:id` | Elimina el rol, salvo que esté publicado o pagado (`409`) |
 
-Toda la API exige sesión, salvo `GET /api/parametros`, `POST /api/simulacion` y `/api/auth/*`, que usa la página de inicio; sin sesión responde `401`. Con sesión, **todo** se filtra por la cuenta: lo de otra empresa responde `404`, igual que si no existiera. Los registros desde una misma IP están limitados a cinco cada 15 minutos (`429`). Tras cinco contraseñas incorrectas desde una misma IP, el inicio de sesión responde `429` durante 15 minutos. Los identificadores de la ruta (`/empleados/:id`) deben ser enteros positivos: si no, `400`.
+Toda la API exige sesión, salvo `GET /api/parametros`, `POST /api/simulacion` y `/api/auth/*`, que usa la página de inicio; sin sesión responde `401`. Con sesión pero sin el permiso del rol, `403` (ver Roles de Usuario). Con sesión, **todo** se filtra por la cuenta: lo de otra empresa responde `404`, igual que si no existiera. Los registros desde una misma IP están limitados a cinco cada 15 minutos (`429`). Tras cinco contraseñas incorrectas desde una misma IP, el inicio de sesión responde `429` durante 15 minutos. Los identificadores de la ruta (`/empleados/:id`) deben ser enteros positivos: si no, `400`.
 
 Los errores de validación responden `400` con `{ "errores": [...] }`; una cédula o un grado repetidos responden `409`.
 
@@ -387,7 +394,7 @@ El IESS no recibe un archivo de aportes: arma la planilla en su portal a partir 
 
 ## 🏢 Cuentas por Empresa
 
-Cada empresa es una **cuenta** (`cuentas`: nombre y RUC) con sus **usuarios** (`usuarios`: correo único y hash `scrypt`). Hoy cada cuenta nace con un usuario, el que la registra; la tabla deja lugar a más.
+Cada empresa es una **cuenta** (`cuentas`: nombre y RUC) con sus **usuarios** (`usuarios`: correo único y hash `scrypt`). Cada cuenta nace con un usuario administrador, el que la registra; después puede agregar más (ver Roles de Usuario).
 
 | Qué | Cómo se aísla |
 |---|---|
@@ -395,11 +402,34 @@ Cada empresa es una **cuenta** (`cuentas`: nombre y RUC) con sus **usuarios** (`
 | Novedades y detalle de los roles | Cuelgan de un empleado o de un rol, que ya son de la cuenta |
 | Cédula, nombre del puesto, grado de la escala y mes del rol | Únicos **por cuenta**: dos empresas pueden tener la misma cédula o el mismo puesto |
 | Referencias entre tablas (puesto o grado de un empleado, superior de un puesto) | Se validan contra la misma cuenta: no se puede apuntar a lo de otra empresa |
-| Sesión | La cookie firmada lleva el usuario y su cuenta; no se puede cambiar sin invalidar la firma |
+| Sesión | La cookie firmada lleva el usuario y su cuenta; no se puede cambiar sin invalidar la firma. El rol no va en la cookie: se lee de la base en cada petición |
 
 **Plantilla de ley.** La cuenta con `plantilla = TRUE` (id 1) no es de ninguna empresa: guarda las reglas de partida (regímenes, parámetros anuales, escala y orgánico de ejemplo). Al registrarse una empresa, la función SQL `copiar_plantilla(cuenta)` le copia todo en la misma transacción, reenlazando por clave natural (régimen y grado; nombre del puesto). A partir de ahí, cada empresa edita lo suyo. La página de inicio pública (sin sesión) lee la plantilla.
 
 **Datos de antes de las cuentas.** Si la base ya tenía empleados o roles, la migración 013 los pasa a una cuenta llamada «Empresa anterior», con su copia del orgánico y la escala, y **sin usuarios**. Para entrar a ella se agrega uno con `npm --prefix backend run usuario -- correo "contraseña" --cuenta 2` (el id lo da `--listar`). Con la base vacía no se crea ninguna: la primera nace al registrarse una empresa.
+
+---
+
+## 👥 Roles de Usuario
+
+| Permiso | Administrador | Aprobador | Lector |
+|---|:---:|:---:|:---:|
+| Consultar todo (empleados, roles, boletas, CSV, historial) | sí | sí | sí |
+| Cambiar datos: empleados, parámetros, regímenes, escala, orgánico, empresa | sí | no | no |
+| Generar, recalcular y eliminar roles | sí | no | no |
+| Validar, aprobar y publicar roles | sí | sí | no |
+| Marcar un rol como pagado | sí | no | no |
+| Gestionar usuarios y la separación de funciones | sí | no | no |
+
+**Un solo lugar decide.** `backend/src/permisos.ts` dice qué permiso exige cada petición y un middleware lo aplica a toda la API. Lo que no se reconoce como lectura ni como paso del ciclo exige el permiso de cambiar datos, así que una ruta nueva nace cerrada para aprobador y lector. La interfaz esconde lo que el rol no puede hacer, pero quien manda es el servidor.
+
+**Los cambios valen al instante.** La cookie solo dice quién es el usuario; su rol se lee de la base en cada petición. Cambiar el rol de alguien, o eliminarlo, tiene efecto en su próxima petición, sin esperar a que venza la sesión.
+
+**Siempre queda un administrador.** No se puede degradar ni eliminar al último, y nadie se elimina a sí mismo. La comprobación bloquea la cuenta mientras cuenta, para que dos cambios a la vez no la dejen sin ninguno.
+
+**Sin correo, el administrador define las contraseñas.** Al agregar un usuario se escribe su contraseña inicial y se le entrega; si la pierde, el administrador le pone una nueva. Las contraseñas nunca van a la auditoría. Desde la consola, `usuario -- correo "contraseña" --cuenta 2 --rol aprobador` crea un usuario con rol.
+
+**Separación de funciones (opcional).** Si la cuenta la activa en **Usuarios**, quien generó un rol no puede aprobarlo ni publicarlo (`403`): lo debe hacer otra persona. Validar y pagar no se restringen. Exige al menos dos usuarios que puedan aprobar. Viene apagada.
 
 ---
 
@@ -449,6 +479,7 @@ El esquema vive en `backend/src/migraciones/NNN_nombre.sql`. Las aplicadas queda
 | 012 | Notas del régimen LOSEP: aporte IESS confirmado, recargo nocturno por confirmar |
 | 013 | Cuentas y usuarios; `cuenta_id` en empleados, roles, regímenes, parámetros, escala y puestos; los únicos (cédula, nombre del puesto, grado, mes del rol) pasan a ser por cuenta; la función `copiar_plantilla` |
 | 014 | Estado del rol (`calculado` a `pagado`) con sus fechas; tabla `audit_logs` de solo inserción; disparadores que protegen los roles publicados |
+| 015 | Rol de cada usuario (`administrador`, `aprobador`, `lector`; los existentes quedan administradores), `separar_funciones` en la cuenta y `generado_por` en cada rol |
 
 Los roles ya generados guardan una foto del régimen, de las tasas y de la modalidad con que se calcularon: si luego se editan las reglas, el historial no cambia.
 
@@ -476,7 +507,7 @@ Verifica todas las cifras con la norma y con el IESS antes de usar el sistema en
 
 ### Simplificaciones declaradas
 
-- Un usuario por cuenta, sin roles ni invitaciones: la misma persona valida, aprueba, publica y marca el pago, sin separación de funciones. Cada paso queda registrado con su correo.
+- Los usuarios se agregan sin invitación por correo: el administrador define la contraseña inicial. La separación de funciones viene apagada, así que por defecto la misma persona puede generar, aprobar y publicar un rol; cada paso queda registrado con su correo.
 - Un rol publicado no tiene reliquidación: si hay un error, ese mes no se puede corregir ni con un ajuste vinculado (el sistema solo guarda un rol por mes).
 - El límite de intentos de contraseña y de registros vive en memoria: en Vercel cada instancia lleva su propia cuenta, así que frena el abuso pero no lo impide.
 - No hay recuperación de contraseña ni verificación del correo: el sistema no envía correos. Quien pierde la contraseña no puede recuperar la cuenta sin acceso a la base (`usuario` agrega un usuario nuevo, pero no cambia la contraseña de uno existente).
@@ -505,7 +536,7 @@ Verifica todas las cifras con la norma y con el IESS antes de usar el sistema en
 - [x] Fecha de salida del empleado y roles de meses pasados que respetan quién estaba en nómina.
 - [x] Dinero exacto también en la base de datos (`NUMERIC`).
 - [x] Ciclo del rol (calculado, validado, aprobado, publicado, pagado), roles publicados inmutables y auditoría de cada paso.
-- [ ] Varios usuarios por empresa, con roles y permisos (aprobar y publicar solo con permiso especial).
+- [x] Varios usuarios por empresa con roles (administrador, aprobador, lector), permisos exigidos por el servidor y separación de funciones opcional.
 - [ ] Reliquidación de un rol publicado con un ajuste vinculado al original.
 - [ ] Recuperar la contraseña y verificar el correo.
 - [ ] Eliminar o exportar una cuenta completa.
@@ -521,7 +552,7 @@ Lista de contribuidores que han aportado commits al desarrollo de este repositor
 
 | Nombre | Commits |
 | :--- | :--- |
-| **kiramman-mp3** | 206 |
+| **kiramman-mp3** | 213 |
 
 ---
 
