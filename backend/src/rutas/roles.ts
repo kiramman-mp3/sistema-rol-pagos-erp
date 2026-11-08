@@ -11,7 +11,7 @@ import { parametrosDelAnio } from "../parametros.ts";
 import { indexarRegimenes, listarRegimenes, opcionesDe, regimenAplicado, reglasDe } from "../regimenes.ts";
 import { documentoCsv } from "../csv.ts";
 import { planillaIess } from "../iess.ts";
-import { aDecimal, ErrorApi } from "../validaciones.ts";
+import { aDecimal, ErrorApi, leerId } from "../validaciones.ts";
 
 const CAMPOS_NOVEDAD = [
   "horasSuplementarias", "horasExtraordinarias", "horasDescanso", "horasNocturnas",
@@ -139,7 +139,7 @@ export function rutasRoles(db: Base): Router {
   const router = Router();
 
   const cargar = async (idTexto: string) => {
-    const cabecera = await uno(db, "SELECT * FROM roles_cabecera WHERE id = ?", Number(idTexto));
+    const cabecera = await uno(db, "SELECT * FROM roles_cabecera WHERE id = ?", leerId(idTexto));
     if (!cabecera) throw new ErrorApi(404, ["El rol no existe."]);
     const detalle = await consultar(
       db, "SELECT * FROM roles_detalle WHERE rol_id = ? ORDER BY nombres", Number(cabecera.id),

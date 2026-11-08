@@ -10,7 +10,7 @@ import { parametrosDelAnio } from "../parametros.ts";
 import { buscarGrado, listarEscala } from "../escala.ts";
 import { buscarPuesto, listarPuestos, soltarResponsable } from "../puestos.ts";
 import { CATEGORIAS_LOEP, indexarRegimenes, listarRegimenes, regimenAplicado } from "../regimenes.ts";
-import { aDecimal, cedulaValida, ErrorApi, fechaIsoValida } from "../validaciones.ts";
+import { aDecimal, cedulaValida, ErrorApi, fechaIsoValida, leerId } from "../validaciones.ts";
 
 interface DatosEmpleado {
   cedula: string;
@@ -170,7 +170,7 @@ export function rutasEmpleados(db: Base): Router {
   const router = Router();
 
   const buscar = async (idTexto: string): Promise<Fila> => {
-    const fila = await uno(db, "SELECT * FROM empleados WHERE id = ?", Number(idTexto));
+    const fila = await uno(db, "SELECT * FROM empleados WHERE id = ?", leerId(idTexto));
     if (!fila) throw new ErrorApi(404, ["El empleado no existe."]);
     return fila;
   };
