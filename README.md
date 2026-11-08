@@ -56,6 +56,7 @@ Para el área de talento humano o contabilidad de una empresa pequeña o mediana
 *   **Tres regímenes laborales:** Código del Trabajo, LOSEP y LOEP. En la LOEP se indica además si el empleado es servidor u obrero, y el rol usa las reglas del régimen que le corresponde.
 *   **Todo parametrizable en pantalla:** SBU, tabla del impuesto a la renta (por año), aportes, recargos, topes, vacaciones y beneficios de cada régimen se editan en **Parámetros**, sin tocar el código.
 *   **Reglas con vigencia por fecha:** cada cambio a las tasas de un régimen se guarda como una versión nueva «vigente desde» una fecha. Un rol usa la versión que regía al cierre de su mes, así que subir un aporte en octubre no altera septiembre. Las versiones anteriores se pueden consultar, corregir o eliminar.
+*   **Reliquidación sin tocar lo publicado:** un error en un rol publicado se corrige con un ajuste vinculado al original, que guarda solo la diferencia y recorre el mismo ciclo y la misma auditoría. Original más ajustes da el total real del mes.
 *   **Escala salarial y orgánico funcional:** el sueldo sale del grado elegido (exacto en la LOSEP, mínimo en el Código del Trabajo) y cada puesto del orgánico lleva su función, su responsable y su nivel de referencia.
 *   **Décimos y fondos a la medida:** por empleado, cada beneficio se paga cada mes en el rol, se acumula o no se recibe.
 *   **Horas extras por tipo:** suplementarias, extraordinarias, de sábado, domingo y feriado, y nocturnas, con el recargo y el tope de cada régimen. Los topes avisan, sin bloquear.
@@ -133,7 +134,7 @@ rol-pagos-ecuador/
 │   │   ├── seed.ts            # Script: crea una cuenta de ejemplo y la llena
 │   │   ├── usuario.ts         # Script: lista las cuentas y agrega usuarios a una cuenta
 │   │   ├── rutas/             # auth, cuenta, empleados, roles, parámetros, regímenes, escala y puestos
-│   │   ├── migraciones/       # Esquema versionado: 001 a 016 (SQL numerado)
+│   │   ├── migraciones/       # Esquema versionado: 001 a 017 (SQL numerado)
 │   │   ├── validaciones.ts    # Cédula, RUC, correo, números y fechas
 │   │   ├── server.ts          # Arranque local
 │   │   └── vercel.ts          # Entrada del backend en Vercel
@@ -310,7 +311,8 @@ El backend no arranca en Vercel sin `DATABASE_URL` y `SESION_SECRETO`. Las empre
 | `GET /api/roles` | Historial de roles |
 | `GET /api/roles/periodo/:anio/:mes` | Empleados del mes, su régimen y las novedades ya digitadas |
 | `POST /api/roles/generar` | Calcula y guarda el rol en estado «calculado» (reemplaza el del mes) y devuelve los avisos. Si el del mes está publicado o pagado: `409` |
-| `GET /api/roles/:id` | Rol con su detalle por empleado |
+| `GET /api/roles/:id` | Rol con su detalle por empleado. Un ajuste trae además su `origen`; un rol publicado o pagado trae sus `ajustes`, el `consolidado` del mes (rol más ajustes publicados) y cómo quedó cada empleado (`vigente`) |
+| `POST /api/roles/:id/reliquidar` | Crea un ajuste de un rol publicado o pagado. Cuerpo: `motivo` (5 a 500 caracteres) y `cambios`, una lista por `cedula` con `sueldoBase`, horas, `comisiones` u `otrosDescuentos`. Responde `201`. Si el rol no está publicado, ya hay un ajuste abierto o el rol es un ajuste: `409`. Si nada cambia: `400`. Solo administrador |
 | `GET /api/roles/:id/csv` | Exportación para Excel |
 | `GET /api/roles/:id/iess`, `GET /api/roles/:id/iess.csv` | Aportes por empleado para conciliar con el IESS |
 | `POST /api/roles/:id/validar` | Revisa el rol. Responde `{ valido, estado, errores, avisos }`: sin errores pasa a «validado»; con errores no avanza (y uno validado vuelve a «calculado») |
@@ -479,6 +481,26 @@ calculado --validar--> validado --aprobar--> aprobado --publicar--> publicado --
 
 ---
 
+## 🔁 Reliquidación
+
+Un rol publicado o pagado no se toca nunca. Si después se descubre un error (comisiones olvidadas, horas mal digitadas, una regla corregida), se crea un **ajuste**: un rol aparte, vinculado al original, cuyo detalle guarda solo la **diferencia**. Sumar el rol original y sus ajustes publicados da lo que realmente corresponde al mes.
+
+| Concepto | Cómo funciona |
+|---|---|
+| Quién puede | Solo el administrador (`POST /api/roles/:id/reliquidar`). El ajuste recorre después el mismo ciclo: se valida, aprueba, publica y marca como pagado, con la misma auditoría y la separación de funciones si está activada |
+| Qué se recalcula | El mes completo con las reglas de ley que regían al cierre de ese mes (ver Vigencia de las reglas) y los datos que cada empleado tenía en el rol: sueldo, fecha de ingreso, régimen y cómo recibe los beneficios. Solo cambia lo que se pide en `cambios` |
+| Qué guarda | Por cada empleado cuyo resultado cambia, la diferencia en dinero y horas (ingresos, aporte IESS, impuesto, descuentos, neto, provisiones, costo). Lo demás (días trabajados, tasas, modalidades) lleva su valor nuevo. Los empleados que no cambian no aparecen |
+| Valores negativos | Un ajuste puede dar un neto negativo: es un descuento. La validación del ajuste lo acepta |
+| Varios ajustes | Cada uno parte de lo ya publicado (rol original más ajustes publicados). Solo puede haber un ajuste sin publicar por rol; eliminarlo libera el lugar. Un ajuste no se reliquida: se reliquida el rol del mes |
+| Sin cambios | Si nada varía, responde `400`. Si se corrigió una regla de ese mes, basta enviar `cambios` vacío: el ajuste recoge la diferencia |
+| En la pantalla | El rol publicado muestra «Ajustes de este rol», con su lista, el total del mes y el botón **Reliquidar este rol**. El ajuste lleva un aviso con el motivo y un enlace al original. En **Roles de pago** el ajuste sale en el historial; el calendario sigue llevando al rol del mes |
+
+**Garantías en la base (migración 017).** `roles_cabecera` gana `tipo` (`ordinario` o `ajuste`), `rol_origen_id` y `motivo`. Hay un solo rol ordinario por mes y empresa, y un solo ajuste sin publicar por rol. Un disparador impide crear un ajuste de un rol que no sea ordinario, publicado o pagado, del mismo mes y la misma empresa. La auditoría registra `rol.ajuste_creado` en el original y el motivo en el ajuste.
+
+**Probado en Postgres real.** La migración 017 se aplicó sobre una base PostgreSQL 17 con un rol anterior (queda como ordinario) y se comprobaron el ajuste, el segundo ajuste rechazado y el disparador.
+
+---
+
 ## 🗄️ Migraciones
 
 El esquema vive en `backend/src/migraciones/NNN_nombre.sql`. Las aplicadas quedan en la tabla `esquema_migraciones`, así que abrir la misma base dos veces no repite nada; cada una corre en una transacción con un candado, para que dos instancias que arrancan a la vez no la apliquen dos veces. Para cambiar el esquema se agrega el siguiente archivo numerado; no se edita uno ya aplicado.
@@ -501,6 +523,7 @@ El esquema vive en `backend/src/migraciones/NNN_nombre.sql`. Las aplicadas queda
 | 014 | Estado del rol (`calculado` a `pagado`) con sus fechas; tabla `audit_logs` de solo inserción; disparadores que protegen los roles publicados |
 | 015 | Rol de cada usuario (`administrador`, `aprobador`, `lector`; los existentes quedan administradores), `separar_funciones` en la cuenta y `generado_por` en cada rol |
 | 016 | Vigencia de las reglas: `regimenes.vigente_desde` (clave `cuenta_id`, `codigo`, `vigente_desde`; las filas existentes quedan desde `2000-01-01`) y `copiar_plantilla` copia todas las versiones |
+| 017 | Reliquidación: `tipo`, `rol_origen_id` y `motivo` en el rol; un solo rol ordinario por mes y un solo ajuste sin publicar por rol; disparador que valida el origen del ajuste |
 
 Los roles ya generados guardan una foto del régimen, de las tasas y de la modalidad con que se calcularon: si luego se editan las reglas, el historial no cambia.
 
@@ -529,7 +552,7 @@ Verifica todas las cifras con la norma y con el IESS antes de usar el sistema en
 ### Simplificaciones declaradas
 
 - Los usuarios se agregan sin invitación por correo: el administrador define la contraseña inicial. La separación de funciones viene apagada, así que por defecto la misma persona puede generar, aprobar y publicar un rol; cada paso queda registrado con su correo.
-- Un rol publicado no tiene reliquidación: si hay un error, ese mes no se puede corregir ni con un ajuste vinculado (el sistema solo guarda un rol por mes).
+- La reliquidación corrige a los empleados que estaban en el rol: no agrega a quien se omitió por completo, y usa su fecha de salida y si recibe horas extras tal como están hoy. El ajuste no altera la planilla del IESS ya presentada: sus aportes salen como diferencias en su propio archivo.
 - El límite de intentos de contraseña y de registros vive en memoria: en Vercel cada instancia lleva su propia cuenta, así que frena el abuso pero no lo impide.
 - No hay recuperación de contraseña ni verificación del correo: el sistema no envía correos. Quien pierde la contraseña no puede recuperar la cuenta sin acceso a la base (`usuario` agrega un usuario nuevo, pero no cambia la contraseña de uno existente).
 - El RUC se valida por su forma y su dígito verificador, no contra el SRI: cualquiera puede registrar un RUC que no es suyo.
@@ -560,7 +583,7 @@ Verifica todas las cifras con la norma y con el IESS antes de usar el sistema en
 - [x] Dinero exacto también en la base de datos (`NUMERIC`).
 - [x] Ciclo del rol (calculado, validado, aprobado, publicado, pagado), roles publicados inmutables y auditoría de cada paso.
 - [x] Varios usuarios por empresa con roles (administrador, aprobador, lector), permisos exigidos por el servidor y separación de funciones opcional.
-- [ ] Reliquidación de un rol publicado con un ajuste vinculado al original.
+- [x] Reliquidación de un rol publicado con un ajuste vinculado al original, que guarda solo la diferencia y recorre el mismo ciclo.
 - [ ] Recuperar la contraseña y verificar el correo.
 - [ ] Eliminar o exportar una cuenta completa.
 - [ ] Gastos personales deducibles y rebajas del impuesto a la renta.
@@ -575,7 +598,7 @@ Lista de contribuidores que han aportado commits al desarrollo de este repositor
 
 | Nombre | Commits |
 | :--- | :--- |
-| **kiramman-mp3** | 221 |
+| **kiramman-mp3** | 228 |
 
 ---
 
