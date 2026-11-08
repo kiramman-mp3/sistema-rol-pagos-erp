@@ -28,9 +28,21 @@ describe('rutas', () => {
     http.match(() => true);
   });
 
-  it('/sistema entra al inicio del mes', async () => {
-    await harness.navigateByUrl('/sistema');
+  it('/sistema con sesión entra al inicio del mes', async () => {
+    const navegacion = harness.navigateByUrl('/sistema');
+    await new Promise((resolver) => setTimeout(resolver, 0)); // el guard pide la sesión tras unos ciclos del router
+    http.expectOne('/api/auth/yo').flush({ autenticado: true, usuario: 'admin', protegida: true });
+    await navegacion;
     expect(TestBed.inject(Router).url).toBe('/sistema/inicio');
+    http.match(() => true);
+  });
+
+  it('/sistema sin sesión pide iniciar sesión', async () => {
+    const navegacion = harness.navigateByUrl('/sistema/empleados');
+    await new Promise((resolver) => setTimeout(resolver, 0)); // el guard pide la sesión tras unos ciclos del router
+    http.expectOne('/api/auth/yo').flush({ autenticado: false, usuario: null, protegida: true });
+    await navegacion;
+    expect(TestBed.inject(Router).url).toBe('/entrar?volver=%2Fsistema%2Fempleados');
     http.match(() => true);
   });
 
