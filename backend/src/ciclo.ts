@@ -89,9 +89,11 @@ const redondeo = (n: Decimal.Value) => new Decimal(n).toDecimalPlaces(2).toNumbe
 /**
  * Revisa un rol ya calculado. `empleadosDelPeriodo` son quienes deberían estar en él hoy;
  * `anioParametros` es el año de los parámetros de ley que se aplican a ese período.
+ * Un ajuste (`ajuste`) guarda diferencias: puede dar neto negativo o cero y sus valores no se comparan
+ * con el sueldo, así que esas revisiones no aplican.
  */
 export function revisarRol(
-  cabecera: Fila, detalle: Fila[], empleadosDelPeriodo: Fila[], anioParametros: number,
+  cabecera: Fila, detalle: Fila[], empleadosDelPeriodo: Fila[], anioParametros: number, ajuste = false,
 ): RevisionRol {
   const errores: string[] = [];
   const avisos: string[] = [];
@@ -109,7 +111,7 @@ export function revisarRol(
     if (!enRol.has(Number(e.id))) errores.push(`${e.nombres} debería estar en este período y no está en el rol: recalcúlalo.`);
   }
 
-  for (const d of detalle) {
+  for (const d of ajuste ? [] : detalle) {
     if (Number(d.neto_pagar) < 0) errores.push(`${d.nombres}: el neto a pagar es negativo (${d.neto_pagar}).`);
     else if (Number(d.neto_pagar) === 0) avisos.push(`${d.nombres}: el neto a pagar es $0.`);
     if (Number(d.total_ingresos) > 2 * Number(d.sueldo_base)) {
