@@ -98,6 +98,20 @@ describe("calcularRol", () => {
     assert.equal(r.sueldo, 500);
     assert.equal(r.decimoCuarto, 20.08); // prorrateado también
   });
+
+  it("el mes de salida se prorratea hasta el día de salida", () => {
+    const r = calcularRol({ sueldoBase: 1000, fechaIngreso: ANTIGUO, fechaSalida: "2026-10-15", anio: 2026, mes: 10 });
+    assert.equal(r.diasTrabajados, 15);
+    assert.equal(r.sueldo, 500);
+    assert.equal(r.decimoCuarto, 20.08); // 482 x 15 / 360
+  });
+
+  it("una salida de otro mes no cambia el rol", () => {
+    const base = { sueldoBase: 1000, fechaIngreso: ANTIGUO, anio: 2026, mes: 10 };
+    const sin = calcularRol(base);
+    assert.deepEqual(calcularRol({ ...base, fechaSalida: "2026-11-20" }), sin);
+    assert.deepEqual(calcularRol({ ...base, fechaSalida: null }), sin);
+  });
 });
 
 describe("reglas inyectadas", () => {
@@ -296,6 +310,22 @@ describe("fechas", () => {
     assert.equal(diasTrabajados("2026-10-01", 2026, 10), 30);
     assert.equal(diasTrabajados("2026-10-31", 2026, 10), 1);
     assert.equal(diasTrabajados("2026-10-16", 2026, 11), 30);
+  });
+  it("diasTrabajados en el mes de salida cuenta hasta el día de salida", () => {
+    assert.equal(diasTrabajados("2020-01-01", 2026, 10, "2026-10-15"), 15);
+    assert.equal(diasTrabajados("2020-01-01", 2026, 10, "2026-10-01"), 1);
+    assert.equal(diasTrabajados("2020-01-01", 2026, 10, "2026-10-30"), 30);
+    assert.equal(diasTrabajados("2020-01-01", 2026, 10, "2026-10-31"), 30); // el mes comercial tiene 30 días
+  });
+  it("diasTrabajados con ingreso y salida en el mismo mes", () => {
+    assert.equal(diasTrabajados("2026-10-10", 2026, 10, "2026-10-20"), 11);
+    assert.equal(diasTrabajados("2026-10-10", 2026, 10, "2026-10-10"), 1);
+    assert.equal(diasTrabajados("2026-10-10", 2026, 10, "2026-10-05"), 1); // nunca menos de un día
+  });
+  it("diasTrabajados ignora una salida de otro mes", () => {
+    assert.equal(diasTrabajados("2020-01-01", 2026, 10, "2026-11-15"), 30);
+    assert.equal(diasTrabajados("2020-01-01", 2026, 10, "2027-10-15"), 30);
+    assert.equal(diasTrabajados("2020-01-01", 2026, 10, null), 30);
   });
   it("mesesDeServicio", () => {
     assert.equal(mesesDeServicio("2025-10-20", 2026, 10), 12);

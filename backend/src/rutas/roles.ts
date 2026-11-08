@@ -29,12 +29,20 @@ function leerPeriodo(anioTexto: unknown, mesTexto: unknown): { anio: number; mes
   return { anio, mes };
 }
 
-/** Activos que ya habían ingresado al cierre del mes (las fechas ISO se comparan como texto). */
+/**
+ * Quienes estuvieron en nómina ese mes: ingresaron antes de que termine y no salieron antes de que
+ * empiece (las fechas ISO se comparan como texto). Un inactivo sin fecha de salida está fuera de todos
+ * los meses; uno con fecha de salida sigue en los meses hasta ella.
+ */
 export function empleadosDelPeriodo(db: Base, anio: number, mes: number): Promise<Fila[]> {
+  const mesTexto = `${anio}-${String(mes).padStart(2, "0")}`;
   return consultar(
     db,
-    "SELECT * FROM empleados WHERE activo = 1 AND fecha_ingreso <= ? ORDER BY nombres",
-    `${anio}-${String(mes).padStart(2, "0")}-31`,
+    `SELECT * FROM empleados
+     WHERE fecha_ingreso <= ? AND (fecha_salida IS NULL OR fecha_salida >= ?)
+       AND (activo = 1 OR fecha_salida IS NOT NULL)
+     ORDER BY nombres`,
+    `${mesTexto}-31`, `${mesTexto}-01`,
   );
 }
 
@@ -57,6 +65,7 @@ export async function guardarRol(
     const resultado = calcularRol({
       sueldoBase: String(e.sueldo_base),
       fechaIngreso: String(e.fecha_ingreso),
+      fechaSalida: e.fecha_salida === null ? null : String(e.fecha_salida),
       anio, mes,
       horasSuplementarias: n?.horasSuplementarias ?? cero,
       horasExtraordinarias: n?.horasExtraordinarias ?? cero,

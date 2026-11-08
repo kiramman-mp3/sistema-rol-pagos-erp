@@ -145,11 +145,18 @@ export function mesesDeServicio(fechaIngreso: string, anio: number, mes: number)
   return (anio - f.anio) * 12 + (mes - f.mes);
 }
 
-/** 30 días, salvo el mes de ingreso, que se prorratea desde el día de ingreso. */
-export function diasTrabajados(fechaIngreso: string, anio: number, mes: number): number {
-  const f = partesFecha(fechaIngreso);
-  if (f.anio === anio && f.mes === mes) return Math.max(1, Math.min(30, 30 - f.dia + 1));
-  return 30;
+/**
+ * 30 días, salvo en el mes de ingreso (cuenta desde el día de ingreso) y en el de salida (hasta el día
+ * de salida; el 31 cuenta como 30 porque el mes comercial tiene 30 días). Nunca menos de un día.
+ */
+export function diasTrabajados(
+  fechaIngreso: string, anio: number, mes: number, fechaSalida: string | null = null,
+): number {
+  const ingreso = partesFecha(fechaIngreso);
+  const salida = fechaSalida ? partesFecha(fechaSalida) : null;
+  const desde = ingreso.anio === anio && ingreso.mes === mes ? ingreso.dia : 1;
+  const hasta = salida && salida.anio === anio && salida.mes === mes ? Math.min(30, salida.dia) : 30;
+  return Math.max(1, Math.min(30, hasta - desde + 1));
 }
 
 /**
@@ -182,6 +189,8 @@ export interface EntradaRol {
   sueldoBase: Monto;
   /** AAAA-MM-DD */
   fechaIngreso: string;
+  /** AAAA-MM-DD; si cae en el mes del rol, se pagan solo los días hasta ella */
+  fechaSalida?: string | null;
   anio: number;
   mes: number;
   horasSuplementarias?: Monto;
@@ -254,7 +263,7 @@ export function calcularRol(
   const comisiones = q(entrada.comisiones ?? 0);
   const otrosDescuentos = q(entrada.otrosDescuentos ?? 0);
 
-  const dias = diasTrabajados(entrada.fechaIngreso, entrada.anio, entrada.mes);
+  const dias = diasTrabajados(entrada.fechaIngreso, entrada.anio, entrada.mes, entrada.fechaSalida ?? null);
   const meses = mesesDeServicio(entrada.fechaIngreso, entrada.anio, entrada.mes);
 
   // Ingresos. El valor hora sale del sueldo completo, aunque el mes se prorratee.
