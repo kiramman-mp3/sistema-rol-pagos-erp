@@ -10,7 +10,7 @@ export function destinoSeguro(volver: string | undefined): string {
   return volver && /^\/sistema(\/|\?|$)/.test(volver) ? volver : '/sistema';
 }
 
-/** Inicio de sesión del administrador. */
+/** Inicio de sesión de una empresa registrada. */
 @Component({
   selector: 'app-entrar',
   imports: [ReactiveFormsModule, RouterLink],
@@ -19,7 +19,7 @@ export function destinoSeguro(volver: string | undefined): string {
       <div class="hoja">
         <div class="hoja-titulo">
           <h1>Ingresar al sistema</h1>
-          <p>Escribe el usuario y la contraseña del administrador.</p>
+          <p>Escribe el correo y la contraseña con que registraste tu empresa.</p>
         </div>
         <div class="hoja-cuerpo">
           @if (error()) {
@@ -27,8 +27,8 @@ export function destinoSeguro(volver: string | undefined): string {
           }
           <form class="formulario" [formGroup]="form" (ngSubmit)="entrar()">
             <div class="campo">
-              <label for="usuario">Usuario</label>
-              <input class="entrada" id="usuario" formControlName="usuario" autocomplete="username" />
+              <label for="email">Correo</label>
+              <input class="entrada" id="email" type="email" formControlName="email" autocomplete="username" />
             </div>
             <div class="campo">
               <label for="clave">Contraseña</label>
@@ -47,6 +47,7 @@ export function destinoSeguro(volver: string | undefined): string {
               <a class="boton boton-texto" routerLink="/">Volver al inicio</a>
             </div>
           </form>
+          <p class="apoyo">¿Tu empresa aún no tiene cuenta? <a routerLink="/registro">Regístrala aquí</a>.</p>
         </div>
       </div>
     </main>
@@ -68,12 +69,12 @@ export class Entrar {
   protected readonly error = signal('');
   protected readonly enviando = signal(false);
   protected readonly form = inject(FormBuilder).nonNullable.group({
-    usuario: ['', Validators.required],
+    email: ['', Validators.required],
     clave: ['', Validators.required],
   });
 
   constructor() {
-    // Quien ya tiene sesión (o la entra en un servidor sin login) no necesita ver esta pantalla.
+    // Quien ya tiene sesión no necesita ver esta pantalla.
     this.sesion.verificar().subscribe((valida) => {
       if (valida) void this.router.navigateByUrl(destinoSeguro(this.volver()));
     });
@@ -82,13 +83,13 @@ export class Entrar {
   protected entrar() {
     if (this.form.invalid) {
       this.form.markAllAsTouched();
-      this.error.set('Escribe el usuario y la contraseña.');
+      this.error.set('Escribe el correo y la contraseña.');
       return;
     }
     this.error.set('');
     this.enviando.set(true);
-    const { usuario, clave } = this.form.getRawValue();
-    this.sesion.entrar(usuario, clave).subscribe({
+    const { email, clave } = this.form.getRawValue();
+    this.sesion.entrar(email, clave).subscribe({
       next: () => void this.router.navigateByUrl(destinoSeguro(this.volver())),
       error: (e: unknown) => {
         this.enviando.set(false);
