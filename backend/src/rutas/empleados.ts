@@ -6,7 +6,7 @@ import { MODALIDADES } from "../calculos.ts";
 import type { Modalidad } from "../calculos.ts";
 import { consultar, ejecutar, esDuplicado, filaACamel, insertar, uno } from "../db.ts";
 import type { Base, Fila } from "../db.ts";
-import { parametrosDelAnio } from "../parametros.ts";
+import { avisoDeAnioSinParametros, parametrosDelAnio } from "../parametros.ts";
 import { buscarGrado, listarEscala } from "../escala.ts";
 import { buscarPuesto, hayPuestosDelRegimen, soltarResponsable } from "../puestos.ts";
 import { CATEGORIAS_LOEP, indexarRegimenes, listarRegimenes, regimenAplicado } from "../regimenes.ts";
@@ -131,8 +131,12 @@ async function validar(
     sueldoBase = aDecimal(cuerpo.sueldoBase).toNumber();
     if (sueldoBase <= 0) errores.push("El sueldo base debe ser mayor a cero.");
     else {
-      // El SBU del año en curso sale de la base, no de una constante.
-      const { parametros } = await parametrosDelAnio(db, new Date().getFullYear());
+      // El sueldo registrado es el de hoy, así que se compara con el SBU de este año; si el año aún no
+      // tiene parámetros se usa el último que haya y se avisa.
+      const anioActual = new Date().getFullYear();
+      const { parametros } = await parametrosDelAnio(db, anioActual);
+      const sinParametros = avisoDeAnioSinParametros(anioActual, parametros);
+      if (sinParametros) avisos.push(sinParametros);
       if (grado && escalaId !== null && grado.esMinimo && sueldoBase < grado.rmu) {
         errores.push(
           `No se puede registrar al empleado: el sueldo ($${sueldoBase}) es menor al mínimo del nivel ${grado.denominacion} ($${grado.rmu}).`,

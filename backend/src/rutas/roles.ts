@@ -7,7 +7,7 @@ import {
   aSnake, consultar, ejecutar, filaACamel, insertar, transaccion, uno,
 } from "../db.ts";
 import type { Base, Fila } from "../db.ts";
-import { parametrosDelAnio } from "../parametros.ts";
+import { avisoDeAnioSinParametros, parametrosDelAnio } from "../parametros.ts";
 import { indexarRegimenes, listarRegimenes, opcionesDe, regimenAplicado, reglasDe } from "../regimenes.ts";
 import { documentoCsv } from "../csv.ts";
 import { planillaIess } from "../iess.ts";
@@ -47,7 +47,7 @@ export async function guardarRol(
   empleados: Fila[], novedades: Map<number, Novedad>,
 ): Promise<{ rolId: number; avisos: string[] }> {
   const cero = new Decimal(0);
-  const { parametros, exacto } = await parametrosDelAnio(db, anio);
+  const { parametros } = await parametrosDelAnio(db, anio);
   const regimenes = indexarRegimenes(await listarRegimenes(db));
   const calculos = empleados.map((e) => {
     const n = novedades.get(Number(e.id));
@@ -73,7 +73,8 @@ export async function guardarRol(
     const nombre = String(e.nombres);
     return opciones.recibeHorasExtras ? avisosDeTopes(nombre, n, reglas) : avisoHorasIgnoradas(nombre, n);
   });
-  if (!exacto) avisos.unshift(`No hay parámetros de ${anio}; se usaron los de ${parametros.anio}.`);
+  const sinParametros = avisoDeAnioSinParametros(anio, parametros);
+  if (sinParametros) avisos.unshift(sinParametros);
 
   const total = (campo: keyof ResultadoRol) =>
     calculos.reduce((suma, c) => suma.plus(c.resultado[campo]), cero).toNumber();
