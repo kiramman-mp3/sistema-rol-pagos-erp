@@ -377,7 +377,7 @@ En el formulario del empleado, si el régimen aplicado tiene puestos, el puesto 
 
 El seed carga 12 empleados con la estructura del orgánico: Johan Gabriel Rodríguez (gerente), José Gabriel Manzano (administrador), David Barragán y Andrea Paola Villavicencio (supervisores de instalaciones), Maybeline Navarro, Santiago Andrés Cevallos y Karen Michelle Salazar (operaciones de instalaciones) y Pedro Pablo Guamán, Luis Fernando Tipán y Mayra Alejandra Chicaiza (auxiliares de guardalmacén), más Lucía Estefanía Mora (LOSEP) y Daniela Alejandra Ruiz (LOEP servidora) para mostrar los otros regímenes. Cada uno cobra al menos el mínimo del nivel de su puesto.
 
-El seed también genera los roles de pago de **enero a septiembre de 2026**, dejando octubre para generarlo a mano. Los empleados aparecen en los roles desde su fecha de ingreso (Mayra desde marzo; Pedro, que ingresó el 16 de octubre, en ninguno). El personal de campo tiene horas extras y algún anticipo descontado, siempre los mismos valores para que la demostración sea repetible. Las cédulas son válidas pero inventadas.
+El seed también genera los roles de pago de **enero a septiembre de 2026**, dejando octubre para generarlo a mano. Los lleva por el ciclo como «sistema»: enero a agosto quedan **pagados** y septiembre **publicado**, para ver cada estado en la demostración. Los empleados aparecen en los roles desde su fecha de ingreso (Mayra desde marzo; Pedro, que ingresó el 16 de octubre, en ninguno). El personal de campo tiene horas extras y algún anticipo descontado, siempre los mismos valores para que la demostración sea repetible. Las cédulas son válidas pero inventadas.
 
 ### Conciliación con el IESS
 
@@ -420,6 +420,8 @@ calculado --validar--> validado --aprobar--> aprobado --publicar--> publicado --
 **Errores bloqueantes:** el rol no tiene empleados; los parámetros de ley del año no existen y se usaron los de otro; alguien que debería estar en el período no está en el rol; un neto es negativo; la cabecera no cuadra con la suma del detalle. **Avisos** (no bloquean): un neto de $0 o ingresos mayores al doble del sueldo base.
 
 **Inmutabilidad.** La API responde `409` si se intenta recalcular o eliminar un rol publicado o pagado, y la migración 014 lo refuerza en la base con disparadores: un rol publicado solo admite pasar a «pagado», y su detalle no se modifica. Cada paso es un `UPDATE` condicionado al estado anterior, así que si dos personas publican a la vez, solo una lo logra y la otra recibe `409`.
+
+**Probado en Postgres real.** La migración 014 y los disparadores se comprobaron también contra PostgreSQL 17 (no solo PGlite): el ciclo del seed corre completo y la base rechaza modificar un rol publicado o el registro de auditoría.
 
 **Auditoría.** `audit_logs` guarda la cuenta, el usuario (con su correo), la acción, el rol y un detalle en JSON. Un disparador impide modificar o borrar sus filas. Los roles del seed quedan registrados como hechos por «sistema».
 
@@ -519,7 +521,7 @@ Lista de contribuidores que han aportado commits al desarrollo de este repositor
 
 | Nombre | Commits |
 | :--- | :--- |
-| **kiramman-mp3** | 202 |
+| **kiramman-mp3** | 206 |
 
 ---
 
