@@ -167,8 +167,16 @@ export interface RolDetalle extends ResultadoRol {
   tasaIessPatronal: number;
 }
 
+/** Ciclo del rol; publicado y pagado ya no se recalculan ni se eliminan. */
+export type EstadoRol = 'calculado' | 'validado' | 'aprobado' | 'publicado' | 'pagado';
+
 export interface RolCabecera {
   id: number;
+  estado: EstadoRol;
+  validadoEn: string | null;
+  aprobadoEn: string | null;
+  publicadoEn: string | null;
+  pagadoEn: string | null;
   anio: number;
   mes: number;
   generadoEn: string;
@@ -207,6 +215,22 @@ export interface RolCompleto extends RolCabecera {
   detalle: RolDetalle[];
 }
 
+/** Resultado de revisar un rol: los errores bloquean el paso a «validado», los avisos no. */
+export interface RevisionRol {
+  valido: boolean;
+  estado: EstadoRol;
+  errores: string[];
+  avisos: string[];
+}
+
+/** Un paso del rol en la auditoría. */
+export interface EventoRol {
+  accion: string;
+  usuario: string;
+  detalle: Record<string, unknown> | null;
+  creadoEn: string;
+}
+
 export interface Novedades {
   horasSuplementarias: number;
   horasExtraordinarias: number;
@@ -232,6 +256,8 @@ export interface Periodo {
   anio: number;
   mes: number;
   existe: boolean;
+  /** null = todavía no hay rol de ese mes */
+  estado: EstadoRol | null;
   empleados: EmpleadoDelPeriodo[];
 }
 

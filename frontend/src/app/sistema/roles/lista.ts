@@ -4,6 +4,7 @@ import { RouterLink } from '@angular/router';
 
 import { ParametrosLey, valorSeguro } from '../../core/api';
 import { DineroPipe } from '../../core/dinero.pipe';
+import { claseEstado, etiquetaEstado } from '../../core/estado-rol';
 import type { RolCabecera } from '../../core/modelos';
 
 @Component({
@@ -37,7 +38,9 @@ import type { RolCabecera } from '../../core/modelos';
     <div class="encabezado">
       <div>
         <h1>Roles de pago</h1>
-        <p class="apoyo">Un rol por mes. Si recalculas uno que ya existe, se reemplaza.</p>
+        <p class="apoyo">
+          Un rol por mes. Si recalculas uno que ya existe, se reemplaza, salvo que ya esté publicado.
+        </p>
       </div>
     </div>
 
@@ -61,7 +64,7 @@ import type { RolCabecera } from '../../core/modelos';
               @switch (m.estado) {
                 @case ('generado') {
                   <span class="mes-cifra">{{ m.rol!.totalNeto | dinero }}</span>
-                  <span class="insignia insignia-neto">Generado</span>
+                  <span class="insignia" [class]="claseEstado(m.rol!.estado)">{{ etiquetaEstado(m.rol!.estado) }}</span>
                 }
                 @case ('toca') {
                   <span class="mes-cifra">Toca este mes</span>
@@ -89,6 +92,7 @@ import type { RolCabecera } from '../../core/modelos';
           <thead>
             <tr>
               <th>Período</th>
+              <th>Estado</th>
               <th class="num">Empleados</th>
               <th class="num t-ingresos">Ingresos</th>
               <th class="num t-descuentos">Descuentos</th>
@@ -103,6 +107,7 @@ import type { RolCabecera } from '../../core/modelos';
                 <td>
                   <a [routerLink]="['/sistema/roles', r.id]"><strong>{{ nombreMes(r.mes) }} {{ r.anio }}</strong></a>
                 </td>
+                <td><span class="insignia" [class]="claseEstado(r.estado)">{{ etiquetaEstado(r.estado) }}</span></td>
                 <td class="num">{{ r.numEmpleados }}</td>
                 <td class="num">{{ r.totalIngresos | dinero }}</td>
                 <td class="num">{{ r.totalDescuentos | dinero }}</td>
@@ -115,7 +120,7 @@ import type { RolCabecera } from '../../core/modelos';
               </tr>
             } @empty {
               <tr>
-                <td colspan="7" class="tabla-vacia">
+                <td colspan="8" class="tabla-vacia">
                   @if (roles.isLoading()) {
                     Cargando roles…
                   } @else if (roles.error()) {
@@ -134,6 +139,8 @@ import type { RolCabecera } from '../../core/modelos';
 })
 export class ListaRoles {
   protected readonly parametros = inject(ParametrosLey).valor;
+  protected readonly claseEstado = claseEstado;
+  protected readonly etiquetaEstado = etiquetaEstado;
   protected readonly roles = httpResource<RolCabecera[]>(() => '/api/roles');
   private readonly cargados = valorSeguro(this.roles);
   protected readonly historial = computed(() => this.cargados() ?? []);
