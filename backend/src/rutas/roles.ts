@@ -133,6 +133,9 @@ const COLUMNAS_IESS = [
   "fondos_reserva_pagados_en_rol",
 ];
 
+/** La traza se pide aparte (pesa y solo se mira de a un empleado): el detalle solo dice si la hay. */
+const sinTraza = ({ traza, ...fila }: Fila) => ({ ...filaACamel(fila), tieneTraza: traza !== null && traza !== undefined });
+
 export function rutasRoles(db: Base): Router {
   const router = Router();
 
@@ -223,7 +226,7 @@ export function rutasRoles(db: Base): Router {
   router.get("/:id", async (req, res) => {
     const cuentaId = cuentaDe(res);
     const { cabecera, detalle } = await cargar(cuentaId, req.params.id);
-    const base = { ...filaACamel(cabecera), detalle: detalle.map(filaACamel) };
+    const base = { ...filaACamel(cabecera), detalle: detalle.map(sinTraza) };
     if (cabecera.tipo === "ajuste") {
       const origen = await uno(db, "SELECT id, anio, mes, estado FROM roles_cabecera WHERE id = ?", Number(cabecera.rol_origen_id));
       return void res.json({ ...base, origen: origen ? filaACamel(origen) : null });
@@ -247,7 +250,21 @@ export function rutasRoles(db: Base): Router {
         totalProvisiones: sumar("total_provisiones"), totalCosto: sumar("total_costo"),
       } : null,
       vigente: cabecera.estado === "publicado" || cabecera.estado === "pagado"
-        ? (await detalleVigente(db, Number(cabecera.id))).map(filaACamel) : [],
+        ? (await detalleVigente(db, Number(cabecera.id))).map(sinTraza) : [],
+    });
+  });
+
+  /** Cómo se calculó a un empleado en este rol: cada paso con su fórmula, sus números y el régimen con que se hizo. */
+  router.get("/:id/traza/:cedula", async (req, res) => {
+    const { cabecera, detalle } = await cargar(cuentaDe(res), req.params.id);
+    const fila = detalle.find((d) => String(d.cedula) === req.params.cedula);
+    if (!fila) throw new ErrorApi(404, ["Esa persona no está en este rol."]);
+    if (!fila.traza) {
+      throw new ErrorApi(404, ["Este rol se calculó antes de que se guardara el desglose: no hay cómo explicarlo."]);
+    }
+    res.json({
+      cedula: fila.cedula, nombres: fila.nombres, anio: cabecera.anio, mes: cabecera.mes, ajuste: cabecera.tipo === "ajuste",
+      ...JSON.parse(String(fila.traza)),
     });
   });
 
