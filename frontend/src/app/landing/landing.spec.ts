@@ -55,13 +55,15 @@ describe('Landing', () => {
     http.match('/api/simulacion').forEach((r) => r.flush(SIMULACION));
   };
 
-  it('todos los botones "Ingresar al sistema" llevan a /sistema', () => {
+  it('los botones llevan a registrar la empresa o a ingresar', () => {
     const el = crear().nativeElement as HTMLElement;
-    const botones = [...el.querySelectorAll('a')].filter((a) =>
-      a.textContent?.includes('Ingresar al sistema'),
-    );
-    expect(botones.length).toBe(3); // barra superior, portada y cierre
-    for (const b of botones) expect(b.getAttribute('href')).toBe('/sistema');
+    const hrefs = (texto: string) =>
+      [...el.querySelectorAll('a')].filter((a) => a.textContent?.includes(texto)).map((a) => a.getAttribute('href'));
+    const registrar = hrefs('Registrar mi empresa');
+    expect(registrar.length).toBe(3); // barra superior, portada y cierre
+    for (const h of registrar) expect(h).toBe('/registro');
+    expect(hrefs('Ingresar')).toEqual(['/entrar']);
+    expect(hrefs('Ya tengo cuenta')).toEqual(['/entrar']);
   });
 
   it('muestra las reglas de ley que entrega el servidor', async () => {
@@ -168,7 +170,7 @@ describe('Landing', () => {
     const el = fixture.nativeElement as HTMLElement;
     expect(el.textContent).toContain('No se pudo calcular');
     expect(el.textContent).toContain('No se pudieron cargar las reglas');
-    expect(el.textContent).toContain('Ingresar al sistema');
+    expect(el.textContent).toContain('Registrar mi empresa');
   });
 
   it('no consulta al servidor si el sueldo no es válido', async () => {
