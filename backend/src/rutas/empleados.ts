@@ -18,6 +18,8 @@ interface DatosEmpleado {
   cargo: string;
   sueldoBase: number;
   fechaIngreso: string;
+  /** null = sigue en la empresa */
+  fechaSalida: string | null;
   tipoContrato: string;
   regimen: string;
   categoriaLoep: string | null;
@@ -49,6 +51,14 @@ async function validar(
   if (!nombres || !cargo) errores.push("Nombres y cargo son obligatorios.");
   if (!CONTRATOS.includes(tipoContrato)) errores.push("Tipo de contrato inválido.");
   if (!fechaIsoValida(fechaIngreso)) errores.push("Fecha de ingreso inválida.");
+  const salida = texto("fechaSalida");
+  let fechaSalida: string | null = null;
+  if (salida) {
+    if (!fechaIsoValida(salida)) errores.push("Fecha de salida inválida.");
+    else if (fechaIsoValida(fechaIngreso) && salida < fechaIngreso) {
+      errores.push("La fecha de salida no puede ser anterior a la de ingreso.");
+    } else fechaSalida = salida;
+  }
 
   // El régimen existe y, si es mixto (LOEP), hace falta saber si es servidor u obrero.
   const regimenes = indexarRegimenes(await listarRegimenes(db));
@@ -157,12 +167,15 @@ async function validar(
   if (errores.length) throw new ErrorApi(400, errores);
   return {
     datos: {
-      cedula, nombres, cargo, sueldoBase, fechaIngreso, tipoContrato, regimen, categoriaLoep, escalaId, puestoId,
+      cedula, nombres, cargo, sueldoBase, fechaIngreso, fechaSalida, tipoContrato, regimen, categoriaLoep, escalaId, puestoId,
       pagoDecimoTercero, pagoDecimoCuarto, pagoFondosReserva, recibeHorasExtras,
     },
     avisos,
   };
 }
+
+/** La fecha de hoy en Ecuador (AAAA-MM-DD), no la del servidor, que en Vercel corre en UTC. */
+const hoyEnEcuador = () => new Date().toLocaleDateString("sv-SE", { timeZone: "America/Guayaquil" });
 
 const aApi = (fila: Fila) => ({
   ...filaACamel(fila),
@@ -208,10 +221,10 @@ export function rutasEmpleados(db: Base): Router {
     const id = await guardar(() =>
       insertar(
         db,
-        `INSERT INTO empleados (cedula, nombres, cargo, sueldo_base, fecha_ingreso, tipo_contrato,
+        `INSERT INTO empleados (cedula, nombres, cargo, sueldo_base, fecha_ingreso, fecha_salida, tipo_contrato,
          regimen, categoria_loep, escala_id, puesto_id, pago_decimo_tercero, pago_decimo_cuarto,
-         pago_fondos_reserva, recibe_horas_extras) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        datos.cedula, datos.nombres, datos.cargo, datos.sueldoBase, datos.fechaIngreso,
+         pago_fondos_reserva, recibe_horas_extras) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        datos.cedula, datos.nombres, datos.cargo, datos.sueldoBase, datos.fechaIngreso, datos.fechaSalida,
         datos.tipoContrato, datos.regimen, datos.categoriaLoep, datos.escalaId, datos.puestoId,
         datos.pagoDecimoTercero, datos.pagoDecimoCuarto, datos.pagoFondosReserva,
         datos.recibeHorasExtras === null ? null : Number(datos.recibeHorasExtras),
@@ -227,10 +240,10 @@ export function rutasEmpleados(db: Base): Router {
       await ejecutar(
         db,
         `UPDATE empleados SET cedula = ?, nombres = ?, cargo = ?, sueldo_base = ?,
-         fecha_ingreso = ?, tipo_contrato = ?, regimen = ?, categoria_loep = ?, escala_id = ?, puesto_id = ?,
+         fecha_ingreso = ?, fecha_salida = ?, tipo_contrato = ?, regimen = ?, categoria_loep = ?, escala_id = ?, puesto_id = ?,
          pago_decimo_tercero = ?, pago_decimo_cuarto = ?, pago_fondos_reserva = ?, recibe_horas_extras = ?
          WHERE id = ?`,
-        datos.cedula, datos.nombres, datos.cargo, datos.sueldoBase, datos.fechaIngreso,
+        datos.cedula, datos.nombres, datos.cargo, datos.sueldoBase, datos.fechaIngreso, datos.fechaSalida,
         datos.tipoContrato, datos.regimen, datos.categoriaLoep, datos.escalaId, datos.puestoId,
         datos.pagoDecimoTercero, datos.pagoDecimoCuarto, datos.pagoFondosReserva,
         datos.recibeHorasExtras === null ? null : Number(datos.recibeHorasExtras), actual.id,
@@ -242,7 +255,21 @@ export function rutasEmpleados(db: Base): Router {
 
   router.patch("/:id/estado", async (req, res) => {
     const actual = await buscar(req.params.id);
-    await ejecutar(db, "UPDATE empleados SET activo = 1 - activo WHERE id = ?", actual.id);
+    // Desactivar a alguien es registrar su salida (hoy, o la fecha que se indique); reactivarlo la borra.
+    const pedida = req.body?.fechaSalida;
+    if (pedida !== undefined && pedida !== null && pedida !== "" && !fechaIsoValida(pedida)) {
+      throw new ErrorApi(400, ["Fecha de salida inválida."]);
+    }
+    const hoy = hoyEnEcuador();
+    const salida = pedida ? String(pedida) : hoy < String(actual.fecha_ingreso) ? String(actual.fecha_ingreso) : hoy;
+    if (actual.activo === 1 && salida < String(actual.fecha_ingreso)) {
+      throw new ErrorApi(400, ["La fecha de salida no puede ser anterior a la de ingreso."]);
+    }
+    await ejecutar(
+      db,
+      "UPDATE empleados SET activo = 1 - activo, fecha_salida = CASE WHEN activo = 1 THEN ? ELSE NULL END WHERE id = ?",
+      salida, actual.id,
+    );
     if (actual.activo === 1) await soltarResponsable(db, Number(actual.id), null); // quien se desactiva deja de ser responsable
     res.json(aApi(await buscar(req.params.id)));
   });
