@@ -24,7 +24,7 @@ describe('rutas', () => {
 
   it('la raíz es la landing pública', async () => {
     await harness.navigateByUrl('/');
-    expect(harness.routeNativeElement?.textContent).toContain('Ingresar al sistema');
+    expect(harness.routeNativeElement?.textContent).toContain('Registrar mi empresa');
     http.match(() => true);
   });
 
