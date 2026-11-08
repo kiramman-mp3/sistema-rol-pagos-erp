@@ -1,10 +1,13 @@
 import { Router } from "express";
+import type { Response } from "express";
 import { Decimal } from "decimal.js";
 
 import { avisoHorasIgnoradas, avisosDeTopes, calcularRol } from "../calculos.ts";
 import type { ResultadoRol } from "../calculos.ts";
+import { listarAuditoria, registrarAuditoria } from "../auditoria.ts";
+import { darPaso, esInmutable, exigirPaso, rechazarValidacion, revisarRol } from "../ciclo.ts";
 import {
-  aSnake, consultar, ejecutar, filaACamel, insertar, transaccion, uno,
+  aSnake, consultar, ejecutar, esDuplicado, filaACamel, insertar, transaccion, uno,
 } from "../db.ts";
 import type { Base, Fila } from "../db.ts";
 import { avisoDeAnioSinParametros, parametrosDelAnio } from "../parametros.ts";
@@ -12,7 +15,7 @@ import { indexarRegimenes, listarRegimenes, opcionesDe, regimenAplicado, reglasD
 import { documentoCsv } from "../csv.ts";
 import { planillaIess } from "../iess.ts";
 import { aDecimal, ErrorApi, leerId } from "../validaciones.ts";
-import { cuentaDe } from "./auth.ts";
+import { cuentaDe, usuarioDe } from "./auth.ts";
 
 const CAMPOS_NOVEDAD = [
   "horasSuplementarias", "horasExtraordinarias", "horasDescanso", "horasNocturnas",
@@ -47,13 +50,23 @@ export function empleadosDelPeriodo(db: Base, cuentaId: number, anio: number, me
   );
 }
 
-const existeRol = async (db: Base, cuentaId: number, anio: number, mes: number) =>
-  (await uno(db, "SELECT 1 AS ok FROM roles_cabecera WHERE cuenta_id = ? AND anio = ? AND mes = ?", cuentaId, anio, mes)) !== undefined;
+/** Estado del rol de ese mes; `undefined` si todavía no se generó. */
+const estadoDelRol = async (db: Base, cuentaId: number, anio: number, mes: number) =>
+  (await uno(db, "SELECT estado FROM roles_cabecera WHERE cuenta_id = ? AND anio = ? AND mes = ?", cuentaId, anio, mes))
+    ?.estado as string | undefined;
 
-/** Calcula y guarda todo en una sola transacción; reemplaza el rol del mes si existía. */
+const errorRolInmutable = (anio: number, mes: number, estado: unknown) =>
+  new ErrorApi(409, [
+    `El rol de ${anio}-${String(mes).padStart(2, "0")} está «${estado}»: ya no se puede recalcular ni eliminar.`,
+  ]);
+
+/**
+ * Calcula y guarda todo en una sola transacción; reemplaza el rol del mes si existía, salvo que esté
+ * publicado o pagado (409). El rol nuevo empieza en «calculado». `usuarioId` es quien lo pidió (`null`: el sistema).
+ */
 export async function guardarRol(
   db: Base, cuentaId: number, anio: number, mes: number,
-  empleados: Fila[], novedades: Map<number, Novedad>,
+  empleados: Fila[], novedades: Map<number, Novedad>, usuarioId: number | null = null,
 ): Promise<{ rolId: number; avisos: string[] }> {
   const cero = new Decimal(0);
   const { parametros } = await parametrosDelAnio(db, cuentaId, anio);
@@ -90,16 +103,35 @@ export async function guardarRol(
     calculos.reduce((suma, c) => suma.plus(c.resultado[campo]), cero).toNumber();
 
   const rolId = await transaccion(db, async (tx) => {
-    await ejecutar(tx, "DELETE FROM roles_cabecera WHERE cuenta_id = ? AND anio = ? AND mes = ?", cuentaId, anio, mes);
-    const nuevoId = await insertar(
+    // Un rol publicado no se toca: el DELETE lo salta y el INSERT choca con el UNIQUE del mes.
+    const reemplazado = await consultar(
       tx,
-      `INSERT INTO roles_cabecera (cuenta_id, anio, mes, generado_en, num_empleados, total_ingresos,
-       total_descuentos, total_neto, total_provisiones, total_costo)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      cuentaId, anio, mes, new Date().toISOString().slice(0, 19), calculos.length,
-      total("totalIngresos"), total("totalDescuentos"), total("netoPagar"),
-      total("totalProvisiones"), total("costoEmpleador"),
+      `DELETE FROM roles_cabecera
+       WHERE cuenta_id = ? AND anio = ? AND mes = ? AND estado NOT IN ('publicado', 'pagado') RETURNING id`,
+      cuentaId, anio, mes,
     );
+    let nuevoId: number;
+    try {
+      nuevoId = await insertar(
+        tx,
+        `INSERT INTO roles_cabecera (cuenta_id, anio, mes, generado_en, num_empleados, total_ingresos,
+         total_descuentos, total_neto, total_provisiones, total_costo)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        cuentaId, anio, mes, new Date().toISOString().slice(0, 19), calculos.length,
+        total("totalIngresos"), total("totalDescuentos"), total("netoPagar"),
+        total("totalProvisiones"), total("costoEmpleador"),
+      );
+    } catch (error) {
+      if (esDuplicado(error)) throw errorRolInmutable(anio, mes, "publicado");
+      throw error;
+    }
+    await registrarAuditoria(tx, {
+      cuentaId, usuarioId, accion: "rol.calculado", entidad: "rol", entidadId: nuevoId,
+      detalle: {
+        anio, mes, empleados: calculos.length, neto: total("netoPagar"),
+        ...(reemplazado.length ? { reemplazaAlRol: Number(reemplazado[0].id) } : {}),
+      },
+    });
 
     for (const { e, resultado, n, aplicado } of calculos) {
       const fila: Fila = {
@@ -169,6 +201,7 @@ export function rutasRoles(db: Base): Router {
     const cuentaId = cuentaDe(res);
     const { anio, mes } = leerPeriodo(req.params.anio, req.params.mes);
     const regimenes = indexarRegimenes(await listarRegimenes(db, cuentaId));
+    const estadoRol = await estadoDelRol(db, cuentaId, anio, mes);
     const guardadas = new Map(
       (await consultar(
         db,
@@ -179,7 +212,8 @@ export function rutasRoles(db: Base): Router {
     );
     res.json({
       anio, mes,
-      existe: await existeRol(db, cuentaId, anio, mes),
+      existe: estadoRol !== undefined,
+      estado: estadoRol ?? null,
       empleados: (await empleadosDelPeriodo(db, cuentaId, anio, mes)).map((e) => {
         const g = guardadas.get(Number(e.id));
         return {
@@ -206,6 +240,8 @@ export function rutasRoles(db: Base): Router {
     const cuentaId = cuentaDe(res);
     const cuerpo = req.body ?? {};
     const { anio, mes } = leerPeriodo(cuerpo.anio, cuerpo.mes);
+    const estadoActual = await estadoDelRol(db, cuentaId, anio, mes);
+    if (esInmutable(estadoActual)) throw errorRolInmutable(anio, mes, estadoActual);
     const empleados = await empleadosDelPeriodo(db, cuentaId, anio, mes);
     if (!empleados.length) throw new ErrorApi(400, ["No hay empleados activos para ese período."]);
 
@@ -225,7 +261,7 @@ export function rutasRoles(db: Base): Router {
     }
     if (errores.length) throw new ErrorApi(400, errores);
 
-    const { rolId, avisos } = await guardarRol(db, cuentaId, anio, mes, empleados, novedades);
+    const { rolId, avisos } = await guardarRol(db, cuentaId, anio, mes, empleados, novedades, usuarioDe(res));
     res.status(201).json({ id: rolId, empleados: empleados.length, avisos });
   });
 
@@ -270,8 +306,78 @@ export function rutasRoles(db: Base): Router {
   router.delete("/:id", async (req, res) => {
     const cuentaId = cuentaDe(res);
     const { cabecera } = await cargar(cuentaId, req.params.id);
-    await ejecutar(db, "DELETE FROM roles_cabecera WHERE cuenta_id = ? AND id = ?", cuentaId, Number(cabecera.id));
+    if (esInmutable(cabecera.estado)) throw errorRolInmutable(Number(cabecera.anio), Number(cabecera.mes), cabecera.estado);
+    await transaccion(db, async (tx) => {
+      const { changes } = await ejecutar(
+        tx,
+        "DELETE FROM roles_cabecera WHERE cuenta_id = ? AND id = ? AND estado NOT IN ('publicado', 'pagado')",
+        cuentaId, Number(cabecera.id),
+      );
+      if (!changes) throw errorRolInmutable(Number(cabecera.anio), Number(cabecera.mes), "publicado");
+      await registrarAuditoria(tx, {
+        cuentaId, usuarioId: usuarioDe(res), accion: "rol.eliminado", entidad: "rol", entidadId: Number(cabecera.id),
+        detalle: { anio: cabecera.anio, mes: cabecera.mes, estado: cabecera.estado },
+      });
+    });
     res.status(204).end();
+  });
+
+  /** Lo que impide o desaconseja avanzar el rol, con los datos de hoy (empleados y parámetros de ley). */
+  const revisar = async (cuentaId: number, cabecera: Fila, detalle: Fila[]) => {
+    const anio = Number(cabecera.anio);
+    const { parametros } = await parametrosDelAnio(db, cuentaId, anio);
+    const esperados = await empleadosDelPeriodo(db, cuentaId, anio, Number(cabecera.mes));
+    return revisarRol(cabecera, detalle, esperados, parametros.anio);
+  };
+
+  /** Responde con el rol tal como quedó después del paso. */
+  const responderCabecera = async (cuentaId: number, id: number, res: Response) => {
+    res.json(filaACamel((await uno(db, "SELECT * FROM roles_cabecera WHERE cuenta_id = ? AND id = ?", cuentaId, id))!));
+  };
+
+  /** Revisa el rol: si no hay errores bloqueantes pasa a «validado»; si los hay, no avanza (y uno validado retrocede). */
+  router.post("/:id/validar", async (req, res) => {
+    const cuentaId = cuentaDe(res);
+    const usuarioId = usuarioDe(res);
+    const { cabecera, detalle } = await cargar(cuentaId, req.params.id);
+    exigirPaso(cabecera, "validar");
+    const { errores, avisos } = await revisar(cuentaId, cabecera, detalle);
+    if (errores.length) await rechazarValidacion(db, cuentaId, usuarioId, Number(cabecera.id), errores);
+    else await darPaso(db, cuentaId, usuarioId, Number(cabecera.id), "validar", { avisos });
+    const actual = (await uno(db, "SELECT estado FROM roles_cabecera WHERE id = ?", Number(cabecera.id)))!;
+    res.json({ valido: !errores.length, estado: actual.estado, errores, avisos });
+  });
+
+  router.post("/:id/aprobar", async (req, res) => {
+    const cuentaId = cuentaDe(res);
+    const { cabecera } = await cargar(cuentaId, req.params.id);
+    await darPaso(db, cuentaId, usuarioDe(res), Number(cabecera.id), "aprobar");
+    await responderCabecera(cuentaId, Number(cabecera.id), res);
+  });
+
+  /** Publicar vuelve a revisar el rol: los datos pudieron cambiar desde que se validó. */
+  router.post("/:id/publicar", async (req, res) => {
+    const cuentaId = cuentaDe(res);
+    const { cabecera, detalle } = await cargar(cuentaId, req.params.id);
+    exigirPaso(cabecera, "publicar");
+    const { errores } = await revisar(cuentaId, cabecera, detalle);
+    if (errores.length) throw new ErrorApi(409, ["No se puede publicar el rol:", ...errores]);
+    await darPaso(db, cuentaId, usuarioDe(res), Number(cabecera.id), "publicar");
+    await responderCabecera(cuentaId, Number(cabecera.id), res);
+  });
+
+  router.post("/:id/pagar", async (req, res) => {
+    const cuentaId = cuentaDe(res);
+    const { cabecera } = await cargar(cuentaId, req.params.id);
+    await darPaso(db, cuentaId, usuarioDe(res), Number(cabecera.id), "pagar");
+    await responderCabecera(cuentaId, Number(cabecera.id), res);
+  });
+
+  /** Quién hizo cada paso del rol y cuándo. */
+  router.get("/:id/historial", async (req, res) => {
+    const cuentaId = cuentaDe(res);
+    const { cabecera } = await cargar(cuentaId, req.params.id);
+    res.json(await listarAuditoria(db, cuentaId, "rol", Number(cabecera.id)));
   });
 
   return router;

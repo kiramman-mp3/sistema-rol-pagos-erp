@@ -42,6 +42,13 @@ export function cuentaDe(res: Response): number {
   return id;
 }
 
+/** El usuario de la petición: quien queda registrado en la auditoría. */
+export function usuarioDe(res: Response): number {
+  const id = res.locals.usuarioId;
+  if (typeof id !== "number") throw new ErrorApi(401, ["Inicia sesión para continuar."]);
+  return id;
+}
+
 /**
  * Deja pasar solo a quien trae una sesión válida y anota su cuenta. Las rutas públicas pasan siempre:
  * con sesión usan los datos de su cuenta; sin ella, los de la plantilla.
