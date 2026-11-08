@@ -7,8 +7,28 @@ import { firstValueFrom } from 'rxjs';
 import { Api, ParametrosLey, valorSeguro } from '../../core/api';
 import { Avisos } from '../../core/avisos';
 import { DineroPipe, sumar } from '../../core/dinero.pipe';
+import { claseEstado, esInmutable, ESTADOS_ROL, etiquetaEstado } from '../../core/estado-rol';
 import { etiquetaRegimen } from '../../core/regimen';
-import type { Modalidad, PlanillaIess, RolCompleto, RolDetalle } from '../../core/modelos';
+import type { EventoRol, Modalidad, PlanillaIess, RevisionRol, RolCompleto, RolDetalle } from '../../core/modelos';
+
+type Accion = 'validar' | 'aprobar' | 'publicar' | 'pagar';
+
+/** Qué paso sigue en cada estado y cómo se llama su botón. */
+const SIGUIENTE: Record<string, { accion: Accion; texto: string; trabajando: string; hecho: string } | undefined> = {
+  calculado: { accion: 'validar', texto: 'Validar el rol', trabajando: 'Validando…', hecho: 'Rol validado.' },
+  validado: { accion: 'aprobar', texto: 'Aprobar', trabajando: 'Aprobando…', hecho: 'Rol aprobado.' },
+  aprobado: { accion: 'publicar', texto: 'Publicar', trabajando: 'Publicando…', hecho: 'Rol publicado. Ya no se puede recalcular.' },
+  publicado: { accion: 'pagar', texto: 'Marcar como pagado', trabajando: 'Guardando…', hecho: 'Rol marcado como pagado.' },
+};
+
+const TEXTO_EVENTO: Record<string, string> = {
+  'rol.calculado': 'Calculado',
+  'rol.validado': 'Validado',
+  'rol.validacion_rechazada': 'Validación rechazada',
+  'rol.aprobado': 'Aprobado',
+  'rol.publicado': 'Publicado',
+  'rol.pagado': 'Pagado',
+};
 
 @Component({
   selector: 'app-detalle-rol',
@@ -22,6 +42,17 @@ import type { Modalidad, PlanillaIess, RolCompleto, RolDetalle } from '../../cor
       background: var(--hoja); border: 1.5px solid var(--linea); border-radius: 999px; padding: .4rem .9rem;
     }
     .saltos a:hover { border-color: var(--marca); background: var(--ingresos-fondo); }
+    .ciclo { list-style: none; display: flex; gap: .5rem; flex-wrap: wrap; margin: 0 0 1rem; padding: 0; }
+    .ciclo li {
+      font-size: .85rem; font-weight: 700; color: var(--tinta-suave);
+      border: 1.5px dashed var(--linea); border-radius: 999px; padding: .3rem .85rem;
+    }
+    .ciclo li.hecho { border-style: solid; background: var(--neto-fondo); border-color: #b5e8cf; color: var(--neto); }
+    .ciclo li.actual { border-style: solid; background: var(--sol); border-color: var(--sol); color: var(--tinta); }
+    .revision { margin: 1rem 0 0; }
+    .revision ul { margin: .4rem 0 0; padding-left: 1.2rem; }
+    .historial { list-style: none; margin: 1.25rem 0 0; padding: 0; font-size: .9rem; }
+    .historial li { padding: .3rem 0; border-top: 1px solid var(--linea-suave); }
     .confirmar { display: inline-flex; align-items: center; gap: .25rem; font-size: .9rem; font-weight: 600; color: var(--descuentos); }
   `,
   template: `
@@ -29,7 +60,7 @@ import type { Modalidad, PlanillaIess, RolCompleto, RolDetalle } from '../../cor
       <div class="encabezado">
         <div>
           <a class="boton-texto volver no-imprimir" routerLink="/sistema/roles">‹ Roles de pago</a>
-          <h1>{{ nombreMes() }} {{ r.anio }} <span class="insignia insignia-neto no-imprimir">Rol generado</span></h1>
+          <h1>{{ nombreMes() }} {{ r.anio }} <span class="insignia no-imprimir" [class]="clase(r.estado)">{{ etiqueta(r.estado) }}</span></h1>
           <p class="apoyo">
             {{ parametros()?.empresa?.nombre }}, RUC {{ parametros()?.empresa?.ruc }}.
             Generado el {{ fechaGeneracion(r.generadoEn) }}.
@@ -39,8 +70,12 @@ import type { Modalidad, PlanillaIess, RolCompleto, RolDetalle } from '../../cor
           <a class="boton boton-sol" [href]="'/api/roles/' + r.id + '/csv'" download>Descargar CSV</a>
           <a class="boton boton-claro" [href]="'/api/roles/' + r.id + '/iess.csv'" download>Aportes para el IESS</a>
           <button class="boton boton-claro" type="button" (click)="imprimir()">Imprimir</button>
-          <a class="boton boton-claro" [routerLink]="['/sistema/roles/novedades', r.anio, r.mes]">Recalcular</a>
-          @if (confirmandoEliminar()) {
+          @if (!inmutable()) {
+            <a class="boton boton-claro" [routerLink]="['/sistema/roles/novedades', r.anio, r.mes]">Recalcular</a>
+          }
+          @if (inmutable()) {
+            <span class="apoyo">Publicado: ya no se recalcula ni se elimina.</span>
+          } @else if (confirmandoEliminar()) {
             <span class="confirmar" role="alert">
               ¿Eliminar el rol de {{ nombreMes() }}?
               <button class="boton-texto boton-peligro" type="button" (click)="eliminar(r)">Sí, eliminar</button>
@@ -57,6 +92,64 @@ import type { Modalidad, PlanillaIess, RolCompleto, RolDetalle } from '../../cor
         <a href="#titulo-provisiones" (click)="ir($event, 'titulo-provisiones')">Costo empleador</a>
         <a href="#titulo-iess" (click)="ir($event, 'titulo-iess')">Conciliación con el IESS</a>
       </nav>
+
+      <div class="hoja no-imprimir" role="group" aria-labelledby="titulo-ciclo">
+        <div class="hoja-titulo">
+          <h2 id="titulo-ciclo">Ciclo del rol</h2>
+          <p>
+            Se valida, se aprueba y se publica. Un rol publicado ya no se puede recalcular ni eliminar, y cada
+            paso queda registrado.
+          </p>
+        </div>
+        <div class="hoja-cuerpo">
+          <ol class="ciclo" aria-label="Estado del rol">
+            @for (p of pasos; track p.estado; let i = $index) {
+              <li [class.hecho]="i < indiceEstado()" [class.actual]="i === indiceEstado()"
+                  [attr.aria-current]="i === indiceEstado() ? 'step' : null">{{ p.etiqueta }}</li>
+            }
+          </ol>
+
+          @if (siguiente(); as paso) {
+            @if (confirmandoPublicar()) {
+              <span class="confirmar" role="alert">
+                ¿Publicar el rol de {{ nombreMes() }}? Ya no se podrá recalcular ni eliminar.
+                <button class="boton-texto boton-peligro" type="button" [disabled]="trabajando()" (click)="avanzar(paso)">Sí, publicar</button>
+                <button class="boton-texto" type="button" (click)="confirmandoPublicar.set(false)">No</button>
+              </span>
+            } @else {
+              <button class="boton" type="button" [disabled]="trabajando()"
+                      (click)="paso.accion === 'publicar' ? confirmandoPublicar.set(true) : avanzar(paso)">
+                {{ trabajando() ? paso.trabajando : paso.texto }}
+              </button>
+            }
+          } @else {
+            <p class="apoyo" style="margin: 0">El rol está pagado: el ciclo terminó.</p>
+          }
+
+          @if (revision(); as v) {
+            <div class="aviso revision" [class.aviso-success]="v.valido" [class.aviso-danger]="!v.valido" role="status">
+              @if (v.valido) {
+                El rol pasó la validación.
+              } @else {
+                No se puede validar el rol todavía:
+                <ul>@for (e of v.errores; track $index) { <li>{{ e }}</li> }</ul>
+              }
+              @if (v.avisos.length) {
+                <strong>Para revisar:</strong>
+                <ul>@for (a of v.avisos; track $index) { <li>{{ a }}</li> }</ul>
+              }
+            </div>
+          }
+
+          @if (eventos(); as lista) {
+            <ul class="historial" aria-label="Historial del rol">
+              @for (e of lista; track $index) {
+                <li><strong>{{ textoEvento(e) }}</strong> por {{ e.usuario }}, {{ fechaGeneracion(e.creadoEn) }}</li>
+              }
+            </ul>
+          }
+        </div>
+      </div>
 
       <div class="franja">
         <div class="ecuacion" role="group" aria-label="Del ingreso al neto">
@@ -324,6 +417,19 @@ export class DetalleRol {
   protected readonly iess = valorSeguro(httpResource<PlanillaIess>(() => `/api/roles/${this.id()}/iess`));
 
   protected readonly confirmandoEliminar = signal(false);
+  protected readonly confirmandoPublicar = signal(false);
+  protected readonly trabajando = signal(false);
+  protected readonly revision = signal<RevisionRol | null>(null);
+
+  private readonly historialRol = httpResource<EventoRol[]>(() => `/api/roles/${this.id()}/historial`);
+  protected readonly eventos = valorSeguro(this.historialRol);
+
+  protected readonly pasos = ESTADOS_ROL;
+  protected readonly etiqueta = etiquetaEstado;
+  protected readonly clase = claseEstado;
+  protected readonly inmutable = computed(() => esInmutable(this.datos()?.estado));
+  protected readonly indiceEstado = computed(() => ESTADOS_ROL.findIndex((e) => e.estado === this.datos()?.estado));
+  protected readonly siguiente = computed(() => SIGUIENTE[this.datos()?.estado ?? '']);
 
   protected readonly nombreMes = computed(
     () => this.parametros()?.meses[(this.datos()?.mes ?? 1) - 1] ?? '',
@@ -379,6 +485,41 @@ export class DetalleRol {
 
   protected imprimir() {
     window.print();
+  }
+
+  protected textoEvento(e: EventoRol): string {
+    return TEXTO_EVENTO[e.accion] ?? e.accion;
+  }
+
+  /** Da el paso siguiente del ciclo y refresca el rol y su historial. */
+  protected async avanzar(paso: { accion: Accion; hecho: string }) {
+    const id = Number(this.id());
+    this.avisos.limpiar();
+    this.trabajando.set(true);
+    this.confirmandoPublicar.set(false);
+    try {
+      if (paso.accion === 'validar') {
+        const r = await firstValueFrom(this.api.validarRol(id));
+        this.revision.set(r);
+        if (r.valido) this.avisos.exito(paso.hecho);
+      } else {
+        await firstValueFrom(
+          paso.accion === 'aprobar'
+            ? this.api.aprobarRol(id)
+            : paso.accion === 'publicar'
+              ? this.api.publicarRol(id)
+              : this.api.pagarRol(id),
+        );
+        this.revision.set(null);
+        this.avisos.exito(paso.hecho);
+      }
+    } catch (error) {
+      this.avisos.errorHttp(error);
+    } finally {
+      this.trabajando.set(false);
+      this.rol.reload();
+      this.historialRol.reload();
+    }
   }
 
   protected async eliminar(r: RolCompleto) {

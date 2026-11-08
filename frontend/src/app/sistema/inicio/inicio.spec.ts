@@ -34,7 +34,7 @@ describe('Inicio', () => {
   };
 
   const rolDeEsteMes = (): RolCabecera => ({
-    id: 7, anio: hoy.getFullYear(), mes: hoy.getMonth() + 1, generadoEn: '', numEmpleados: 1,
+    id: 7, anio: hoy.getFullYear(), mes: hoy.getMonth() + 1, generadoEn: '', estado: 'calculado', validadoEn: null, aprobadoEn: null, publicadoEn: null, pagadoEn: null, numEmpleados: 1,
     totalIngresos: 1000, totalDescuentos: 94.5, totalNeto: 905.5, totalProvisiones: 200, totalCosto: 1200,
   });
 

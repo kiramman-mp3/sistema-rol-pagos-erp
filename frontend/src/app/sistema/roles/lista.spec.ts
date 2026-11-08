@@ -40,7 +40,7 @@ describe('ListaRoles', () => {
   it('un mes con rol abre el rol y uno sin rol abre las novedades', async () => {
     const anio = hoy.getFullYear();
     const rol: RolCabecera = {
-      id: 9, anio, mes: 1, generadoEn: '', numEmpleados: 2, totalIngresos: 0, totalDescuentos: 0,
+      id: 9, anio, mes: 1, generadoEn: '', estado: 'calculado', validadoEn: null, aprobadoEn: null, publicadoEn: null, pagadoEn: null, numEmpleados: 2, totalIngresos: 0, totalDescuentos: 0,
       totalNeto: 1500, totalProvisiones: 0, totalCosto: 0,
     };
     const el = await cargar([rol]);
