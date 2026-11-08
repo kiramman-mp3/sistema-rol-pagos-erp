@@ -9,7 +9,7 @@ import {
   aniosConParametros, guardarParametros, parametrosDelAnio, validarTablaIr,
 } from "../parametros.ts";
 import {
-  buscarRegimen, CATEGORIAS_LOEP, indexarRegimenes, listarRegimenes, opcionesDe, regimenAplicado, reglasDe,
+  buscarRegimen, CATEGORIAS_LOEP, fechaDeCierre, indexarRegimenes, listarRegimenes, opcionesDe, regimenAplicado, reglasDe,
 } from "../regimenes.ts";
 import { aDecimal, ErrorApi } from "../validaciones.ts";
 import { cuentaDe } from "./auth.ts";
@@ -89,7 +89,8 @@ export function rutasParametros(db: Base): Router {
     const horasSuplementarias = campo("horasSuplementarias", 0, 100, "Horas suplementarias");
     const horasExtraordinarias = campo("horasExtraordinarias", 0, 100, "Horas extraordinarias");
     const comisiones = campo("comisiones", 0, 100000, "Comisiones");
-    const regimenes = indexarRegimenes(await listarRegimenes(db, cuentaId));
+    // El rol de ejemplo es de octubre de 2026: se calcula con las reglas de ese mes.
+    const regimenes = indexarRegimenes(await listarRegimenes(db, cuentaId, fechaDeCierre(2026, 10)));
     const aplicado = regimenAplicado(
       regimenes, String(cuerpo.regimen ?? "CODIGO_TRABAJO"), cuerpo.categoriaLoep ? String(cuerpo.categoriaLoep) : null,
     );

@@ -1,16 +1,19 @@
 /** Regímenes laborales guardados en la base y las reglas que de ellos salen. */
 import { MODALIDADES, REGLAS_CT_2026 } from "./calculos.ts";
 import type { Modalidad, OpcionesRol, ReglasRol } from "./calculos.ts";
-import { consultar, ejecutar, uno } from "./db.ts";
-import type { Base, Fila } from "./db.ts";
+import { registrarAuditoria } from "./auditoria.ts";
+import { consultar, ejecutar, transaccion, uno } from "./db.ts";
+import type { Base, Fila, Valor } from "./db.ts";
 import type { ParametrosAnio } from "./parametros.ts";
-import { ErrorApi } from "./validaciones.ts";
+import { ErrorApi, fechaIsoValida } from "./validaciones.ts";
 
 export const CATEGORIAS_LOEP = ["servidor", "obrero"] as const;
 export type CategoriaLoep = (typeof CATEGORIAS_LOEP)[number];
 
 export interface Regimen {
   codigo: string;
+  /** Primer día (AAAA-MM-DD) en que rige esta versión de las reglas. */
+  vigenteDesde: string;
   nombre: string;
   descripcion: string;
   baseLegal: string;
@@ -41,6 +44,7 @@ const numero = (v: unknown): number | null => (v === null || v === undefined ? n
 function aRegimen(f: Fila): Regimen {
   return {
     codigo: String(f.codigo),
+    vigenteDesde: String(f.vigente_desde),
     nombre: String(f.nombre),
     descripcion: String(f.descripcion),
     baseLegal: String(f.base_legal),
@@ -67,17 +71,50 @@ function aRegimen(f: Fila): Regimen {
   };
 }
 
-export async function listarRegimenes(db: Base, cuentaId: number): Promise<Regimen[]> {
+/** Hoy en Ecuador (AAAA-MM-DD), sin depender de la zona horaria del servidor. */
+export const hoyEnEcuador = (): string =>
+  new Date().toLocaleDateString("sv-SE", { timeZone: "America/Guayaquil" });
+
+/**
+ * Fecha con la que se eligen las reglas de un rol: el último día de su mes. Una regla que empieza a
+ * regir en cualquier día del mes ya cuenta para el rol de ese mes.
+ */
+export function fechaDeCierre(anio: number, mes: number): string {
+  const ultimo = new Date(Date.UTC(anio, mes, 0)).getUTCDate();
+  return `${String(anio).padStart(4, "0")}-${String(mes).padStart(2, "0")}-${String(ultimo).padStart(2, "0")}`;
+}
+
+/**
+ * La versión de cada régimen que rige en una fecha (por defecto hoy): la más reciente que ya empezó.
+ * Si la fecha es anterior a todas las versiones, se usa la más antigua.
+ */
+const VIGENTE_EN_FECHA = `
+  SELECT r.* FROM regimenes r
+  WHERE r.cuenta_id = ? AND r.vigente_desde = COALESCE(
+    (SELECT MAX(v.vigente_desde) FROM regimenes v
+     WHERE v.cuenta_id = r.cuenta_id AND v.codigo = r.codigo AND v.vigente_desde <= ?),
+    (SELECT MIN(v.vigente_desde) FROM regimenes v WHERE v.cuenta_id = r.cuenta_id AND v.codigo = r.codigo))`;
+
+export async function listarRegimenes(db: Base, cuentaId: number, fecha = hoyEnEcuador()): Promise<Regimen[]> {
   return (await consultar(
     db,
-    "SELECT * FROM regimenes WHERE cuenta_id = ? ORDER BY CASE codigo WHEN 'CODIGO_TRABAJO' THEN 0 ELSE 1 END, nombre",
-    cuentaId,
+    `${VIGENTE_EN_FECHA} ORDER BY CASE r.codigo WHEN 'CODIGO_TRABAJO' THEN 0 ELSE 1 END, r.nombre`,
+    cuentaId, fecha,
   )).map(aRegimen);
 }
 
-export async function buscarRegimen(db: Base, cuentaId: number, codigo: string): Promise<Regimen | undefined> {
-  const fila = await uno(db, "SELECT * FROM regimenes WHERE cuenta_id = ? AND codigo = ?", cuentaId, codigo);
+export async function buscarRegimen(
+  db: Base, cuentaId: number, codigo: string, fecha = hoyEnEcuador(),
+): Promise<Regimen | undefined> {
+  const fila = await uno(db, `${VIGENTE_EN_FECHA} AND r.codigo = ?`, cuentaId, fecha, codigo);
   return fila ? aRegimen(fila) : undefined;
+}
+
+/** Todas las versiones de un régimen, la más reciente primero. */
+export async function versionesDeRegimen(db: Base, cuentaId: number, codigo: string): Promise<Regimen[]> {
+  return (await consultar(
+    db, "SELECT * FROM regimenes WHERE cuenta_id = ? AND codigo = ? ORDER BY vigente_desde DESC", cuentaId, codigo,
+  )).map(aRegimen);
 }
 
 /**
@@ -151,11 +188,31 @@ export function opcionesDe(
 
 type Cuerpo = Record<string, unknown>;
 
-/** Valida y guarda los cambios de un régimen; devuelve el régimen actualizado. */
-export async function actualizarRegimen(db: Base, cuentaId: number, codigo: string, cuerpo: Cuerpo): Promise<Regimen> {
-  const actual = await buscarRegimen(db, cuentaId, codigo);
-  if (!actual) throw new ErrorApi(404, ["El régimen no existe."]);
+/**
+ * Valida y guarda los cambios de un régimen; devuelve la versión que quedó.
+ *
+ * `vigenteDesde` dice desde cuándo rigen estas reglas. Si ya hay una versión con esa fecha se corrige;
+ * si no, se crea una nueva a partir de la que regía ese día, y las anteriores quedan intactas (los
+ * meses viejos se siguen calculando con lo que valía entonces). Sin `vigenteDesde` se corrige en el
+ * sitio la versión que rige hoy. `usuarioId` es quien lo pidió, para la auditoría.
+ */
+export async function actualizarRegimen(
+  db: Base, cuentaId: number, codigo: string, cuerpo: Cuerpo, usuarioId: number | null = null,
+): Promise<Regimen> {
   const errores: string[] = [];
+
+  let pedida: string | null = null;
+  if (cuerpo.vigenteDesde !== undefined && cuerpo.vigenteDesde !== null && cuerpo.vigenteDesde !== "") {
+    const fecha = cuerpo.vigenteDesde;
+    if (!fechaIsoValida(fecha) || fecha < "2000-01-01" || fecha > "2100-12-31") {
+      throw new ErrorApi(400, ["Vigente desde: escribe una fecha válida (AAAA-MM-DD) entre 2000 y 2100."]);
+    }
+    pedida = fecha;
+  }
+  const actual = await buscarRegimen(db, cuentaId, codigo, pedida ?? undefined);
+  if (!actual) throw new ErrorApi(404, ["El régimen no existe."]);
+  const desde = pedida ?? actual.vigenteDesde;
+  const crea = desde !== actual.vigenteDesde;
 
   const rango = (campo: string, etiqueta: string, min: number, max: number, entero = false): number | null => {
     const valor = cuerpo[campo];
@@ -184,8 +241,38 @@ export async function actualizarRegimen(db: Base, cuentaId: number, codigo: stri
   const verificado = bool("verificado");
   const notas = texto("notas", 1000);
 
+  /** Guarda en la versión `desde` (creándola antes si es nueva) y deja constancia, todo en una transacción. */
+  const guardar = (cambios: string, ...valores: Valor[]) => transaccion(db, async (tx) => {
+    if (crea) {
+      await ejecutar(
+        tx,
+        `INSERT INTO regimenes (cuenta_id, codigo, vigente_desde, nombre, descripcion, base_legal, tipo, regimen_servidor,
+           regimen_obrero, iess_personal, iess_patronal, recargo_suplementarias, recargo_extraordinarias,
+           recargo_descanso, recargo_nocturno, tope_suplementarias_mes, tope_extraordinarias_mes, dias_vacaciones,
+           fondos_reserva, meses_para_fondos, aplica_decimo_tercero, aplica_decimo_cuarto, aplica_fondos_reserva,
+           aplica_horas_extras, verificado, notas)
+         SELECT cuenta_id, codigo, ?, nombre, descripcion, base_legal, tipo, regimen_servidor,
+           regimen_obrero, iess_personal, iess_patronal, recargo_suplementarias, recargo_extraordinarias,
+           recargo_descanso, recargo_nocturno, tope_suplementarias_mes, tope_extraordinarias_mes, dias_vacaciones,
+           fondos_reserva, meses_para_fondos, aplica_decimo_tercero, aplica_decimo_cuarto, aplica_fondos_reserva,
+           aplica_horas_extras, verificado, notas
+         FROM regimenes WHERE cuenta_id = ? AND codigo = ? AND vigente_desde = ?`,
+        desde, cuentaId, codigo, actual.vigenteDesde,
+      );
+    }
+    await ejecutar(
+      tx, `UPDATE regimenes SET ${cambios} WHERE cuenta_id = ? AND codigo = ? AND vigente_desde = ?`,
+      ...valores, cuentaId, codigo, desde,
+    );
+    // Los cambios a las reglas de ley no tienen un id numérico: el régimen y la fecha van en el detalle.
+    await registrarAuditoria(tx, {
+      cuentaId, usuarioId, accion: crea ? "regimen.version_creada" : "regimen.corregido", entidad: "regimen", entidadId: 0,
+      detalle: { codigo, vigenteDesde: desde, ...(crea ? { copiadaDe: actual.vigenteDesde } : {}) },
+    });
+  });
+
   if (actual.tipo === "mixto") {
-    const destinos = new Map((await listarRegimenes(db, cuentaId)).map((r) => [r.codigo, r]));
+    const destinos = new Map((await listarRegimenes(db, cuentaId, desde)).map((r) => [r.codigo, r]));
     const valido = (campo: string, etiqueta: string) => {
       const d = String(cuerpo[campo] ?? "");
       if (destinos.get(d)?.tipo !== "reglas") errores.push(`${etiqueta}: elige un régimen con reglas propias.`);
@@ -194,9 +281,9 @@ export async function actualizarRegimen(db: Base, cuentaId: number, codigo: stri
     const servidor = valido("regimenServidor", "Régimen de los servidores");
     const obrero = valido("regimenObrero", "Régimen de los obreros");
     if (errores.length) throw new ErrorApi(400, errores);
-    await ejecutar(db, "UPDATE regimenes SET nombre = ?, regimen_servidor = ?, regimen_obrero = ?, verificado = ?, notas = ? WHERE cuenta_id = ? AND codigo = ?",
-      nombre, servidor, obrero, verificado, notas, cuentaId, codigo);
-    return (await buscarRegimen(db, cuentaId, codigo))!;
+    await guardar("nombre = ?, regimen_servidor = ?, regimen_obrero = ?, verificado = ?, notas = ?",
+      nombre, servidor, obrero, verificado, notas);
+    return (await buscarRegimen(db, cuentaId, codigo, desde))!;
   }
 
   const iessPersonal = rango("iessPersonal", "Aporte personal al IESS", 0, 1);
@@ -212,16 +299,31 @@ export async function actualizarRegimen(db: Base, cuentaId: number, codigo: stri
   const topeExt = tope("topeExtraordinariasMes", "Tope de horas extraordinarias");
   if (errores.length) throw new ErrorApi(400, errores);
 
-  await ejecutar(
-    db,
-    `UPDATE regimenes SET nombre = ?, iess_personal = ?, iess_patronal = ?, recargo_suplementarias = ?,
+  await guardar(
+    `nombre = ?, iess_personal = ?, iess_patronal = ?, recargo_suplementarias = ?,
        recargo_extraordinarias = ?, recargo_descanso = ?, recargo_nocturno = ?, tope_suplementarias_mes = ?,
        tope_extraordinarias_mes = ?, dias_vacaciones = ?, fondos_reserva = ?, meses_para_fondos = ?,
        aplica_decimo_tercero = ?, aplica_decimo_cuarto = ?, aplica_fondos_reserva = ?, aplica_horas_extras = ?,
-       verificado = ?, notas = ? WHERE cuenta_id = ? AND codigo = ?`,
+       verificado = ?, notas = ?`,
     nombre, iessPersonal, iessPatronal, recSup, recExt, recDes, recNoc, topeSup, topeExt, dias, fondos, meses,
     bool("aplicaDecimoTercero"), bool("aplicaDecimoCuarto"), bool("aplicaFondosReserva"), bool("aplicaHorasExtras"),
-    verificado, notas, cuentaId, codigo,
+    verificado, notas,
   );
-  return (await buscarRegimen(db, cuentaId, codigo))!;
+  return (await buscarRegimen(db, cuentaId, codigo, desde))!;
+}
+
+/** Elimina una versión (por ejemplo una fecha mal puesta). La única que queda de un régimen no se puede quitar. */
+export async function eliminarVersionDeRegimen(
+  db: Base, cuentaId: number, codigo: string, desde: string, usuarioId: number | null = null,
+): Promise<void> {
+  const versiones = await versionesDeRegimen(db, cuentaId, codigo);
+  if (!versiones.some((v) => v.vigenteDesde === desde)) throw new ErrorApi(404, ["Esa versión del régimen no existe."]);
+  if (versiones.length === 1) throw new ErrorApi(409, ["No se puede eliminar la única versión del régimen."]);
+  await transaccion(db, async (tx) => {
+    await ejecutar(tx, "DELETE FROM regimenes WHERE cuenta_id = ? AND codigo = ? AND vigente_desde = ?", cuentaId, codigo, desde);
+    await registrarAuditoria(tx, {
+      cuentaId, usuarioId, accion: "regimen.version_eliminada", entidad: "regimen", entidadId: 0,
+      detalle: { codigo, vigenteDesde: desde },
+    });
+  });
 }

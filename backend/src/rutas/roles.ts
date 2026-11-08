@@ -11,7 +11,7 @@ import {
 } from "../db.ts";
 import type { Base, Fila } from "../db.ts";
 import { avisoDeAnioSinParametros, parametrosDelAnio } from "../parametros.ts";
-import { indexarRegimenes, listarRegimenes, opcionesDe, regimenAplicado, reglasDe } from "../regimenes.ts";
+import { fechaDeCierre, indexarRegimenes, listarRegimenes, opcionesDe, regimenAplicado, reglasDe } from "../regimenes.ts";
 import { documentoCsv } from "../csv.ts";
 import { planillaIess } from "../iess.ts";
 import { aDecimal, ErrorApi, leerId } from "../validaciones.ts";
@@ -70,7 +70,8 @@ export async function guardarRol(
 ): Promise<{ rolId: number; avisos: string[] }> {
   const cero = new Decimal(0);
   const { parametros } = await parametrosDelAnio(db, cuentaId, anio);
-  const regimenes = indexarRegimenes(await listarRegimenes(db, cuentaId));
+  // Las reglas son las que regían al cierre del mes, no las de hoy.
+  const regimenes = indexarRegimenes(await listarRegimenes(db, cuentaId, fechaDeCierre(anio, mes)));
   const calculos = empleados.map((e) => {
     const n = novedades.get(Number(e.id));
     const aplicado = regimenAplicado(regimenes, String(e.regimen), e.categoria_loep as string | null);
@@ -200,7 +201,7 @@ export function rutasRoles(db: Base): Router {
   router.get("/periodo/:anio/:mes", async (req, res) => {
     const cuentaId = cuentaDe(res);
     const { anio, mes } = leerPeriodo(req.params.anio, req.params.mes);
-    const regimenes = indexarRegimenes(await listarRegimenes(db, cuentaId));
+    const regimenes = indexarRegimenes(await listarRegimenes(db, cuentaId, fechaDeCierre(anio, mes)));
     const estadoRol = await estadoDelRol(db, cuentaId, anio, mes);
     const guardadas = new Map(
       (await consultar(
