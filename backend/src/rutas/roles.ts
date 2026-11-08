@@ -12,6 +12,7 @@ import { indexarRegimenes, listarRegimenes, opcionesDe, regimenAplicado, reglasD
 import { documentoCsv } from "../csv.ts";
 import { planillaIess } from "../iess.ts";
 import { aDecimal, ErrorApi, leerId } from "../validaciones.ts";
+import { cuentaDe } from "./auth.ts";
 
 const CAMPOS_NOVEDAD = [
   "horasSuplementarias", "horasExtraordinarias", "horasDescanso", "horasNocturnas",
@@ -34,29 +35,29 @@ function leerPeriodo(anioTexto: unknown, mesTexto: unknown): { anio: number; mes
  * empiece (las fechas ISO se comparan como texto). Un inactivo sin fecha de salida está fuera de todos
  * los meses; uno con fecha de salida sigue en los meses hasta ella.
  */
-export function empleadosDelPeriodo(db: Base, anio: number, mes: number): Promise<Fila[]> {
+export function empleadosDelPeriodo(db: Base, cuentaId: number, anio: number, mes: number): Promise<Fila[]> {
   const mesTexto = `${anio}-${String(mes).padStart(2, "0")}`;
   return consultar(
     db,
     `SELECT * FROM empleados
-     WHERE fecha_ingreso <= ? AND (fecha_salida IS NULL OR fecha_salida >= ?)
+     WHERE cuenta_id = ? AND fecha_ingreso <= ? AND (fecha_salida IS NULL OR fecha_salida >= ?)
        AND (activo = 1 OR fecha_salida IS NOT NULL)
      ORDER BY nombres`,
-    `${mesTexto}-31`, `${mesTexto}-01`,
+    cuentaId, `${mesTexto}-31`, `${mesTexto}-01`,
   );
 }
 
-const existeRol = async (db: Base, anio: number, mes: number) =>
-  (await uno(db, "SELECT 1 AS ok FROM roles_cabecera WHERE anio = ? AND mes = ?", anio, mes)) !== undefined;
+const existeRol = async (db: Base, cuentaId: number, anio: number, mes: number) =>
+  (await uno(db, "SELECT 1 AS ok FROM roles_cabecera WHERE cuenta_id = ? AND anio = ? AND mes = ?", cuentaId, anio, mes)) !== undefined;
 
 /** Calcula y guarda todo en una sola transacción; reemplaza el rol del mes si existía. */
 export async function guardarRol(
-  db: Base, anio: number, mes: number,
+  db: Base, cuentaId: number, anio: number, mes: number,
   empleados: Fila[], novedades: Map<number, Novedad>,
 ): Promise<{ rolId: number; avisos: string[] }> {
   const cero = new Decimal(0);
-  const { parametros } = await parametrosDelAnio(db, anio);
-  const regimenes = indexarRegimenes(await listarRegimenes(db));
+  const { parametros } = await parametrosDelAnio(db, cuentaId, anio);
+  const regimenes = indexarRegimenes(await listarRegimenes(db, cuentaId));
   const calculos = empleados.map((e) => {
     const n = novedades.get(Number(e.id));
     const aplicado = regimenAplicado(regimenes, String(e.regimen), e.categoria_loep as string | null);
@@ -89,13 +90,13 @@ export async function guardarRol(
     calculos.reduce((suma, c) => suma.plus(c.resultado[campo]), cero).toNumber();
 
   const rolId = await transaccion(db, async (tx) => {
-    await ejecutar(tx, "DELETE FROM roles_cabecera WHERE anio = ? AND mes = ?", anio, mes);
+    await ejecutar(tx, "DELETE FROM roles_cabecera WHERE cuenta_id = ? AND anio = ? AND mes = ?", cuentaId, anio, mes);
     const nuevoId = await insertar(
       tx,
-      `INSERT INTO roles_cabecera (anio, mes, generado_en, num_empleados, total_ingresos,
+      `INSERT INTO roles_cabecera (cuenta_id, anio, mes, generado_en, num_empleados, total_ingresos,
        total_descuentos, total_neto, total_provisiones, total_costo)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      anio, mes, new Date().toISOString().slice(0, 19), calculos.length,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      cuentaId, anio, mes, new Date().toISOString().slice(0, 19), calculos.length,
       total("totalIngresos"), total("totalDescuentos"), total("netoPagar"),
       total("totalProvisiones"), total("costoEmpleador"),
     );
@@ -148,8 +149,8 @@ const COLUMNAS_IESS = [
 export function rutasRoles(db: Base): Router {
   const router = Router();
 
-  const cargar = async (idTexto: string) => {
-    const cabecera = await uno(db, "SELECT * FROM roles_cabecera WHERE id = ?", leerId(idTexto));
+  const cargar = async (cuentaId: number, idTexto: string) => {
+    const cabecera = await uno(db, "SELECT * FROM roles_cabecera WHERE cuenta_id = ? AND id = ?", cuentaId, leerId(idTexto));
     if (!cabecera) throw new ErrorApi(404, ["El rol no existe."]);
     const detalle = await consultar(
       db, "SELECT * FROM roles_detalle WHERE rol_id = ? ORDER BY nombres", Number(cabecera.id),
@@ -159,22 +160,27 @@ export function rutasRoles(db: Base): Router {
 
   router.get("/", async (_req, res) => {
     res.json(
-      (await consultar(db, "SELECT * FROM roles_cabecera ORDER BY anio DESC, mes DESC")).map(filaACamel),
+      (await consultar(db, "SELECT * FROM roles_cabecera WHERE cuenta_id = ? ORDER BY anio DESC, mes DESC", cuentaDe(res))).map(filaACamel),
     );
   });
 
   /** Empleados que entrarán al rol del mes y las novedades que ya se habían digitado. */
   router.get("/periodo/:anio/:mes", async (req, res) => {
+    const cuentaId = cuentaDe(res);
     const { anio, mes } = leerPeriodo(req.params.anio, req.params.mes);
-    const regimenes = indexarRegimenes(await listarRegimenes(db));
+    const regimenes = indexarRegimenes(await listarRegimenes(db, cuentaId));
     const guardadas = new Map(
-      (await consultar(db, "SELECT * FROM novedades WHERE anio = ? AND mes = ?", anio, mes))
-        .map((n) => [Number(n.empleado_id), n]),
+      (await consultar(
+        db,
+        `SELECT n.* FROM novedades n JOIN empleados e ON e.id = n.empleado_id
+         WHERE e.cuenta_id = ? AND n.anio = ? AND n.mes = ?`,
+        cuentaId, anio, mes,
+      )).map((n) => [Number(n.empleado_id), n]),
     );
     res.json({
       anio, mes,
-      existe: await existeRol(db, anio, mes),
-      empleados: (await empleadosDelPeriodo(db, anio, mes)).map((e) => {
+      existe: await existeRol(db, cuentaId, anio, mes),
+      empleados: (await empleadosDelPeriodo(db, cuentaId, anio, mes)).map((e) => {
         const g = guardadas.get(Number(e.id));
         return {
           id: e.id, nombres: e.nombres, cargo: e.cargo, sueldoBase: e.sueldo_base,
@@ -197,9 +203,10 @@ export function rutasRoles(db: Base): Router {
   });
 
   router.post("/generar", async (req, res) => {
+    const cuentaId = cuentaDe(res);
     const cuerpo = req.body ?? {};
     const { anio, mes } = leerPeriodo(cuerpo.anio, cuerpo.mes);
-    const empleados = await empleadosDelPeriodo(db, anio, mes);
+    const empleados = await empleadosDelPeriodo(db, cuentaId, anio, mes);
     if (!empleados.length) throw new ErrorApi(400, ["No hay empleados activos para ese período."]);
 
     const errores: string[] = [];
@@ -218,17 +225,17 @@ export function rutasRoles(db: Base): Router {
     }
     if (errores.length) throw new ErrorApi(400, errores);
 
-    const { rolId, avisos } = await guardarRol(db, anio, mes, empleados, novedades);
+    const { rolId, avisos } = await guardarRol(db, cuentaId, anio, mes, empleados, novedades);
     res.status(201).json({ id: rolId, empleados: empleados.length, avisos });
   });
 
   router.get("/:id", async (req, res) => {
-    const { cabecera, detalle } = await cargar(req.params.id);
+    const { cabecera, detalle } = await cargar(cuentaDe(res), req.params.id);
     res.json({ ...filaACamel(cabecera), detalle: detalle.map(filaACamel) });
   });
 
   router.get("/:id/csv", async (req, res) => {
-    const { cabecera, detalle } = await cargar(req.params.id);
+    const { cabecera, detalle } = await cargar(cuentaDe(res), req.params.id);
     const nombre = `rol_${cabecera.anio}_${String(cabecera.mes).padStart(2, "0")}.csv`;
     res
       .type("text/csv; charset=utf-8")
@@ -238,12 +245,12 @@ export function rutasRoles(db: Base): Router {
 
   /** Aportes del rol por empleado, para contrastarlos con el comprobante del IESS. */
   router.get("/:id/iess", async (req, res) => {
-    const { cabecera, detalle } = await cargar(req.params.id);
+    const { cabecera, detalle } = await cargar(cuentaDe(res), req.params.id);
     res.json(planillaIess(Number(cabecera.anio), Number(cabecera.mes), detalle));
   });
 
   router.get("/:id/iess.csv", async (req, res) => {
-    const { cabecera, detalle } = await cargar(req.params.id);
+    const { cabecera, detalle } = await cargar(cuentaDe(res), req.params.id);
     const p = planillaIess(Number(cabecera.anio), Number(cabecera.mes), detalle);
     const filas: unknown[][] = p.filas.map((f) => [
       f.cedula, f.nombres, f.regimenAplicado, f.diasTrabajados, f.materiaGravada, f.tasaPersonal,
@@ -261,8 +268,9 @@ export function rutasRoles(db: Base): Router {
   });
 
   router.delete("/:id", async (req, res) => {
-    const { cabecera } = await cargar(req.params.id);
-    await ejecutar(db, "DELETE FROM roles_cabecera WHERE id = ?", Number(cabecera.id));
+    const cuentaId = cuentaDe(res);
+    const { cabecera } = await cargar(cuentaId, req.params.id);
+    await ejecutar(db, "DELETE FROM roles_cabecera WHERE cuenta_id = ? AND id = ?", cuentaId, Number(cabecera.id));
     res.status(204).end();
   });
 

@@ -11,6 +11,7 @@ import { buscarGrado, listarEscala } from "../escala.ts";
 import { buscarPuesto, hayPuestosDelRegimen, soltarResponsable } from "../puestos.ts";
 import { CATEGORIAS_LOEP, indexarRegimenes, listarRegimenes, regimenAplicado } from "../regimenes.ts";
 import { aDecimal, cedulaValida, ErrorApi, fechaIsoValida, leerId } from "../validaciones.ts";
+import { cuentaDe } from "./auth.ts";
 
 interface DatosEmpleado {
   cedula: string;
@@ -34,7 +35,7 @@ interface DatosEmpleado {
 
 /** Reglas de negocio del formulario. Devuelve los datos limpios y los avisos no bloqueantes. */
 async function validar(
-  db: Base, cuerpo: Record<string, unknown>,
+  db: Base, cuentaId: number, cuerpo: Record<string, unknown>,
 ): Promise<{ datos: DatosEmpleado; avisos: string[] }> {
   const texto = (campo: string) => String(cuerpo[campo] ?? "").trim();
   const errores: string[] = [];
@@ -61,7 +62,7 @@ async function validar(
   }
 
   // El régimen existe y, si es mixto (LOEP), hace falta saber si es servidor u obrero.
-  const regimenes = indexarRegimenes(await listarRegimenes(db));
+  const regimenes = indexarRegimenes(await listarRegimenes(db, cuentaId));
   const elegido = regimenes.get(regimen);
   let categoriaLoep: string | null = null;
   if (!elegido) {
@@ -86,8 +87,8 @@ async function validar(
   // Puesto del orgánico: si el régimen aplicado tiene puestos, se identifica primero (función,
   // responsabilidad, sector) y de él sale el nivel de la escala que sirve de referencia al sueldo.
   let puestoId: number | null = null;
-  const puesto = vacio(cuerpo.puestoId) ? undefined : await buscarPuesto(db, Number(cuerpo.puestoId));
-  const hayPuestos = aplicado !== null && (await hayPuestosDelRegimen(db, aplicado));
+  const puesto = vacio(cuerpo.puestoId) ? undefined : await buscarPuesto(db, cuentaId, Number(cuerpo.puestoId));
+  const hayPuestos = aplicado !== null && (await hayPuestosDelRegimen(db, cuentaId, aplicado));
   if (!vacio(cuerpo.puestoId)) {
     if (!puesto) errores.push("El puesto no existe.");
     else if (aplicado && puesto.referencia && puesto.referencia.regimen !== aplicado) {
@@ -102,7 +103,7 @@ async function validar(
   let escalaId: number | null = null;
   const pedido = vacio(cuerpo.escalaId) && puestoId !== null ? puesto?.escalaId : cuerpo.escalaId;
   const hayPedido = !vacio(pedido);
-  const grado = hayPedido ? await buscarGrado(db, Number(pedido)) : undefined;
+  const grado = hayPedido ? await buscarGrado(db, cuentaId, Number(pedido)) : undefined;
   if (hayPedido) {
     if (!grado) errores.push("El grado de la escala salarial no existe.");
     else if (aplicado && grado.regimen !== aplicado) {
@@ -113,7 +114,7 @@ async function validar(
         avisos.push(`Aviso: el nivel ${grado.denominacion} difiere de la referencia del puesto «${puesto.nombre}».`);
       }
     }
-  } else if (aplicado && (await listarEscala(db, aplicado)).length > 0) {
+  } else if (aplicado && (await listarEscala(db, cuentaId, aplicado)).length > 0) {
     errores.push(`Elige un grado de la escala salarial ${aplicado}: el sueldo se toma de la tabla.`);
   }
 
@@ -144,7 +145,7 @@ async function validar(
       // El sueldo registrado es el de hoy, así que se compara con el SBU de este año; si el año aún no
       // tiene parámetros se usa el último que haya y se avisa.
       const anioActual = new Date().getFullYear();
-      const { parametros } = await parametrosDelAnio(db, anioActual);
+      const { parametros } = await parametrosDelAnio(db, cuentaId, anioActual);
       const sinParametros = avisoDeAnioSinParametros(anioActual, parametros);
       if (sinParametros) avisos.push(sinParametros);
       if (grado && escalaId !== null && grado.esMinimo && sueldoBase < grado.rmu) {
@@ -186,8 +187,8 @@ const aApi = (fila: Fila) => ({
 export function rutasEmpleados(db: Base): Router {
   const router = Router();
 
-  const buscar = async (idTexto: string): Promise<Fila> => {
-    const fila = await uno(db, "SELECT * FROM empleados WHERE id = ?", leerId(idTexto));
+  const buscar = async (cuentaId: number, idTexto: string): Promise<Fila> => {
+    const fila = await uno(db, "SELECT * FROM empleados WHERE cuenta_id = ? AND id = ?", cuentaId, leerId(idTexto));
     if (!fila) throw new ErrorApi(404, ["El empleado no existe."]);
     return fila;
   };
@@ -205,56 +206,59 @@ export function rutasEmpleados(db: Base): Router {
   };
 
   router.get("/", async (_req, res) => {
-    res.json((await consultar(db, "SELECT * FROM empleados ORDER BY activo DESC, nombres")).map(aApi));
+    res.json((await consultar(db, "SELECT * FROM empleados WHERE cuenta_id = ? ORDER BY activo DESC, nombres", cuentaDe(res))).map(aApi));
   });
 
   router.post("/demo", async (_req, res) => {
-    res.status(201).json({ agregados: await cargarEmpleadosDemo(db) });
+    res.status(201).json({ agregados: await cargarEmpleadosDemo(db, cuentaDe(res)) });
   });
 
   router.get("/:id", async (req, res) => {
-    res.json(aApi(await buscar(req.params.id)));
+    res.json(aApi(await buscar(cuentaDe(res), req.params.id)));
   });
 
   router.post("/", async (req, res) => {
-    const { datos, avisos } = await validar(db, req.body ?? {});
+    const cuentaId = cuentaDe(res);
+    const { datos, avisos } = await validar(db, cuentaId, req.body ?? {});
     const id = await guardar(() =>
       insertar(
         db,
-        `INSERT INTO empleados (cedula, nombres, cargo, sueldo_base, fecha_ingreso, fecha_salida, tipo_contrato,
+        `INSERT INTO empleados (cuenta_id, cedula, nombres, cargo, sueldo_base, fecha_ingreso, fecha_salida, tipo_contrato,
          regimen, categoria_loep, escala_id, puesto_id, pago_decimo_tercero, pago_decimo_cuarto,
-         pago_fondos_reserva, recibe_horas_extras) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        datos.cedula, datos.nombres, datos.cargo, datos.sueldoBase, datos.fechaIngreso, datos.fechaSalida,
+         pago_fondos_reserva, recibe_horas_extras) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        cuentaId, datos.cedula, datos.nombres, datos.cargo, datos.sueldoBase, datos.fechaIngreso, datos.fechaSalida,
         datos.tipoContrato, datos.regimen, datos.categoriaLoep, datos.escalaId, datos.puestoId,
         datos.pagoDecimoTercero, datos.pagoDecimoCuarto, datos.pagoFondosReserva,
         datos.recibeHorasExtras === null ? null : Number(datos.recibeHorasExtras),
       ),
     );
-    res.status(201).json({ ...aApi(await buscar(String(id))), avisos });
+    res.status(201).json({ ...aApi(await buscar(cuentaId, String(id))), avisos });
   });
 
   router.put("/:id", async (req, res) => {
-    const actual = await buscar(req.params.id);
-    const { datos, avisos } = await validar(db, req.body ?? {});
+    const cuentaId = cuentaDe(res);
+    const actual = await buscar(cuentaId, req.params.id);
+    const { datos, avisos } = await validar(db, cuentaId, req.body ?? {});
     await guardar(async () => {
       await ejecutar(
         db,
         `UPDATE empleados SET cedula = ?, nombres = ?, cargo = ?, sueldo_base = ?,
          fecha_ingreso = ?, fecha_salida = ?, tipo_contrato = ?, regimen = ?, categoria_loep = ?, escala_id = ?, puesto_id = ?,
          pago_decimo_tercero = ?, pago_decimo_cuarto = ?, pago_fondos_reserva = ?, recibe_horas_extras = ?
-         WHERE id = ?`,
+         WHERE cuenta_id = ? AND id = ?`,
         datos.cedula, datos.nombres, datos.cargo, datos.sueldoBase, datos.fechaIngreso, datos.fechaSalida,
         datos.tipoContrato, datos.regimen, datos.categoriaLoep, datos.escalaId, datos.puestoId,
         datos.pagoDecimoTercero, datos.pagoDecimoCuarto, datos.pagoFondosReserva,
-        datos.recibeHorasExtras === null ? null : Number(datos.recibeHorasExtras), actual.id,
+        datos.recibeHorasExtras === null ? null : Number(datos.recibeHorasExtras), cuentaId, actual.id,
       );
-      await soltarResponsable(db, Number(actual.id), datos.puestoId); // si cambió de puesto, ya no lo encabeza
+      await soltarResponsable(db, cuentaId, Number(actual.id), datos.puestoId); // si cambió de puesto, ya no lo encabeza
     });
-    res.json({ ...aApi(await buscar(req.params.id)), avisos });
+    res.json({ ...aApi(await buscar(cuentaId, req.params.id)), avisos });
   });
 
   router.patch("/:id/estado", async (req, res) => {
-    const actual = await buscar(req.params.id);
+    const cuentaId = cuentaDe(res);
+    const actual = await buscar(cuentaId, req.params.id);
     // Desactivar a alguien es registrar su salida (hoy, o la fecha que se indique); reactivarlo la borra.
     const pedida = req.body?.fechaSalida;
     if (pedida !== undefined && pedida !== null && pedida !== "" && !fechaIsoValida(pedida)) {
@@ -267,16 +271,17 @@ export function rutasEmpleados(db: Base): Router {
     }
     await ejecutar(
       db,
-      "UPDATE empleados SET activo = 1 - activo, fecha_salida = CASE WHEN activo = 1 THEN ? ELSE NULL END WHERE id = ?",
-      salida, actual.id,
+      "UPDATE empleados SET activo = 1 - activo, fecha_salida = CASE WHEN activo = 1 THEN ? ELSE NULL END WHERE cuenta_id = ? AND id = ?",
+      salida, cuentaId, actual.id,
     );
-    if (actual.activo === 1) await soltarResponsable(db, Number(actual.id), null); // quien se desactiva deja de ser responsable
-    res.json(aApi(await buscar(req.params.id)));
+    if (actual.activo === 1) await soltarResponsable(db, cuentaId, Number(actual.id), null); // quien se desactiva deja de ser responsable
+    res.json(aApi(await buscar(cuentaId, req.params.id)));
   });
 
   router.delete("/:id", async (req, res) => {
-    const actual = await buscar(req.params.id);
-    await ejecutar(db, "DELETE FROM empleados WHERE id = ?", actual.id);
+    const cuentaId = cuentaDe(res);
+    const actual = await buscar(cuentaId, req.params.id);
+    await ejecutar(db, "DELETE FROM empleados WHERE cuenta_id = ? AND id = ?", cuentaId, actual.id);
     res.status(204).end();
   });
 
