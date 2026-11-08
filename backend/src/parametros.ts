@@ -38,6 +38,11 @@ export async function parametrosDelAnio(
   return { parametros, exacto: parametros.anio === anio };
 }
 
+/** Aviso (no bloquea) cuando se usaron los parámetros de otro año porque el pedido no tiene; null si son los del año. */
+export function avisoDeAnioSinParametros(anioPedido: number, usados: ParametrosAnio): string | null {
+  return usados.anio === anioPedido ? null : `No hay parámetros de ${anioPedido}; se usaron los de ${usados.anio}.`;
+}
+
 /** Valida la forma de la tabla: tramos contiguos, crecientes y el último abierto. */
 export function validarTablaIr(tabla: unknown): TramoIR[] {
   const errores: string[] = [];
