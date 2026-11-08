@@ -4,6 +4,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
 import { DetalleRol } from './detalle';
+import { Avisos } from '../../core/avisos';
 import { Sesion } from '../../core/sesion';
 
 const BASE = {
@@ -21,7 +22,7 @@ const BASE = {
 
 const ROL = {
   id: 1, anio: 2026, mes: 10, generadoEn: '2026-10-20T10:00:00', numEmpleados: 2,
-  estado: 'calculado', validadoEn: null, aprobadoEn: null, publicadoEn: null, pagadoEn: null,
+  estado: 'calculado', tipo: 'ordinario', rolOrigenId: null, motivo: '', validadoEn: null, aprobadoEn: null, publicadoEn: null, pagadoEn: null,
   totalIngresos: 4140.11, totalDescuentos: 400, totalNeto: 3740.11, totalProvisiones: 700, totalCosto: 4840.11,
   detalle: [
     { ...BASE, id: 1, nombres: 'Ana Mensual' },
@@ -214,5 +215,111 @@ describe('DetalleRol', () => {
     const el = await abrir();
     const enlace = [...el.querySelectorAll('a')].find((a) => a.textContent?.includes('Aportes para el IESS'))!;
     expect(enlace.getAttribute('href')).toBe('/api/roles/1/iess.csv');
+  });
+
+  describe('reliquidación', () => {
+    const ANA = { ...BASE, id: 1, nombres: 'Ana Mensual', cedula: '1801234566' };
+    const BETO = { ...BASE, id: 2, nombres: 'Beto Acumula', cedula: '0903456788' };
+
+    /** Abre el rol 1 con el cuerpo dado encima del rol de ejemplo. */
+    const abrirCon = async (extra: object) => {
+      const fixture = TestBed.createComponent(DetalleRol);
+      fixture.componentRef.setInput('id', '1');
+      fixture.detectChanges();
+      TestBed.tick();
+      http.expectOne('/api/parametros').flush(PARAMETROS);
+      http.expectOne('/api/roles/1').flush({ ...ROL, ...extra });
+      http.expectOne('/api/roles/1/iess').flush(IESS);
+      http.expectOne('/api/roles/1/historial').flush([]);
+      await fixture.whenStable();
+      fixture.detectChanges();
+      return { fixture, el: fixture.nativeElement as HTMLElement };
+    };
+    const publicado = { estado: 'publicado', ajustes: [], consolidado: null, vigente: [ANA, BETO] };
+    const boton = (el: HTMLElement, texto: string) =>
+      [...el.querySelectorAll('button')].find((b) => b.textContent?.trim() === texto)!;
+
+    it('un rol publicado ofrece reliquidar y uno sin publicar no', async () => {
+      const { el } = await abrirCon(publicado);
+      expect(el.querySelector('#titulo-ajustes')).not.toBeNull();
+      expect(el.textContent).toContain('Este rol no tiene ajustes.');
+      expect(boton(el, 'Reliquidar este rol')).toBeTruthy();
+    });
+
+    it('un rol sin publicar se corrige recalculándolo, no con un ajuste', async () => {
+      const { el } = await abrirCon({ estado: 'aprobado' });
+      expect(el.querySelector('#titulo-ajustes')).toBeNull();
+    });
+
+    it('un lector ve los ajustes pero no puede crear uno', async () => {
+      TestBed.inject(Sesion).permisos.set(['ver']);
+      const { el } = await abrirCon(publicado);
+      expect(el.querySelector('#titulo-ajustes')).not.toBeNull();
+      expect(el.textContent).not.toContain('Reliquidar este rol');
+    });
+
+    it('envía solo lo que se cambió, con el motivo, y abre el ajuste creado', async () => {
+      const { fixture, el } = await abrirCon(publicado);
+      boton(el, 'Reliquidar este rol').click();
+      fixture.detectChanges();
+      expect(el.querySelectorAll('form tbody tr').length).toBe(2);
+
+      const motivo = el.querySelector<HTMLTextAreaElement>('#motivo-ajuste')!;
+      motivo.value = 'Faltaron las comisiones';
+      motivo.dispatchEvent(new Event('input'));
+      const comisiones = el.querySelector<HTMLInputElement>('input[aria-label="Comisiones de Beto Acumula"]')!;
+      expect(comisiones.value).toBe('0');
+      comisiones.value = '200';
+      comisiones.dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+
+      el.querySelector('form')!.dispatchEvent(new Event('submit'));
+      const envio = http.expectOne('/api/roles/1/reliquidar');
+      expect(envio.request.method).toBe('POST');
+      expect(envio.request.body).toEqual({
+        motivo: 'Faltaron las comisiones',
+        cambios: [{ cedula: '0903456788', comisiones: '200' }],
+      });
+      envio.flush({ id: 5, empleados: 1, avisos: [] }, { status: 201, statusText: 'Created' });
+      await new Promise((resolver) => setTimeout(resolver));
+    });
+
+    it('muestra el motivo cuando el servidor rechaza el ajuste', async () => {
+      const { fixture, el } = await abrirCon(publicado);
+      boton(el, 'Reliquidar este rol').click();
+      fixture.detectChanges();
+      el.querySelector('form')!.dispatchEvent(new Event('submit'));
+      http.expectOne('/api/roles/1/reliquidar').flush(
+        { errores: ['Motivo: explica en 5 a 500 caracteres por qué se corrige el rol.'] },
+        { status: 400, statusText: 'Bad Request' },
+      );
+      await new Promise((resolver) => setTimeout(resolver));
+      expect(TestBed.inject(Avisos).lista()[0].texto).toContain('Motivo');
+    });
+
+    it('lista los ajustes y el total del mes con los ya publicados', async () => {
+      const { el } = await abrirCon({
+        ...publicado,
+        ajustes: [{ id: 5, estado: 'publicado', motivo: 'Faltaron las comisiones', generadoEn: '2026-11-02T10:00:00', numEmpleados: 1, totalNeto: 233.5 }],
+        consolidado: { totalIngresos: 4400, totalDescuentos: 430, totalNeto: 3973.61, totalProvisiones: 700, totalCosto: 5100 },
+      });
+      const enlace = [...el.querySelectorAll('.hoja-cuerpo table a')].find((a) => a.textContent?.includes('Rol 5'))!;
+      expect(enlace.getAttribute('href')).toBe('/sistema/roles/5');
+      expect(el.textContent).toContain('Faltaron las comisiones');
+      expect(el.textContent).toContain('$3,973.61');
+    });
+
+    it('un ajuste avisa que sus cifras son diferencias y enlaza al rol original', async () => {
+      const { el } = await abrirCon({
+        tipo: 'ajuste', rolOrigenId: 3, motivo: 'Faltaron las comisiones', estado: 'calculado',
+        origen: { id: 3, anio: 2026, mes: 10, estado: 'publicado' },
+      });
+      expect(el.querySelector('h1')!.textContent).toContain('Ajuste de Octubre 2026');
+      const aviso = el.querySelector('.aviso')!;
+      expect(aviso.textContent).toContain('Faltaron las comisiones');
+      expect(aviso.textContent).toContain('diferencias');
+      expect(aviso.querySelector('a')!.getAttribute('href')).toBe('/sistema/roles/3');
+      expect(el.querySelector('#titulo-ajustes')).toBeNull();
+    });
   });
 });

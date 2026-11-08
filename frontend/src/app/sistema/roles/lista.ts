@@ -39,7 +39,7 @@ import type { RolCabecera } from '../../core/modelos';
       <div>
         <h1>Roles de pago</h1>
         <p class="apoyo">
-          Un rol por mes. Si recalculas uno que ya existe, se reemplaza, salvo que ya esté publicado.
+          Un rol por mes. Si recalculas uno que ya existe, se reemplaza, salvo que ya esté publicado: entonces se corrige con un ajuste.
         </p>
       </div>
     </div>
@@ -106,6 +106,10 @@ import type { RolCabecera } from '../../core/modelos';
               <tr>
                 <td>
                   <a [routerLink]="['/sistema/roles', r.id]"><strong>{{ nombreMes(r.mes) }} {{ r.anio }}</strong></a>
+                  @if (r.tipo === 'ajuste') {
+                    <span class="insignia insignia-suave">Ajuste</span>
+                    <span class="apoyo pequeno">{{ r.motivo }}</span>
+                  }
                 </td>
                 <td><span class="insignia" [class]="claseEstado(r.estado)">{{ etiquetaEstado(r.estado) }}</span></td>
                 <td class="num">{{ r.numEmpleados }}</td>
@@ -154,7 +158,7 @@ export class ListaRoles {
     const actual = this.hoy.getFullYear() * 12 + this.hoy.getMonth();
     return (this.parametros()?.meses ?? []).map((nombre, i) => {
       const numero = i + 1;
-      const rol = this.historial().find((r) => r.anio === anio && r.mes === numero);
+      const rol = this.historial().find((r) => r.tipo === 'ordinario' && r.anio === anio && r.mes === numero);
       const posicion = anio * 12 + i;
       const estado = rol ? 'generado' : posicion === actual ? 'toca' : posicion < actual ? 'falta' : 'futuro';
       const enlace = rol ? ['/sistema/roles', String(rol.id)] : ['/sistema/roles/novedades', String(anio), String(numero)];

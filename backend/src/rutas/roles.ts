@@ -2,27 +2,24 @@ import { Router } from "express";
 import type { Response } from "express";
 import { Decimal } from "decimal.js";
 
-import { avisoHorasIgnoradas, avisosDeTopes, calcularRol } from "../calculos.ts";
 import type { ResultadoRol } from "../calculos.ts";
 import { listarAuditoria, registrarAuditoria } from "../auditoria.ts";
 import { darPaso, esInmutable, exigirPaso, rechazarValidacion, revisarRol } from "../ciclo.ts";
 import {
-  aSnake, consultar, ejecutar, esDuplicado, filaACamel, insertar, transaccion, uno,
+  consultar, ejecutar, esDuplicado, filaACamel, insertar, transaccion, uno,
 } from "../db.ts";
 import type { Base, Fila } from "../db.ts";
-import { avisoDeAnioSinParametros, parametrosDelAnio } from "../parametros.ts";
-import { fechaDeCierre, indexarRegimenes, listarRegimenes, opcionesDe, regimenAplicado, reglasDe } from "../regimenes.ts";
+import { calcularMes, CAMPOS_NOVEDAD, COLUMNAS_NOVEDAD, insertarDetalle, totalDe } from "../nomina.ts";
+import type { Novedad } from "../nomina.ts";
+import { parametrosDelAnio } from "../parametros.ts";
+import { detalleVigente, reliquidar } from "../reliquidacion.ts";
+import { fechaDeCierre, indexarRegimenes, listarRegimenes, opcionesDe, regimenAplicado } from "../regimenes.ts";
 import { documentoCsv } from "../csv.ts";
 import { planillaIess } from "../iess.ts";
 import { aDecimal, ErrorApi, leerId } from "../validaciones.ts";
 import { cuentaDe, usuarioDe } from "./auth.ts";
 
-const CAMPOS_NOVEDAD = [
-  "horasSuplementarias", "horasExtraordinarias", "horasDescanso", "horasNocturnas",
-  "comisiones", "otrosDescuentos",
-] as const;
-export type Novedad = Record<(typeof CAMPOS_NOVEDAD)[number], Decimal>;
-const COLUMNAS_NOVEDAD = CAMPOS_NOVEDAD.map(aSnake);
+export type { Novedad };
 
 function leerPeriodo(anioTexto: unknown, mesTexto: unknown): { anio: number; mes: number } {
   const anio = Number(anioTexto);
@@ -52,7 +49,7 @@ export function empleadosDelPeriodo(db: Base, cuentaId: number, anio: number, me
 
 /** Estado del rol de ese mes; `undefined` si todavía no se generó. */
 const estadoDelRol = async (db: Base, cuentaId: number, anio: number, mes: number) =>
-  (await uno(db, "SELECT estado FROM roles_cabecera WHERE cuenta_id = ? AND anio = ? AND mes = ?", cuentaId, anio, mes))
+  (await uno(db, "SELECT estado FROM roles_cabecera WHERE cuenta_id = ? AND anio = ? AND mes = ? AND tipo = 'ordinario'", cuentaId, anio, mes))
     ?.estado as string | undefined;
 
 const errorRolInmutable = (anio: number, mes: number, estado: unknown) =>
@@ -69,46 +66,15 @@ export async function guardarRol(
   empleados: Fila[], novedades: Map<number, Novedad>, usuarioId: number | null = null,
 ): Promise<{ rolId: number; avisos: string[] }> {
   const cero = new Decimal(0);
-  const { parametros } = await parametrosDelAnio(db, cuentaId, anio);
-  // Las reglas son las que regían al cierre del mes, no las de hoy.
-  const regimenes = indexarRegimenes(await listarRegimenes(db, cuentaId, fechaDeCierre(anio, mes)));
-  const calculos = empleados.map((e) => {
-    const n = novedades.get(Number(e.id));
-    const aplicado = regimenAplicado(regimenes, String(e.regimen), e.categoria_loep as string | null);
-    const reglas = reglasDe(parametros, aplicado);
-    const opciones = opcionesDe(aplicado, e);
-    const resultado = calcularRol({
-      sueldoBase: String(e.sueldo_base),
-      fechaIngreso: String(e.fecha_ingreso),
-      fechaSalida: e.fecha_salida === null ? null : String(e.fecha_salida),
-      anio, mes,
-      horasSuplementarias: n?.horasSuplementarias ?? cero,
-      horasExtraordinarias: n?.horasExtraordinarias ?? cero,
-      horasDescanso: n?.horasDescanso ?? cero,
-      horasNocturnas: n?.horasNocturnas ?? cero,
-      comisiones: n?.comisiones ?? cero,
-      otrosDescuentos: n?.otrosDescuentos ?? cero,
-    }, reglas, opciones);
-    return { e, resultado, n, aplicado, reglas, opciones };
-  });
-
-  const avisos = calculos.flatMap(({ e, n, reglas, opciones }) => {
-    if (!n) return [];
-    const nombre = String(e.nombres);
-    return opciones.recibeHorasExtras ? avisosDeTopes(nombre, n, reglas) : avisoHorasIgnoradas(nombre, n);
-  });
-  const sinParametros = avisoDeAnioSinParametros(anio, parametros);
-  if (sinParametros) avisos.unshift(sinParametros);
-
-  const total = (campo: keyof ResultadoRol) =>
-    calculos.reduce((suma, c) => suma.plus(c.resultado[campo]), cero).toNumber();
+  const { calculos, avisos } = await calcularMes(db, cuentaId, anio, mes, empleados.map((e) => ({ e })), novedades);
+  const total = (campo: keyof ResultadoRol) => totalDe(calculos, campo);
 
   const rolId = await transaccion(db, async (tx) => {
     // Un rol publicado no se toca: el DELETE lo salta y el INSERT choca con el UNIQUE del mes.
     const reemplazado = await consultar(
       tx,
       `DELETE FROM roles_cabecera
-       WHERE cuenta_id = ? AND anio = ? AND mes = ? AND estado NOT IN ('publicado', 'pagado') RETURNING id`,
+       WHERE cuenta_id = ? AND anio = ? AND mes = ? AND tipo = 'ordinario' AND estado NOT IN ('publicado', 'pagado') RETURNING id`,
       cuentaId, anio, mes,
     );
     let nuevoId: number;
@@ -134,21 +100,9 @@ export async function guardarRol(
       },
     });
 
-    for (const { e, resultado, n, aplicado } of calculos) {
-      const fila: Fila = {
-        rol_id: nuevoId, empleado_id: Number(e.id), cedula: e.cedula, nombres: e.nombres,
-        cargo: e.cargo, sueldo_base: e.sueldo_base, fecha_ingreso: e.fecha_ingreso,
-        regimen: e.regimen, regimen_aplicado: aplicado.codigo,
-        tasa_iess_personal: aplicado.iessPersonal, tasa_iess_patronal: aplicado.iessPatronal,
-        ...Object.fromEntries(Object.entries(resultado).map(([k, v]) => [aSnake(k), v])),
-      };
-      const columnas = Object.keys(fila);
-      await ejecutar(
-        tx,
-        `INSERT INTO roles_detalle (${columnas.join(", ")})
-         VALUES (${columnas.map(() => "?").join(", ")})`,
-        ...Object.values(fila),
-      );
+    for (const c of calculos) {
+      const { e, n } = c;
+      await insertarDetalle(tx, nuevoId, c);
       await ejecutar(
         tx,
         `INSERT INTO novedades (empleado_id, anio, mes, ${COLUMNAS_NOVEDAD.join(", ")})
@@ -267,8 +221,48 @@ export function rutasRoles(db: Base): Router {
   });
 
   router.get("/:id", async (req, res) => {
-    const { cabecera, detalle } = await cargar(cuentaDe(res), req.params.id);
-    res.json({ ...filaACamel(cabecera), detalle: detalle.map(filaACamel) });
+    const cuentaId = cuentaDe(res);
+    const { cabecera, detalle } = await cargar(cuentaId, req.params.id);
+    const base = { ...filaACamel(cabecera), detalle: detalle.map(filaACamel) };
+    if (cabecera.tipo === "ajuste") {
+      const origen = await uno(db, "SELECT id, anio, mes, estado FROM roles_cabecera WHERE id = ?", Number(cabecera.rol_origen_id));
+      return void res.json({ ...base, origen: origen ? filaACamel(origen) : null });
+    }
+    // Un rol publicado o pagado puede tener ajustes: se listan, y se da cómo quedó cada empleado y el total del mes.
+    const ajustes = await consultar(
+      db,
+      `SELECT id, estado, motivo, generado_en, num_empleados, total_ingresos, total_descuentos, total_neto,
+              total_provisiones, total_costo
+       FROM roles_cabecera WHERE cuenta_id = ? AND rol_origen_id = ? ORDER BY id`,
+      cuentaId, Number(cabecera.id),
+    );
+    const vigentes = ajustes.filter((a) => a.estado === "publicado" || a.estado === "pagado");
+    const sumar = (campo: string) =>
+      vigentes.reduce((s, a) => s.plus(Number(a[campo])), new Decimal(Number(cabecera[campo]))).toDecimalPlaces(2).toNumber();
+    res.json({
+      ...base,
+      ajustes: ajustes.map(filaACamel),
+      consolidado: ajustes.length ? {
+        totalIngresos: sumar("total_ingresos"), totalDescuentos: sumar("total_descuentos"), totalNeto: sumar("total_neto"),
+        totalProvisiones: sumar("total_provisiones"), totalCosto: sumar("total_costo"),
+      } : null,
+      vigente: cabecera.estado === "publicado" || cabecera.estado === "pagado"
+        ? (await detalleVigente(db, Number(cabecera.id))).map(filaACamel) : [],
+    });
+  });
+
+  /**
+   * Corrige un rol publicado o pagado con un rol de ajuste: recalcula el mes con los cambios pedidos y
+   * guarda solo la diferencia. Cuerpo: `motivo` y `cambios` (por cédula: sueldoBase, horas, comisiones, descuentos).
+   */
+  router.post("/:id/reliquidar", async (req, res) => {
+    const cuentaId = cuentaDe(res);
+    const { cabecera } = await cargar(cuentaId, req.params.id);
+    const cuerpo = req.body ?? {};
+    const { rolId, empleados, avisos } = await reliquidar(
+      db, cuentaId, usuarioDe(res), Number(cabecera.id), cuerpo.motivo, cuerpo.cambios,
+    );
+    res.status(201).json({ id: rolId, empleados, avisos });
   });
 
   router.get("/:id/csv", async (req, res) => {
@@ -327,8 +321,9 @@ export function rutasRoles(db: Base): Router {
   const revisar = async (cuentaId: number, cabecera: Fila, detalle: Fila[]) => {
     const anio = Number(cabecera.anio);
     const { parametros } = await parametrosDelAnio(db, cuentaId, anio);
-    const esperados = await empleadosDelPeriodo(db, cuentaId, anio, Number(cabecera.mes));
-    return revisarRol(cabecera, detalle, esperados, parametros.anio);
+    const ajuste = cabecera.tipo === "ajuste";
+    const esperados = ajuste ? [] : await empleadosDelPeriodo(db, cuentaId, anio, Number(cabecera.mes));
+    return revisarRol(cabecera, detalle, esperados, parametros.anio, ajuste);
   };
 
   /** Responde con el rol tal como quedó después del paso. */
