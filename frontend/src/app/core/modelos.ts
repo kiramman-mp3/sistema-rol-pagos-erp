@@ -167,6 +167,30 @@ export interface RolDetalle extends ResultadoRol {
   regimenAplicado: string;
   tasaIessPersonal: number;
   tasaIessPatronal: number;
+  /** El rol guardó el desglose de su cálculo (los anteriores a la migración 018 no). */
+  tieneTraza?: boolean;
+}
+
+/** Un paso del cálculo de un empleado: fórmula, números y resultado. */
+export interface PasoCalculo {
+  clave: string;
+  concepto: string;
+  formula: string;
+  detalle: string;
+  resultado: number;
+  fuente?: string;
+}
+
+/** Cómo se calculó a un empleado en un rol. */
+export interface TrazaRol {
+  cedula: string;
+  nombres: string;
+  anio: number;
+  mes: number;
+  /** En un ajuste: la traza explica el mes completo, no la diferencia. */
+  ajuste: boolean;
+  contexto: { regimen: string; vigenteDesde: string; anioParametros: number; sbu: number; ajuste?: boolean };
+  pasos: PasoCalculo[];
 }
 
 /** Ciclo del rol; publicado y pagado ya no se recalculan ni se eliminan. */
