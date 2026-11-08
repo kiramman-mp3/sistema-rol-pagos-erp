@@ -8,7 +8,7 @@ import { consultar, ejecutar, esDuplicado, filaACamel, insertar, uno } from "../
 import type { Base, Fila } from "../db.ts";
 import { parametrosDelAnio } from "../parametros.ts";
 import { buscarGrado, listarEscala } from "../escala.ts";
-import { buscarPuesto, listarPuestos, soltarResponsable } from "../puestos.ts";
+import { buscarPuesto, hayPuestosDelRegimen, soltarResponsable } from "../puestos.ts";
 import { CATEGORIAS_LOEP, indexarRegimenes, listarRegimenes, regimenAplicado } from "../regimenes.ts";
 import { aDecimal, cedulaValida, ErrorApi, fechaIsoValida, leerId } from "../validaciones.ts";
 
@@ -77,7 +77,7 @@ async function validar(
   // responsabilidad, sector) y de él sale el nivel de la escala que sirve de referencia al sueldo.
   let puestoId: number | null = null;
   const puesto = vacio(cuerpo.puestoId) ? undefined : await buscarPuesto(db, Number(cuerpo.puestoId));
-  const hayPuestos = aplicado !== null && (await listarPuestos(db)).some((p) => p.referencia?.regimen === aplicado);
+  const hayPuestos = aplicado !== null && (await hayPuestosDelRegimen(db, aplicado));
   if (!vacio(cuerpo.puestoId)) {
     if (!puesto) errores.push("El puesto no existe.");
     else if (aplicado && puesto.referencia && puesto.referencia.regimen !== aplicado) {
