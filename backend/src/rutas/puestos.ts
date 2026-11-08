@@ -2,7 +2,7 @@ import { Router } from "express";
 
 import { actualizarPuesto, asignarResponsable, buscarPuesto, crearPuesto, eliminarPuesto, listarPuestos } from "../puestos.ts";
 import type { Base } from "../db.ts";
-import { ErrorApi } from "../validaciones.ts";
+import { ErrorApi, leerId } from "../validaciones.ts";
 
 export function rutasPuestos(db: Base): Router {
   const router = Router();
@@ -12,7 +12,7 @@ export function rutasPuestos(db: Base): Router {
   });
 
   router.get("/:id", async (req, res) => {
-    const puesto = await buscarPuesto(db, Number(req.params.id));
+    const puesto = await buscarPuesto(db, leerId(req.params.id));
     if (!puesto) throw new ErrorApi(404, ["El puesto no existe."]);
     res.json(puesto);
   });
@@ -22,16 +22,16 @@ export function rutasPuestos(db: Base): Router {
   });
 
   router.put("/:id", async (req, res) => {
-    res.json(await actualizarPuesto(db, Number(req.params.id), req.body ?? {}));
+    res.json(await actualizarPuesto(db, leerId(req.params.id), req.body ?? {}));
   });
 
   /** Asigna (`{ empleadoId: 3 }`) o quita (`{ empleadoId: null }`) al responsable del puesto. */
   router.patch("/:id/responsable", async (req, res) => {
-    res.json(await asignarResponsable(db, Number(req.params.id), req.body?.empleadoId));
+    res.json(await asignarResponsable(db, leerId(req.params.id), req.body?.empleadoId));
   });
 
   router.delete("/:id", async (req, res) => {
-    await eliminarPuesto(db, Number(req.params.id));
+    await eliminarPuesto(db, leerId(req.params.id));
     res.status(204).end();
   });
 
