@@ -175,6 +175,10 @@ export type EstadoRol = 'calculado' | 'validado' | 'aprobado' | 'publicado' | 'p
 export interface RolCabecera {
   id: number;
   estado: EstadoRol;
+  /** 'ajuste' corrige a un rol ordinario ya publicado: su detalle guarda solo las diferencias. */
+  tipo: 'ordinario' | 'ajuste';
+  rolOrigenId: number | null;
+  motivo: string;
   validadoEn: string | null;
   aprobadoEn: string | null;
   publicadoEn: string | null;
@@ -215,6 +219,24 @@ export interface PlanillaIess {
 
 export interface RolCompleto extends RolCabecera {
   detalle: RolDetalle[];
+  /** En un ajuste: el rol que corrige. */
+  origen?: { id: number; anio: number; mes: number; estado: EstadoRol } | null;
+  /** En un rol publicado o pagado: sus ajustes, el total del mes con los ya publicados y cómo quedó cada empleado. */
+  ajustes?: Pick<RolCabecera, 'id' | 'estado' | 'motivo' | 'generadoEn' | 'numEmpleados' | 'totalNeto'>[];
+  consolidado?: { totalIngresos: number; totalDescuentos: number; totalNeto: number; totalProvisiones: number; totalCosto: number } | null;
+  vigente?: RolDetalle[];
+}
+
+/** Lo que se puede corregir de un empleado al reliquidar; solo se envía lo que cambia. */
+export interface CambioReliquidacion {
+  cedula: string;
+  sueldoBase?: string;
+  horasSuplementarias?: string;
+  horasExtraordinarias?: string;
+  horasDescanso?: string;
+  horasNocturnas?: string;
+  comisiones?: string;
+  otrosDescuentos?: string;
 }
 
 /** Resultado de revisar un rol: los errores bloquean el paso a «validado», los avisos no. */

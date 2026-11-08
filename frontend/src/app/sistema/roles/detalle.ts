@@ -11,7 +11,9 @@ import type { Permiso } from '../../core/sesion';
 import { DineroPipe, sumar } from '../../core/dinero.pipe';
 import { claseEstado, esInmutable, ESTADOS_ROL, etiquetaEstado } from '../../core/estado-rol';
 import { etiquetaRegimen } from '../../core/regimen';
-import type { EventoRol, Modalidad, PlanillaIess, RevisionRol, RolCompleto, RolDetalle } from '../../core/modelos';
+import type {
+  CambioReliquidacion, EventoRol, Modalidad, PlanillaIess, RevisionRol, RolCompleto, RolDetalle,
+} from '../../core/modelos';
 
 type Accion = 'validar' | 'aprobar' | 'publicar' | 'pagar';
 
@@ -23,7 +25,19 @@ const SIGUIENTE: Record<string, { accion: Accion; permiso: Permiso; texto: strin
   publicado: { accion: 'pagar', permiso: 'pagar', texto: 'Marcar como pagado', trabajando: 'Guardando…', hecho: 'Rol marcado como pagado.' },
 };
 
+/** Lo que se puede corregir de cada empleado al reliquidar un rol. */
+const CAMPOS_AJUSTE = [
+  { clave: 'sueldoBase', etiqueta: 'Sueldo base' },
+  { clave: 'horasSuplementarias', etiqueta: 'H. suplementarias' },
+  { clave: 'horasExtraordinarias', etiqueta: 'H. extraordinarias' },
+  { clave: 'horasDescanso', etiqueta: 'H. sáb., dom. y feriado' },
+  { clave: 'horasNocturnas', etiqueta: 'H. nocturnas' },
+  { clave: 'comisiones', etiqueta: 'Comisiones' },
+  { clave: 'otrosDescuentos', etiqueta: 'Otros descuentos' },
+] as const;
+
 const TEXTO_EVENTO: Record<string, string> = {
+  'rol.ajuste_creado': 'Ajuste creado',
   'rol.calculado': 'Calculado',
   'rol.validado': 'Validado',
   'rol.validacion_rechazada': 'Validación rechazada',
@@ -62,7 +76,7 @@ const TEXTO_EVENTO: Record<string, string> = {
       <div class="encabezado">
         <div>
           <a class="boton-texto volver no-imprimir" routerLink="/sistema/roles">‹ Roles de pago</a>
-          <h1>{{ nombreMes() }} {{ r.anio }} <span class="insignia no-imprimir" [class]="clase(r.estado)">{{ etiqueta(r.estado) }}</span></h1>
+          <h1>@if (r.tipo === 'ajuste') {Ajuste de }{{ nombreMes() }} {{ r.anio }} <span class="insignia no-imprimir" [class]="clase(r.estado)">{{ etiqueta(r.estado) }}</span></h1>
           <p class="apoyo">
             {{ parametros()?.empresa?.nombre }}, RUC {{ parametros()?.empresa?.ruc }}.
             Generado el {{ fechaGeneracion(r.generadoEn) }}.
@@ -90,6 +104,14 @@ const TEXTO_EVENTO: Record<string, string> = {
           }
         </div>
       </div>
+
+      @if (r.tipo === 'ajuste') {
+        <div class="aviso aviso-warning" role="note">
+          <strong>Ajuste</strong> al rol de {{ nombreMes() }}
+          @if (r.origen; as o) { (<a [routerLink]="['/sistema/roles', o.id]">ver el rol original</a>) }.
+          Motivo: {{ r.motivo }}. Las cifras son diferencias contra lo ya publicado: un valor negativo es un descuento.
+        </div>
+      }
 
       <nav class="saltos no-imprimir" aria-label="Secciones del rol">
         <a href="#titulo-planilla" (click)="ir($event, 'titulo-planilla')">Lo que recibe cada persona</a>
@@ -158,6 +180,85 @@ const TEXTO_EVENTO: Record<string, string> = {
           }
         </div>
       </div>
+
+      @if (r.tipo === 'ordinario' && inmutable()) {
+        <section class="hoja no-imprimir" aria-labelledby="titulo-ajustes">
+          <div class="hoja-titulo">
+            <h2 id="titulo-ajustes">Ajustes de este rol</h2>
+            <p>Un rol publicado no se modifica. Si hubo un error, se corrige con un ajuste: un rol aparte que guarda solo la diferencia.</p>
+          </div>
+          <div class="hoja-cuerpo">
+            @if (r.ajustes?.length) {
+              <div class="deslizable">
+                <table class="tabla">
+                  <thead><tr><th>Ajuste</th><th>Estado</th><th>Motivo</th><th class="num">Empleados</th><th class="num">Diferencia en el neto</th></tr></thead>
+                  <tbody>
+                    @for (a of r.ajustes; track a.id) {
+                      <tr>
+                        <td><a [routerLink]="['/sistema/roles', a.id]">Rol {{ a.id }}</a>, {{ fechaGeneracion(a.generadoEn) }}</td>
+                        <td><span class="insignia" [class]="clase(a.estado)">{{ etiqueta(a.estado) }}</span></td>
+                        <td>{{ a.motivo }}</td>
+                        <td class="num">{{ a.numEmpleados }}</td>
+                        <td class="num">{{ a.totalNeto | dinero }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+              @if (r.consolidado; as c) {
+                <p class="apoyo">Con los ajustes ya publicados, el mes queda en {{ c.totalNeto | dinero }} de neto a pagar y {{ c.totalCosto | dinero }} de costo del empleador.</p>
+              }
+            } @else {
+              <p class="apoyo">Este rol no tiene ajustes.</p>
+            }
+
+            @if (sesion.puede('editar')) {
+              @if (!reliquidando()) {
+                <button class="boton boton-claro" type="button" (click)="abrirReliquidacion()">Reliquidar este rol</button>
+              } @else {
+                <form (submit)="enviarReliquidacion($event)">
+                  <div class="campo">
+                    <label for="motivo-ajuste">Motivo del ajuste</label>
+                    <textarea id="motivo-ajuste" class="entrada" rows="2" maxlength="500" [value]="motivo()" (input)="motivo.set(texto($event))"></textarea>
+                  </div>
+                  <p class="apoyo">
+                    Cambia solo lo que estuvo mal; el resto se calcula igual que en el rol original, con las reglas de ley de ese mes
+                    (si corregiste una regla, el ajuste la recoge sin que cambies nada aquí).
+                  </p>
+                  <div class="deslizable">
+                    <table class="tabla">
+                      <thead>
+                        <tr>
+                          <th>Empleado</th>
+                          @for (c of camposAjuste; track c.clave) { <th class="num">{{ c.etiqueta }}</th> }
+                        </tr>
+                      </thead>
+                      <tbody>
+                        @for (v of r.vigente; track v.cedula) {
+                          <tr>
+                            <td>{{ v.nombres }}</td>
+                            @for (c of camposAjuste; track c.clave) {
+                              <td class="num">
+                                <input class="entrada num" type="number" step="0.01" min="0"
+                                       [value]="valorCampo(v, c.clave)" (input)="cambiar(v.cedula, c.clave, $event)"
+                                       [attr.aria-label]="c.etiqueta + ' de ' + v.nombres" />
+                              </td>
+                            }
+                          </tr>
+                        }
+                      </tbody>
+                    </table>
+                  </div>
+                  <div class="acciones">
+                    <button class="boton" [disabled]="trabajando()">Crear el ajuste</button>
+                    <button class="boton-texto" type="button" (click)="reliquidando.set(false)">Cancelar</button>
+                  </div>
+                </form>
+              }
+            }
+          </div>
+        </section>
+      }
 
       <div class="franja">
         <div class="ecuacion" role="group" aria-label="Del ingreso al neto">
@@ -430,6 +531,12 @@ export class DetalleRol {
   protected readonly trabajando = signal(false);
   protected readonly revision = signal<RevisionRol | null>(null);
 
+  protected readonly camposAjuste = CAMPOS_AJUSTE;
+  protected readonly reliquidando = signal(false);
+  protected readonly motivo = signal('');
+  /** Lo escrito en la tabla del ajuste, por cédula y campo; lo que no se toca no se envía. */
+  private readonly ediciones = signal<Record<string, Record<string, string>>>({});
+
   private readonly historialRol = httpResource<EventoRol[]>(() => `/api/roles/${this.id()}/historial`);
   protected readonly eventos = valorSeguro(this.historialRol);
 
@@ -498,6 +605,52 @@ export class DetalleRol {
 
   protected textoEvento(e: EventoRol): string {
     return TEXTO_EVENTO[e.accion] ?? e.accion;
+  }
+
+  protected abrirReliquidacion() {
+    this.motivo.set('');
+    this.ediciones.set({});
+    this.reliquidando.set(true);
+  }
+
+  protected texto(evento: Event): string {
+    return (evento.target as HTMLInputElement | HTMLTextAreaElement).value;
+  }
+
+  protected valorCampo(v: RolDetalle, clave: string): string {
+    return this.ediciones()[v.cedula]?.[clave] ?? String((v as unknown as Record<string, number>)[clave]);
+  }
+
+  protected cambiar(cedula: string, clave: string, evento: Event) {
+    const valor = this.texto(evento);
+    this.ediciones.update((e) => ({ ...e, [cedula]: { ...e[cedula], [clave]: valor } }));
+  }
+
+  protected async enviarReliquidacion(evento: Event) {
+    evento.preventDefault();
+    const r = this.datos();
+    if (!r) return;
+    const cambios = (r.vigente ?? []).flatMap((v) => {
+      const editado = this.ediciones()[v.cedula] ?? {};
+      const cambio: CambioReliquidacion = { cedula: v.cedula };
+      for (const { clave } of CAMPOS_AJUSTE) {
+        const nuevo = editado[clave];
+        if (nuevo !== undefined && nuevo !== String((v as unknown as Record<string, number>)[clave])) cambio[clave] = nuevo;
+      }
+      return Object.keys(cambio).length > 1 ? [cambio] : [];
+    });
+    this.avisos.limpiar();
+    this.trabajando.set(true);
+    try {
+      const creado = await firstValueFrom(this.api.reliquidarRol(r.id, { motivo: this.motivo(), cambios }));
+      this.reliquidando.set(false);
+      this.avisos.exito('Ajuste creado. Recorre el mismo ciclo: valídalo, apruébalo y publícalo.');
+      await this.router.navigate(['/sistema/roles', creado.id]);
+    } catch (error) {
+      this.avisos.errorHttp(error);
+    } finally {
+      this.trabajando.set(false);
+    }
   }
 
   /** Da el paso siguiente del ciclo y refresca el rol y su historial. */
