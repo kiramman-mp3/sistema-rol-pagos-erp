@@ -1,12 +1,14 @@
 /**
- * Autenticación de un único administrador: contraseña con scrypt, sesión firmada con HMAC y un
- * límite de intentos fallidos. Sin dependencias: todo sale de `node:crypto`.
+ * Autenticación: contraseña con scrypt, sesión firmada con HMAC y un límite de intentos fallidos.
+ * Sin dependencias: todo sale de `node:crypto`.
  *
- * La sesión no se guarda en ningún lado: la cookie lleva el usuario y el vencimiento firmados con
- * `SESION_SECRETO`. Cambiar ese secreto cierra todas las sesiones abiertas.
+ * La sesión no se guarda en ningún lado: la cookie lleva el usuario, su cuenta y el vencimiento,
+ * firmados con `SESION_SECRETO`. Cambiar ese secreto cierra todas las sesiones abiertas.
  */
 import { createHash, createHmac, randomBytes, scrypt, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
+
+import { esId } from "./validaciones.ts";
 
 const scryptAsync = promisify(scrypt) as (
   clave: string, sal: Buffer, largo: number, opciones: { N: number; r: number; p: number },
@@ -17,10 +19,7 @@ const R = 8;
 const P = 1;
 const LARGO_HASH = 64;
 
-/**
- * `scrypt.N.r.p.sal.hash`, con sal y hash en base64url: lo que se guarda en `ADMIN_CLAVE_HASH`.
- * Sin `$` ni comillas, para que se pueda pegar en un `export`, un `.env` o el panel de Vercel.
- */
+/** `scrypt.N.r.p.sal.hash`, con sal y hash en base64url: lo que se guarda en `usuarios.clave_hash`. */
 export async function hashClave(clave: string): Promise<string> {
   const sal = randomBytes(16);
   const hash = await scryptAsync(clave, sal, LARGO_HASH, { N, r: R, p: P });
@@ -52,7 +51,8 @@ export function textosIguales(a: string, b: string): boolean {
 export const DURACION_SESION_MS = 8 * 60 * 60 * 1000;
 
 export interface Sesion {
-  usuario: string;
+  usuarioId: number;
+  cuentaId: number;
   /** milisegundos desde 1970 en que deja de valer */
   vence: number;
 }
@@ -60,8 +60,8 @@ export interface Sesion {
 const firmar = (datos: string, secreto: string) => createHmac("sha256", secreto).update(datos).digest("base64url");
 
 /** Token de sesión: `datos.firma`, ambos en base64url. */
-export function crearSesion(usuario: string, secreto: string, ahora = Date.now()): string {
-  const datos = Buffer.from(JSON.stringify({ u: usuario, e: ahora + DURACION_SESION_MS })).toString("base64url");
+export function crearSesion(usuarioId: number, cuentaId: number, secreto: string, ahora = Date.now()): string {
+  const datos = Buffer.from(JSON.stringify({ u: usuarioId, c: cuentaId, e: ahora + DURACION_SESION_MS })).toString("base64url");
   return `${datos}.${firmar(datos, secreto)}`;
 }
 
@@ -72,9 +72,9 @@ export function leerSesion(token: string | undefined, secreto: string, ahora = D
   if (!datos || !firma || resto !== undefined) return null;
   if (!textosIguales(firma, firmar(datos, secreto))) return null;
   try {
-    const { u, e } = JSON.parse(Buffer.from(datos, "base64url").toString("utf8")) as { u: unknown; e: unknown };
-    if (typeof u !== "string" || typeof e !== "number" || e <= ahora) return null;
-    return { usuario: u, vence: e };
+    const { u, c, e } = JSON.parse(Buffer.from(datos, "base64url").toString("utf8")) as { u: unknown; c: unknown; e: unknown };
+    if (!esId(u) || !esId(c) || typeof e !== "number" || e <= ahora) return null;
+    return { usuarioId: u, cuentaId: c, vence: e };
   } catch {
     return null;
   }
@@ -118,28 +118,16 @@ export class LimiteIntentos {
   }
 }
 
-export interface ConfigAuth {
-  usuario: string;
-  claveHash: string;
-  secreto: string;
+/**
+ * El secreto que firma las sesiones sale de `SESION_SECRETO` (al menos 32 caracteres). Sin él,
+ * devuelve null: quien arranca decide si inventa uno (local) o se niega a arrancar (servidor).
+ */
+export function secretoDeEntorno(entorno: Record<string, string | undefined>): string | null {
+  const secreto = entorno.SESION_SECRETO?.trim();
+  if (!secreto) return null;
+  if (secreto.length < 32) throw new Error("SESION_SECRETO debe tener al menos 32 caracteres.");
+  return secreto;
 }
 
-/**
- * La configuración sale del entorno: `ADMIN_USUARIO`, `ADMIN_CLAVE_HASH` y `SESION_SECRETO`.
- * Sin ninguna de las tres, la autenticación queda apagada (null). Con solo algunas, o con un
- * secreto corto, es un error: una configuración a medias no debe dejar la API abierta sin avisar.
- */
-export function authDeEntorno(entorno: Record<string, string | undefined>): ConfigAuth | null {
-  const usuario = entorno.ADMIN_USUARIO?.trim();
-  const claveHash = entorno.ADMIN_CLAVE_HASH?.trim();
-  const secreto = entorno.SESION_SECRETO?.trim();
-  if (!usuario && !claveHash && !secreto) return null;
-  const faltan = [
-    ["ADMIN_USUARIO", usuario],
-    ["ADMIN_CLAVE_HASH", claveHash],
-    ["SESION_SECRETO", secreto],
-  ].filter(([, valor]) => !valor).map(([nombre]) => nombre);
-  if (faltan.length) throw new Error(`Falta ${faltan.join(" y ")} para activar el inicio de sesión.`);
-  if (secreto!.length < 32) throw new Error("SESION_SECRETO debe tener al menos 32 caracteres.");
-  return { usuario: usuario!, claveHash: claveHash!, secreto: secreto! };
-}
+/** Un secreto nuevo para trabajar en local: las sesiones duran lo que dure el proceso. */
+export const secretoAleatorio = () => randomBytes(32).toString("base64url");

@@ -1,5 +1,5 @@
-/** Datos de la empresa que aparecen en el rol y en la boleta (editar para el taller). */
-export const EMPRESA = { nombre: "Empresa Demo S.A.", ruc: "1790000000001" };
+/** La empresa de los datos de ejemplo (`npm run seed`): un RUC con dígito verificador válido. */
+export const EMPRESA_DEMO = { nombre: "Empresa Demo S.A.", ruc: "1790000028001" };
 
 export const MESES = [
   "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
