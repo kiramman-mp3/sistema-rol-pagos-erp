@@ -97,6 +97,7 @@ describe("permisos en la API", () => {
     ["POST", "/api/roles/999/publicar", {}, ["administrador", "aprobador"]],
     ["POST", "/api/roles/999/pagar", {}, ["administrador"]],
     ["POST", "/api/roles/999/reliquidar", {}, ["administrador"]],
+    ["GET", "/api/roles/999/traza/1801234566", {}, ["administrador", "aprobador", "lector"]],
     ["GET", "/api/usuarios", {}, ["administrador"]],
     ["POST", "/api/usuarios", {}, ["administrador"]],
     ["PATCH", "/api/usuarios/999", {}, ["administrador"]],

@@ -217,6 +217,48 @@ describe('DetalleRol', () => {
     expect(enlace.getAttribute('href')).toBe('/api/roles/1/iess.csv');
   });
 
+  describe('cálculo de cada empleado', () => {
+    const abrirConTraza = async (conTraza: boolean) => {
+      const fixture = TestBed.createComponent(DetalleRol);
+      fixture.componentRef.setInput('id', '1');
+      fixture.detectChanges();
+      TestBed.tick();
+      http.expectOne('/api/parametros').flush(PARAMETROS);
+      http.expectOne('/api/roles/1').flush({ ...ROL, detalle: ROL.detalle.map((d, i) => ({ ...d, cedula: `18012345${i}0`, tieneTraza: conTraza })) });
+      http.expectOne('/api/roles/1/iess').flush(IESS);
+      http.expectOne('/api/roles/1/historial').flush([]);
+      await fixture.whenStable();
+      fixture.detectChanges();
+      return { fixture, el: fixture.nativeElement as HTMLElement };
+    };
+    const botonCalculo = (el: HTMLElement) =>
+      [...el.querySelectorAll('button')].filter((b) => /cálculo|calculó/.test(b.textContent ?? ''));
+
+    it('no ofrece «Cómo se calculó» si el rol se calculó antes de guardar el desglose', async () => {
+      expect(botonCalculo((await abrirConTraza(false)).el).length).toBe(0);
+    });
+
+    it('ofrece «Cómo se calculó» a cada empleado si el rol guardó el desglose', async () => {
+      expect(botonCalculo((await abrirConTraza(true)).el).length).toBe(2);
+    });
+
+    it('abre el desglose de un solo empleado y lo cierra con el mismo botón', async () => {
+      const { fixture, el } = await abrirConTraza(true);
+      botonCalculo(el)[1].click();
+      fixture.detectChanges();
+      TestBed.tick();
+      // Pide la traza de quien se abrió, no la de los demás.
+      http.expectOne('/api/roles/1/traza/1801234510');
+      http.expectNone('/api/roles/1/traza/1801234500');
+      expect(botonCalculo(el)[1].textContent).toContain('Ocultar');
+      expect(el.querySelectorAll('app-desglose-calculo').length).toBe(1);
+
+      botonCalculo(el)[1].click();
+      fixture.detectChanges();
+      expect(el.querySelector('app-desglose-calculo')).toBeNull();
+    });
+  });
+
   describe('reliquidación', () => {
     const ANA = { ...BASE, id: 1, nombres: 'Ana Mensual', cedula: '1801234566' };
     const BETO = { ...BASE, id: 2, nombres: 'Beto Acumula', cedula: '0903456788' };
