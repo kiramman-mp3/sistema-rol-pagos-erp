@@ -9,6 +9,7 @@ import type {
   Parametros,
   DatosCuenta,
   Puesto,
+  CambioReliquidacion,
   Regimen,
   RevisionRol,
   RolCabecera,
@@ -100,6 +101,9 @@ export class Api {
   }
   pagarRol(id: number) {
     return this.http.post<RolCabecera>(`/api/roles/${id}/pagar`, {});
+  }
+  reliquidarRol(id: number, datos: { motivo: string; cambios: CambioReliquidacion[] }) {
+    return this.http.post<{ id: number; empleados: number; avisos: string[] }>(`/api/roles/${id}/reliquidar`, datos);
   }
 
   guardarParametros(anio: number, datos: { sbu: number; tablaIr: TramoIr[]; fuente: string }) {
