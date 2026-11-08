@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { avisoDeAnioSinParametros } from "../src/parametros.ts";
 import { iniciar } from "./ayuda.ts";
 import type { Cliente } from "./ayuda.ts";
 
@@ -80,4 +81,16 @@ describe("parámetros anuales", () => {
       assert.equal((await api.put("/api/parametros/abc", { sbu: 500, tablaIr: TABLA_SIMPLE })).status, 400);
       assert.equal((await api.put("/api/parametros/2027", { sbu: 500, tablaIr: [] })).status, 400);
     }));
+});
+
+describe("aviso de año sin parámetros", () => {
+  const usados = { anio: 2026, sbu: 482, tablaIr: [], fuente: "" };
+
+  it("no avisa cuando se usan los parámetros del año pedido", () => {
+    assert.equal(avisoDeAnioSinParametros(2026, usados), null);
+  });
+
+  it("avisa de qué año se usaron cuando el pedido no tiene", () => {
+    assert.equal(avisoDeAnioSinParametros(2027, usados), "No hay parámetros de 2027; se usaron los de 2026.");
+  });
 });
