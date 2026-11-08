@@ -1,4 +1,5 @@
-import { Component, computed, effect, inject, input, output, signal } from '@angular/core';
+import { Component, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 
@@ -22,6 +23,9 @@ const aFraccion = (porcentaje: unknown): number | null => {
   return n === null ? null : Number((n / 100).toFixed(6));
 };
 const textoTope = (tope: number | null): string => (tope === null ? '' : String(tope));
+/** Hoy en Ecuador, AAAA-MM-DD (la fecha con la que se propone que empiecen a regir los cambios). */
+const hoy = (): string => new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Guayaquil' });
+const porcentaje = (fraccion: number | null): string => (fraccion === null ? '—' : `${aPorcentaje(fraccion)} %`);
 
 /** Edita las reglas de un régimen laboral. */
 @Component({
@@ -29,7 +33,14 @@ const textoTope = (tope: number | null): string => (tope === null ? '' : String(
   imports: [ReactiveFormsModule],
   template: `
     <form class="formulario" [formGroup]="form" (ngSubmit)="guardar()">
-      <div class="campo c6">
+      <div class="campo c2">
+        <label [for]="id('vigente')">Vigente desde</label>
+        <input class="entrada" [id]="id('vigente')" type="date" formControlName="vigenteDesde" />
+        <span class="ayuda">
+          @if (corrige()) { Corrige la versión que empieza ese día. } @else { Crea una versión nueva; las anteriores no cambian. }
+        </span>
+      </div>
+      <div class="campo c4">
         <label [for]="id('nombre')">Nombre</label>
         <input class="entrada" [id]="id('nombre')" formControlName="nombre" maxlength="120" />
         <span class="ayuda">{{ regimen().baseLegal }}</span>
@@ -86,9 +97,44 @@ const textoTope = (tope: number | null): string => (tope === null ? '' : String(
       </label>
 
       <div class="acciones">
-        <button class="boton" [disabled]="guardando() || !sesion.puede('editar')">Guardar {{ regimen().nombre }}</button>
+        <button class="boton" [disabled]="guardando() || !sesion.puede('editar')">
+          {{ corrige() ? 'Corregir' : 'Crear versión de' }} {{ regimen().nombre }}
+        </button>
       </div>
     </form>
+
+    @if (versiones().length > 1) {
+      <div class="tabla-envoltura" style="margin-top: 1rem">
+        <table class="tabla versiones">
+          <caption class="apoyo pequeno">Versiones: un rol usa la que regía al cierre de su mes.</caption>
+          <thead>
+            <tr><th>Vigente desde</th>@if (regimen().tipo === 'reglas') { <th class="num">IESS personal</th><th class="num">IESS patronal</th> }<th></th></tr>
+          </thead>
+          <tbody>
+            @for (v of versiones(); track v.vigenteDesde) {
+              <tr>
+                <td>{{ v.vigenteDesde }}</td>
+                @if (regimen().tipo === 'reglas') {
+                  <td class="num">{{ porcentaje(v.iessPersonal) }}</td>
+                  <td class="num">{{ porcentaje(v.iessPatronal) }}</td>
+                }
+                <td class="acciones-fila">
+                  <button type="button" class="boton boton-secundario" (click)="editarVersion(v)">Editar</button>
+                  @if (sesion.puede('editar')) {
+                    @if (confirmando() === v.vigenteDesde) {
+                      <button type="button" class="boton boton-peligro" (click)="eliminarVersion(v)">Sí, eliminar</button>
+                      <button type="button" class="boton boton-secundario" (click)="confirmando.set(null)">No</button>
+                    } @else {
+                      <button type="button" class="boton boton-secundario" (click)="confirmando.set(v.vigenteDesde)">Eliminar</button>
+                    }
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
   `,
 })
 export class EditorRegimen {
@@ -101,6 +147,9 @@ export class EditorRegimen {
   protected readonly sesion = inject(Sesion);
 
   protected readonly guardando = signal(false);
+  protected readonly versiones = signal<Regimen[]>([]);
+  protected readonly confirmando = signal<string | null>(null);
+  protected readonly porcentaje = porcentaje;
   protected readonly conReglas = computed(() => this.todos().filter((r) => r.tipo === 'reglas'));
 
   protected readonly numeros = [
@@ -125,6 +174,7 @@ export class EditorRegimen {
   ] as const;
 
   protected readonly form = inject(FormBuilder).nonNullable.group({
+    vigenteDesde: [''],
     nombre: [''],
     regimenServidor: [''],
     regimenObrero: [''],
@@ -147,32 +197,68 @@ export class EditorRegimen {
     notas: [''],
   });
 
+  /** ¿La fecha escrita ya es la de una versión? Entonces guardar la corrige en vez de crear otra. */
+  private readonly fecha = toSignal(this.form.controls.vigenteDesde.valueChanges, { initialValue: '' });
+  protected readonly corrige = computed(() => this.versiones().some((v) => v.vigenteDesde === this.fecha()));
+
   constructor() {
     effect(() => {
       const r = this.regimen();
-      this.form.reset({
-        nombre: r.nombre,
-        regimenServidor: r.regimenServidor ?? '',
-        regimenObrero: r.regimenObrero ?? '',
-        iessPersonal: aPorcentaje(r.iessPersonal),
-        iessPatronal: aPorcentaje(r.iessPatronal),
-        fondosReserva: aPorcentaje(r.fondosReserva),
-        mesesParaFondos: textoTope(r.mesesParaFondos),
-        recargoSuplementarias: aPorcentaje(r.recargoSuplementarias),
-        recargoExtraordinarias: aPorcentaje(r.recargoExtraordinarias),
-        recargoDescanso: aPorcentaje(r.recargoDescanso),
-        recargoNocturno: aPorcentaje(r.recargoNocturno),
-        topeSuplementariasMes: textoTope(r.topeSuplementariasMes),
-        topeExtraordinariasMes: textoTope(r.topeExtraordinariasMes),
-        diasVacaciones: textoTope(r.diasVacaciones),
-        aplicaDecimoTercero: r.aplicaDecimoTercero,
-        aplicaDecimoCuarto: r.aplicaDecimoCuarto,
-        aplicaFondosReserva: r.aplicaFondosReserva,
-        aplicaHorasExtras: r.aplicaHorasExtras,
-        verificado: r.verificado,
-        notas: r.notas,
-      });
+      this.rellenar(r, hoy());
+      untracked(() => void this.cargarVersiones());
     });
+  }
+
+  private rellenar(r: Regimen, vigenteDesde: string) {
+    this.form.reset({
+      vigenteDesde,
+      nombre: r.nombre,
+      regimenServidor: r.regimenServidor ?? '',
+      regimenObrero: r.regimenObrero ?? '',
+      iessPersonal: aPorcentaje(r.iessPersonal),
+      iessPatronal: aPorcentaje(r.iessPatronal),
+      fondosReserva: aPorcentaje(r.fondosReserva),
+      mesesParaFondos: textoTope(r.mesesParaFondos),
+      recargoSuplementarias: aPorcentaje(r.recargoSuplementarias),
+      recargoExtraordinarias: aPorcentaje(r.recargoExtraordinarias),
+      recargoDescanso: aPorcentaje(r.recargoDescanso),
+      recargoNocturno: aPorcentaje(r.recargoNocturno),
+      topeSuplementariasMes: textoTope(r.topeSuplementariasMes),
+      topeExtraordinariasMes: textoTope(r.topeExtraordinariasMes),
+      diasVacaciones: textoTope(r.diasVacaciones),
+      aplicaDecimoTercero: r.aplicaDecimoTercero,
+      aplicaDecimoCuarto: r.aplicaDecimoCuarto,
+      aplicaFondosReserva: r.aplicaFondosReserva,
+      aplicaHorasExtras: r.aplicaHorasExtras,
+      verificado: r.verificado,
+      notas: r.notas,
+    });
+  }
+
+  private async cargarVersiones() {
+    try {
+      this.versiones.set(await firstValueFrom(this.api.versionesRegimen(this.regimen().codigo)));
+    } catch {
+      this.versiones.set([]);
+    }
+  }
+
+  /** Carga una versión en el formulario para corregirla. */
+  protected editarVersion(v: Regimen) {
+    this.rellenar(v, v.vigenteDesde);
+  }
+
+  protected async eliminarVersion(v: Regimen) {
+    this.avisos.limpiar();
+    this.confirmando.set(null);
+    try {
+      await firstValueFrom(this.api.eliminarVersionRegimen(v.codigo, v.vigenteDesde));
+      this.avisos.exito(`Se eliminó la versión de ${v.nombre} del ${v.vigenteDesde}.`);
+      this.guardado.emit();
+    } catch (error) {
+      this.avisos.errorHttp(error);
+      window.scrollTo({ top: 0 });
+    }
   }
 
   protected id(campo: string): string {
@@ -183,7 +269,7 @@ export class EditorRegimen {
     this.avisos.limpiar();
     const v = this.form.getRawValue();
     const cuerpo: Record<string, unknown> = {
-      nombre: v.nombre, verificado: v.verificado, notas: v.notas,
+      vigenteDesde: v.vigenteDesde, nombre: v.nombre, verificado: v.verificado, notas: v.notas,
     };
     if (this.regimen().tipo === 'mixto') {
       cuerpo['regimenServidor'] = v.regimenServidor;
