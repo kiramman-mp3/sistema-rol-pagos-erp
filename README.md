@@ -33,7 +33,7 @@ Cada empresa se registra con su nombre, su RUC, un correo y una contraseña, y t
 3. Genera la **boleta individual** imprimible y la descarga en **CSV** del rol y de los aportes.
 4. Arma el **cuadro de conciliación con el IESS**, para contrastarlo línea por línea con el comprobante del portal.
 
-Los roles ya generados guardan una foto de las reglas con que se calcularon: si luego se editan los parámetros, el historial no cambia.
+Los roles ya generados guardan sus valores, y las reglas de cada régimen tienen vigencia por fecha: cambiar una tasa agrega una versión nueva, y volver a generar un mes anterior usa la que regía entonces.
 
 ### ¿Para quién está pensado?
 Para el área de talento humano o contabilidad de una empresa pequeña o mediana (cada una registra la suya), y para quien necesite estudiar cómo se compone un rol de pagos ecuatoriano: el motor de cálculo son funciones puras, con pruebas, y cada regla cita su fuente.
@@ -55,6 +55,7 @@ Para el área de talento humano o contabilidad de una empresa pequeña o mediana
 
 *   **Tres regímenes laborales:** Código del Trabajo, LOSEP y LOEP. En la LOEP se indica además si el empleado es servidor u obrero, y el rol usa las reglas del régimen que le corresponde.
 *   **Todo parametrizable en pantalla:** SBU, tabla del impuesto a la renta (por año), aportes, recargos, topes, vacaciones y beneficios de cada régimen se editan en **Parámetros**, sin tocar el código.
+*   **Reglas con vigencia por fecha:** cada cambio a las tasas de un régimen se guarda como una versión nueva «vigente desde» una fecha. Un rol usa la versión que regía al cierre de su mes, así que subir un aporte en octubre no altera septiembre. Las versiones anteriores se pueden consultar, corregir o eliminar.
 *   **Escala salarial y orgánico funcional:** el sueldo sale del grado elegido (exacto en la LOSEP, mínimo en el Código del Trabajo) y cada puesto del orgánico lleva su función, su responsable y su nivel de referencia.
 *   **Décimos y fondos a la medida:** por empleado, cada beneficio se paga cada mes en el rol, se acumula o no se recibe.
 *   **Horas extras por tipo:** suplementarias, extraordinarias, de sábado, domingo y feriado, y nocturnas, con el recargo y el tope de cada régimen. Los topes avisan, sin bloquear.
@@ -132,7 +133,7 @@ rol-pagos-ecuador/
 │   │   ├── seed.ts            # Script: crea una cuenta de ejemplo y la llena
 │   │   ├── usuario.ts         # Script: lista las cuentas y agrega usuarios a una cuenta
 │   │   ├── rutas/             # auth, cuenta, empleados, roles, parámetros, regímenes, escala y puestos
-│   │   ├── migraciones/       # Esquema versionado: 001 a 015 (SQL numerado)
+│   │   ├── migraciones/       # Esquema versionado: 001 a 016 (SQL numerado)
 │   │   ├── validaciones.ts    # Cédula, RUC, correo, números y fechas
 │   │   ├── server.ts          # Arranque local
 │   │   └── vercel.ts          # Entrada del backend en Vercel
@@ -255,7 +256,7 @@ El backend no arranca en Vercel sin `DATABASE_URL` y `SESION_SECRETO`. Las empre
 1. **Página de inicio (`/`)**: explica el sistema, lleva a **Registrar mi empresa** (`/registro`) o a **Ingresar** (`/entrar`) y tiene un simulador que calcula un sueldo en vivo con el motor real. Se elige el régimen y si los décimos se pagan, se acumulan o no se reciben.
 2. **Información (`/informacion`)**: de qué trata el proyecto, lo que encontró la investigación y los enlaces de todas las fuentes.
 3. **Inicio del mes (`/sistema/inicio`)**: la primera pantalla al ingresar; `/sistema` pide correo y contraseña en `/entrar` y, al entrar, vuelve a donde se iba. Quien aún no tiene cuenta la crea en `/registro` (nombre de la empresa, RUC, correo y contraseña de al menos 10 caracteres) y entra directo. El botón **Salir** cierra la sesión; la barra muestra el nombre de la empresa de la cuenta. Muestra en cuatro pasos (equipo, novedades, rol generado, pagos e IESS) en qué punto está el mes y ofrece el botón de lo que sigue.
-4. **Parámetros (`/sistema/parametros`)**: tres pestañas. *Año*: SBU y tabla del impuesto a la renta, con la opción de agregar un año nuevo copiando otro. *Regímenes laborales*: aportes, recargos, topes, vacaciones y beneficios de cada uno. *Escala salarial*: los grados de cada régimen.
+4. **Parámetros (`/sistema/parametros`)**: tres pestañas. *Año*: SBU y tabla del impuesto a la renta, con la opción de agregar un año nuevo copiando otro. *Regímenes laborales*: aportes, recargos, topes, vacaciones y beneficios de cada uno, con la fecha desde la que rige el cambio y la lista de versiones anteriores. *Escala salarial*: los grados de cada régimen.
 5. **Empleados**: alta con cédula validada (módulo 10), régimen, grado de la escala, beneficios, horas extras y fecha de salida opcional. Un clic carga seis empleados de ejemplo que cubren los tres regímenes.
 6. **Roles de pago**: se elige el mes en un calendario de doce meses que muestra cuál ya tiene rol y se digitan las novedades (horas suplementarias, extraordinarias, de sábado, domingo o feriado, y nocturnas; comisiones; anticipos). Quien no recibe horas extras tiene esas columnas deshabilitadas.
 7. **Generar**: el backend calcula a cada empleado activo con las reglas de su régimen y guarda una foto en `roles_detalle`. Avisa, sin bloquear, si alguien pasa el tope mensual de horas. El rol nace «calculado».
@@ -294,8 +295,10 @@ El backend no arranca en Vercel sin `DATABASE_URL` y `SESION_SECRETO`. Las empre
 | `GET /api/parametros?anio=` | Reglas de ley del año, tabla del IR, regímenes y datos de la empresa. Con sesión, los de la cuenta; sin ella, los de la plantilla |
 | `PUT /api/parametros/:anio` | Crea o actualiza el SBU y la tabla del IR de un año |
 | `POST /api/simulacion` | Calcula un rol de ejemplo sin guardar nada (`regimen`, `categoriaLoep`, `decimos`) |
-| `GET /api/regimenes`, `GET /api/regimenes/:codigo` | Regímenes con todas sus reglas |
-| `PUT /api/regimenes/:codigo` | Edita las reglas de un régimen |
+| `GET /api/regimenes`, `GET /api/regimenes/:codigo` | Regímenes con todas sus reglas, en la versión que rige hoy o en la de `?fecha=AAAA-MM-DD` |
+| `GET /api/regimenes/:codigo/versiones` | Todas las versiones de un régimen, la más reciente primero |
+| `PUT /api/regimenes/:codigo` | Edita las reglas de un régimen. Con `vigenteDesde` (AAAA-MM-DD) crea la versión de esa fecha, o corrige la que ya empieza ese día; sin ella corrige la versión de hoy |
+| `DELETE /api/regimenes/:codigo/versiones/:desde` | Elimina una versión. La única que queda de un régimen no se puede eliminar (`409`) |
 | `GET /api/escala?regimen=` | Grados de la escala salarial |
 | `POST /api/escala`, `PUT/DELETE /api/escala/:id` | Alta, edición y baja de un grado |
 | `GET/POST /api/puestos`, `GET/PUT/DELETE /api/puestos/:id` | Puestos del orgánico funcional |
@@ -353,6 +356,23 @@ La **LOEP** no tiene tasas propias: sus servidores de carrera se rigen por la LO
 | Fondos de reserva | 8,33 % del aportable desde el mes 13 |
 | Mes de ingreso y de salida | sueldo y décimo cuarto proporcionales a los días (base 30): desde el día de ingreso o hasta el día de salida, nunca menos de un día |
 | Quién entra al rol de un mes | quien ingresó antes de que termine y no salió antes de que empiece; un inactivo sin fecha de salida queda fuera de todos |
+
+### Vigencia de las reglas
+
+Las reglas de cada régimen no se sobrescriben: cada una es una versión con su fecha `vigente_desde` (clave `cuenta_id`, `codigo`, `vigente_desde`). Las que existían antes de la migración 016 quedan como la versión más antigua, vigente desde `2000-01-01`.
+
+| Situación | Qué pasa |
+|---|---|
+| Se genera el rol de un mes | Se usa la versión que regía el **último día de ese mes**. Una regla que empieza a mitad de mes cuenta para todo ese mes: no se prorratea por días. |
+| Se edita un régimen con una fecha nueva | Se crea una versión copiando la que regía ese día y aplicando los cambios; las anteriores no se tocan. |
+| Se edita con la fecha de una versión que ya existe | Esa versión se corrige. |
+| Se edita sin fecha | Se corrige en el sitio la versión de hoy (la pantalla siempre envía una fecha, por defecto hoy). |
+| La fecha es anterior a todas las versiones | Se usa la más antigua. |
+| Se crea una empresa | Recibe todas las versiones de la plantilla. |
+
+Cada alta, corrección y eliminación de una versión queda en `audit_logs` (`regimen.version_creada`, `regimen.corregido`, `regimen.version_eliminada`) con el régimen y la fecha. Un rol publicado o pagado no cambia nunca, ni aunque se edite una regla de su mes. Un rol «calculado» sí toma las reglas nuevas si se vuelve a generar.
+
+Los parámetros anuales (SBU y tabla del IR) ya eran una versión por año, así que no cambian.
 
 ### Décimos y fondos: no, mensual o acumulado
 
@@ -480,6 +500,7 @@ El esquema vive en `backend/src/migraciones/NNN_nombre.sql`. Las aplicadas queda
 | 013 | Cuentas y usuarios; `cuenta_id` en empleados, roles, regímenes, parámetros, escala y puestos; los únicos (cédula, nombre del puesto, grado, mes del rol) pasan a ser por cuenta; la función `copiar_plantilla` |
 | 014 | Estado del rol (`calculado` a `pagado`) con sus fechas; tabla `audit_logs` de solo inserción; disparadores que protegen los roles publicados |
 | 015 | Rol de cada usuario (`administrador`, `aprobador`, `lector`; los existentes quedan administradores), `separar_funciones` en la cuenta y `generado_por` en cada rol |
+| 016 | Vigencia de las reglas: `regimenes.vigente_desde` (clave `cuenta_id`, `codigo`, `vigente_desde`; las filas existentes quedan desde `2000-01-01`) y `copiar_plantilla` copia todas las versiones |
 
 Los roles ya generados guardan una foto del régimen, de las tasas y de la modalidad con que se calcularon: si luego se editan las reglas, el historial no cambia.
 
@@ -516,6 +537,7 @@ Verifica todas las cifras con la norma y con el IESS antes de usar el sistema en
 - No hay eliminación ni exportación de una cuenta completa desde la aplicación.
 - Sin gastos personales deducibles ni rebajas del impuesto a la renta.
 - Sin préstamos del IESS, vacaciones gozadas ni liquidaciones (finiquito) por salida: la fecha de salida solo prorratea el último mes.
+- Una regla que cambia a mitad de mes se aplica a todo ese mes, sin prorratear por días. Los parámetros anuales (SBU e IR) tienen una versión por año, no por fecha.
 - Los topes de horas extras avisan pero no bloquean: la LOSEP dice que si se obliga a trabajar sobre el límite, igual se pagan.
 - Los puestos del nivel jerárquico superior de la LOSEP no cobran horas extras: se marca «No las recibe» en ese empleado. No se incluye la escala oficial de ese nivel.
 
@@ -526,6 +548,7 @@ Verifica todas las cifras con la norma y con el IESS antes de usar el sistema en
 - [x] Motor de cálculo con funciones puras y aritmética decimal exacta.
 - [x] Tres regímenes laborales con reglas editables en pantalla (Código del Trabajo, LOSEP y LOEP).
 - [x] SBU y tabla del impuesto a la renta por año.
+- [x] Reglas de cada régimen con vigencia por fecha: un cambio crea una versión y los meses anteriores conservan la suya.
 - [x] Escala salarial por régimen y orgánico funcional con responsable por puesto.
 - [x] Décimos y fondos de reserva: no, mensual o acumulado, por empleado.
 - [x] Horas extras por tipo, con recargo y tope por régimen.
@@ -552,7 +575,7 @@ Lista de contribuidores que han aportado commits al desarrollo de este repositor
 
 | Nombre | Commits |
 | :--- | :--- |
-| **kiramman-mp3** | 213 |
+| **kiramman-mp3** | 221 |
 
 ---
 
