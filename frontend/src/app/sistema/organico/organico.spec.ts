@@ -4,6 +4,7 @@ import { TestBed } from '@angular/core/testing';
 
 import type { Grado, Puesto } from '../../core/modelos';
 import { Organico } from './organico';
+import { Sesion } from '../../core/sesion';
 
 const NIVEL_A: Grado = {
   id: 1, regimen: 'CODIGO_TRABAJO', grado: 1, denominacion: 'A: Jefatura', rmu: 510, rmuMax: 1280, esMinimo: true, fuente: '',
@@ -32,6 +33,7 @@ describe('Organico', () => {
   beforeEach(() => {
     TestBed.configureTestingModule({ providers: [provideHttpClient(), provideHttpClientTesting()] });
     http = TestBed.inject(HttpTestingController);
+    TestBed.inject(Sesion).permisos.set(['ver', 'editar', 'validar', 'aprobar', 'publicar', 'pagar', 'usuarios']);
   });
 
   const abrir = async () => {

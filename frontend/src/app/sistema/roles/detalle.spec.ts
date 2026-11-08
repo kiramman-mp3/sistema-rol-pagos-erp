@@ -4,6 +4,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
 import { DetalleRol } from './detalle';
+import { Sesion } from '../../core/sesion';
 
 const BASE = {
   empleadoId: 1, cedula: '1801234566', cargo: 'Analista', sueldoBase: 1800, fechaIngreso: '2022-07-15',
@@ -65,6 +66,7 @@ describe('DetalleRol', () => {
       providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting()],
     });
     http = TestBed.inject(HttpTestingController);
+    TestBed.inject(Sesion).permisos.set(['ver', 'editar', 'validar', 'aprobar', 'publicar', 'pagar', 'usuarios']);
   });
 
   const abrirConEstado = async (estado = 'calculado', historial: unknown[] = []) => {
@@ -151,6 +153,31 @@ describe('DetalleRol', () => {
     await fixture.whenStable();
     fixture.detectChanges();
     expect(el.querySelector('.revision')!.textContent).toContain('el neto a pagar es negativo');
+  });
+
+  it('un lector ve el rol completo pero ningún botón para moverlo', async () => {
+    TestBed.inject(Sesion).permisos.set(['ver']);
+    const el = (await abrirConEstado('calculado')).nativeElement as HTMLElement;
+    expect(botones(el)).not.toContain('Validar el rol');
+    expect(botones(el)).not.toContain('Eliminar rol');
+    expect([...el.querySelectorAll('a')].some((a) => a.textContent?.includes('Recalcular'))).toBe(false);
+    expect(el.textContent).toContain('tu rol no lo permite');
+    expect(el.querySelectorAll('tbody tr').length).toBeGreaterThan(0);
+  });
+
+  it('un aprobador puede aprobar, pero no eliminar ni recalcular el rol', async () => {
+    TestBed.inject(Sesion).permisos.set(['ver', 'validar', 'aprobar', 'publicar']);
+    const el = (await abrirConEstado('validado')).nativeElement as HTMLElement;
+    expect(botones(el)).toContain('Aprobar');
+    expect(botones(el)).not.toContain('Eliminar rol');
+    expect([...el.querySelectorAll('a')].some((a) => a.textContent?.includes('Recalcular'))).toBe(false);
+  });
+
+  it('el paso de pagar no se ofrece a un aprobador', async () => {
+    TestBed.inject(Sesion).permisos.set(['ver', 'validar', 'aprobar', 'publicar']);
+    const el = (await abrirConEstado('publicado')).nativeElement as HTMLElement;
+    expect(botones(el)).not.toContain('Marcar como pagado');
+    expect(el.textContent).toContain('«Marcar como pagado»; tu rol no lo permite');
   });
 
   it('publicar pide confirmación antes de enviar nada', async () => {

@@ -7,6 +7,7 @@ import { ParametrosAnuales } from './anuales';
 import { EscalaSalarial } from './escala';
 import { PaginaParametros } from './parametros';
 import { RegimenesLaborales } from './regimenes';
+import { Sesion } from '../../core/sesion';
 
 const CT = {
   codigo: 'CODIGO_TRABAJO', nombre: 'Código del Trabajo', descripcion: 'Sector privado.', baseLegal: 'Código del Trabajo',
@@ -47,6 +48,7 @@ describe('parámetros', () => {
   beforeEach(() => {
     TestBed.configureTestingModule({ providers: [provideHttpClient(), provideHttpClientTesting()] });
     http = TestBed.inject(HttpTestingController);
+    TestBed.inject(Sesion).permisos.set(['ver', 'editar', 'validar', 'aprobar', 'publicar', 'pagar', 'usuarios']);
   });
 
   afterEach(() => vi.restoreAllMocks());
