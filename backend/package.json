@@ -3,7 +3,7 @@
   "version": "0.3.0",
   "private": true,
   "type": "module",
-  "description": "API REST del rol de pagos Ecuador 2026 (Express + node:sqlite)",
+  "description": "API REST del rol de pagos Ecuador 2026 (Express + PostgreSQL)",
   "engines": {
     "node": ">=24"
   },
