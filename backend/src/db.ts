@@ -91,6 +91,20 @@ function baseDePglite(db: PGlite): Base {
   return raiz;
 }
 
+/** ¿El destino es un servidor Postgres (y no PGlite)? */
+export const esBaseRemota = (destino: string) => /^postgres(ql)?:\/\//.test(destino);
+
+/** `host:puerto/base` de una URL de conexión, sin usuario ni contraseña, para mostrarla sin filtrar secretos. */
+export function descripcionDeDestino(destino: string): string {
+  if (!esBaseRemota(destino)) return destino;
+  try {
+    const url = new URL(destino);
+    return `${url.host}${url.pathname}`;
+  } catch {
+    return "(URL de conexión ilegible)";
+  }
+}
+
 /**
  * TLS hacia el servidor. Siempre se verifica el certificado, salvo que se pida lo contrario:
  *  - `DATABASE_SSL_CA`: certificado de la autoridad (el texto PEM o la ruta del archivo). Supabase
@@ -111,7 +125,7 @@ export function opcionesSsl(entorno: Record<string, string | undefined>): pg.Cli
  */
 export async function abrirBase(destino: string): Promise<Base> {
   let db: Base;
-  if (/^postgres(ql)?:\/\//.test(destino)) {
+  if (esBaseRemota(destino)) {
     db = baseDePg(new pg.Pool({
       connectionString: destino,
       ssl: opcionesSsl(process.env),
