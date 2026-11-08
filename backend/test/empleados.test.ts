@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 
-import { EMPLEADO, iniciar, NIVEL_E2_CT } from "./ayuda.ts";
+import { EMPLEADO, iniciar, NIVEL_E2_CT, puesto } from "./ayuda.ts";
 import type { Cliente } from "./ayuda.ts";
 
 describe("API de empleados", () => {
@@ -55,7 +55,7 @@ describe("API de empleados", () => {
   });
 
   it("no registra a un empleado con sueldo menor al mínimo de su nivel y lo dice", async () => {
-    const r = await api.post("/api/empleados", { ...EMPLEADO, cedula: "0903456788", puestoId: 1, escalaId: undefined, sueldoBase: 490 });
+    const r = await api.post("/api/empleados", { ...EMPLEADO, cedula: "0903456788", puestoId: puesto(1), escalaId: undefined, sueldoBase: 490 });
     assert.equal(r.status, 400);
     assert.match(r.json.errores[0], /No se puede registrar al empleado: el sueldo \(\$490\) es menor al mínimo del nivel A: Jefatura \(\$510\)/);
   });
