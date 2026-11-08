@@ -4,6 +4,7 @@ import { firstValueFrom } from 'rxjs';
 
 import { Api, ParametrosLey } from '../../core/api';
 import { Avisos } from '../../core/avisos';
+import { Sesion } from '../../core/sesion';
 import type { Regimen } from '../../core/modelos';
 
 /** Fracción guardada (0.0945) -> porcentaje que se escribe (9.45). */
@@ -85,7 +86,7 @@ const textoTope = (tope: number | null): string => (tope === null ? '' : String(
       </label>
 
       <div class="acciones">
-        <button class="boton" [disabled]="guardando()">Guardar {{ regimen().nombre }}</button>
+        <button class="boton" [disabled]="guardando() || !sesion.puede('editar')">Guardar {{ regimen().nombre }}</button>
       </div>
     </form>
   `,
@@ -97,6 +98,7 @@ export class EditorRegimen {
 
   private readonly api = inject(Api);
   private readonly avisos = inject(Avisos);
+  protected readonly sesion = inject(Sesion);
 
   protected readonly guardando = signal(false);
   protected readonly conReglas = computed(() => this.todos().filter((r) => r.tipo === 'reglas'));

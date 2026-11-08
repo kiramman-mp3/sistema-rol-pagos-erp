@@ -6,6 +6,8 @@ import {
 } from "../auth.ts";
 import { buscarCuenta, buscarUsuario, buscarUsuarioPorEmail, CUENTA_PLANTILLA, registrarCuenta } from "../cuentas.ts";
 import type { Base } from "../db.ts";
+import { permisoQueExige, permisosDe, puede } from "../permisos.ts";
+import type { RolUsuario } from "../permisos.ts";
 import { ErrorApi } from "../validaciones.ts";
 
 const COOKIE = "rol_sesion";
@@ -50,17 +52,23 @@ export function usuarioDe(res: Response): number {
 }
 
 /**
- * Deja pasar solo a quien trae una sesión válida y anota su cuenta. Las rutas públicas pasan siempre:
- * con sesión usan los datos de su cuenta; sin ella, los de la plantilla.
+ * Deja pasar solo a quien trae una sesión válida y anota su cuenta, su usuario y su rol. El rol se lee
+ * de la base en cada petición: un cambio de rol o un usuario eliminado valen de inmediato, sin esperar
+ * a que venza la cookie. Las rutas públicas pasan siempre: con sesión usan los datos de su cuenta;
+ * sin ella, los de la plantilla.
  */
-export function exigirSesion(secreto: string): RequestHandler {
-  return (req, res, next) => {
+export function exigirSesion(db: Base, secreto: string): RequestHandler {
+  return async (req, res, next) => {
     const ruta = req.path.replace(/\/+$/, "").toLowerCase();
     const sesion = leerSesion(leerCookie(req, COOKIE), secreto);
     if (sesion) {
-      res.locals.cuentaId = sesion.cuentaId;
-      res.locals.usuarioId = sesion.usuarioId;
-      return next();
+      const usuario = await buscarUsuario(db, sesion.usuarioId);
+      if (usuario && usuario.cuentaId === sesion.cuentaId) {
+        res.locals.cuentaId = sesion.cuentaId;
+        res.locals.usuarioId = sesion.usuarioId;
+        res.locals.rolUsuario = usuario.rol;
+        return next();
+      }
     }
     if (PUBLICAS.some(([metodo, publica]) => metodo === req.method && publica === ruta)) {
       res.locals.cuentaId = CUENTA_PLANTILLA;
@@ -69,6 +77,14 @@ export function exigirSesion(secreto: string): RequestHandler {
     next(new ErrorApi(401, ["Inicia sesión para continuar."]));
   };
 }
+
+/** Niega con 403 lo que el rol del usuario no puede hacer. Va después de `exigirSesion`. */
+export const exigirPermiso: RequestHandler = (req, res, next) => {
+  const rol = res.locals.rolUsuario as RolUsuario | undefined;
+  if (rol === undefined) return next(); // ruta pública, sin sesión
+  if (puede(rol, permisoQueExige(req.method, req.path))) return next();
+  next(new ErrorApi(403, [`Tu rol (${rol}) no permite hacer esto.`]));
+};
 
 /** Registrarse, entrar, salir y saber quién es el usuario de la sesión. */
 export function rutasAuth(db: Base, secreto: string): Router {
@@ -85,7 +101,10 @@ export function rutasAuth(db: Base, secreto: string): Router {
     const usuario = await buscarUsuario(db, usuarioId);
     const cuenta = usuario && (await buscarCuenta(db, usuario.cuentaId));
     return usuario && cuenta
-      ? { autenticado: true, email: usuario.email, empresa: { nombre: cuenta.nombre, ruc: cuenta.ruc } }
+      ? {
+          autenticado: true, email: usuario.email, empresa: { nombre: cuenta.nombre, ruc: cuenta.ruc },
+          rol: usuario.rol, permisos: permisosDe(usuario.rol),
+        }
       : null;
   };
 
@@ -100,7 +119,7 @@ export function rutasAuth(db: Base, secreto: string): Router {
   router.get("/yo", async (req, res) => {
     const sesion = leerSesion(leerCookie(req, COOKIE), secreto);
     const datos = sesion && (await datosDeSesion(sesion.usuarioId));
-    res.json(datos ?? { autenticado: false, email: null, empresa: null });
+    res.json(datos ?? { autenticado: false, email: null, empresa: null, rol: null, permisos: [] });
   });
 
   /** Crea la cuenta de una empresa con su primer usuario y deja la sesión abierta. */

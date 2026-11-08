@@ -1,7 +1,8 @@
 /** Cuentas de empresa y sus usuarios: el registro, la búsqueda por correo y los datos de la empresa. */
 import { hashClave } from "./auth.ts";
 import { consultar, ejecutar, esDuplicado, insertar, transaccion, uno } from "./db.ts";
-import type { Base } from "./db.ts";
+import type { Base, Fila } from "./db.ts";
+import type { RolUsuario } from "./permisos.ts";
 import { emailValido, ErrorApi, rucValido } from "./validaciones.ts";
 
 /** La cuenta que no es de ninguna empresa: guarda las reglas de ley de partida (migración 013). */
@@ -14,6 +15,8 @@ export interface Cuenta {
   id: number;
   nombre: string;
   ruc: string;
+  /** Quien generó un rol no puede aprobarlo ni publicarlo. */
+  separarFunciones: boolean;
 }
 
 export interface DatosEmpresa {
@@ -70,22 +73,30 @@ export interface Usuario {
   cuentaId: number;
   email: string;
   claveHash: string;
+  rol: RolUsuario;
 }
+
+const aUsuario = (f: Fila): Usuario => ({
+  id: Number(f.id), cuentaId: Number(f.cuenta_id), email: String(f.email), claveHash: String(f.clave_hash),
+  rol: f.rol as RolUsuario,
+});
 
 /** El usuario con ese correo (sin distinguir mayúsculas), o undefined. */
 export async function buscarUsuarioPorEmail(db: Base, email: string): Promise<Usuario | undefined> {
-  const f = await uno(db, "SELECT id, cuenta_id, email, clave_hash FROM usuarios WHERE lower(email) = lower(?)", email);
-  return f && { id: Number(f.id), cuentaId: Number(f.cuenta_id), email: String(f.email), claveHash: String(f.clave_hash) };
+  const f = await uno(db, "SELECT id, cuenta_id, email, clave_hash, rol FROM usuarios WHERE lower(email) = lower(?)", email);
+  return f && aUsuario(f);
 }
 
 export async function buscarUsuario(db: Base, id: number): Promise<Usuario | undefined> {
-  const f = await uno(db, "SELECT id, cuenta_id, email, clave_hash FROM usuarios WHERE id = ?", id);
-  return f && { id: Number(f.id), cuentaId: Number(f.cuenta_id), email: String(f.email), claveHash: String(f.clave_hash) };
+  const f = await uno(db, "SELECT id, cuenta_id, email, clave_hash, rol FROM usuarios WHERE id = ?", id);
+  return f && aUsuario(f);
 }
 
 export async function buscarCuenta(db: Base, id: number): Promise<Cuenta | undefined> {
-  const f = await uno(db, "SELECT id, nombre, ruc FROM cuentas WHERE id = ?", id);
-  return f && { id: Number(f.id), nombre: String(f.nombre), ruc: String(f.ruc) };
+  const f = await uno(db, "SELECT id, nombre, ruc, separar_funciones FROM cuentas WHERE id = ?", id);
+  return f && {
+    id: Number(f.id), nombre: String(f.nombre), ruc: String(f.ruc), separarFunciones: Boolean(f.separar_funciones),
+  };
 }
 
 /** Cambia el nombre y el RUC de la empresa; los de la plantilla no se editan. */
@@ -93,8 +104,16 @@ export async function actualizarEmpresa(db: Base, id: number, cuerpo: Record<str
   if (id === CUENTA_PLANTILLA) throw new ErrorApi(403, ["La plantilla del sistema no se edita."]);
   const errores: string[] = [];
   const empresa = leerEmpresa(cuerpo, errores);
+  if (cuerpo.separarFunciones !== undefined && typeof cuerpo.separarFunciones !== "boolean") {
+    errores.push("separarFunciones debe ser verdadero o falso.");
+  }
   if (errores.length) throw new ErrorApi(400, errores);
   await ejecutar(db, "UPDATE cuentas SET nombre = ?, ruc = ? WHERE id = ?", empresa.nombre, empresa.ruc, id);
+  if (typeof cuerpo.separarFunciones === "boolean") {
+    await ejecutar(
+      db, `UPDATE cuentas SET separar_funciones = ${cuerpo.separarFunciones ? "TRUE" : "FALSE"} WHERE id = ?`, id,
+    );
+  }
   const cuenta = await buscarCuenta(db, id);
   if (!cuenta) throw new ErrorApi(404, ["La cuenta no existe."]);
   return cuenta;

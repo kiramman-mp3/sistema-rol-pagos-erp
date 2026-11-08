@@ -5,10 +5,16 @@ import { catchError, map, of, tap, throwError } from 'rxjs';
 
 import { ParametrosLey } from './api';
 
+/** Lo que el servidor deja hacer a cada rol; la tabla vive en el backend (`permisos.ts`). */
+export type Permiso = 'ver' | 'editar' | 'validar' | 'aprobar' | 'publicar' | 'pagar' | 'usuarios';
+export type RolUsuario = 'administrador' | 'aprobador' | 'lector';
+
 interface EstadoSesion {
   autenticado: boolean;
   email: string | null;
   empresa: { nombre: string; ruc: string } | null;
+  rol?: RolUsuario | null;
+  permisos?: Permiso[];
 }
 
 /** Lo que pide el registro de una empresa. */
@@ -30,11 +36,20 @@ export class Sesion {
   /** el correo de quien entró */
   readonly email = signal<string | null>(null);
   readonly empresa = signal<{ nombre: string; ruc: string } | null>(null);
+  readonly rol = signal<RolUsuario | null>(null);
+  readonly permisos = signal<Permiso[]>([]);
+
+  /** ¿Puede esta persona hacer eso? Solo ordena la pantalla: el servidor es quien lo exige. */
+  puede(permiso: Permiso): boolean {
+    return this.permisos().includes(permiso);
+  }
 
   private aplicar(estado: EstadoSesion) {
     this.autenticado.set(estado.autenticado);
     this.email.set(estado.email);
     this.empresa.set(estado.empresa);
+    this.rol.set(estado.rol ?? null);
+    this.permisos.set(estado.permisos ?? []);
   }
 
   /**
@@ -79,6 +94,8 @@ export class Sesion {
     this.autenticado.set(false);
     this.email.set(null);
     this.empresa.set(null);
+    this.rol.set(null);
+    this.permisos.set([]);
     if (habia) this.cambioDeCuenta();
   }
 }
@@ -92,6 +109,15 @@ export const sesionActiva: CanActivateFn = (_ruta, estado) => {
     .verificar()
     .pipe(map((valida) => valida || router.createUrlTree(['/entrar'], { queryParams: { volver: estado.url } })));
 };
+
+/** Solo deja pasar a quien tiene ese permiso; si no, al inicio del sistema. */
+export const conPermiso =
+  (permiso: Permiso): CanActivateFn =>
+  () => {
+    const sesion = inject(Sesion);
+    const router = inject(Router);
+    return sesion.puede(permiso) || router.createUrlTree(['/sistema/inicio']);
+  };
 
 /** Si la API responde 401 (la sesión venció), se lleva a la persona a iniciar sesión de nuevo. */
 export const sesionVencida: HttpInterceptorFn = (peticion, siguiente) => {

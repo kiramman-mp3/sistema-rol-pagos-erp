@@ -2,8 +2,11 @@ import type { AddressInfo } from "node:net";
 
 import { crearApp } from "../src/app.ts";
 import { abrirBase } from "../src/db.ts";
+import type { Base } from "../src/db.ts";
 
 export interface Cliente {
+  /** La base de esta API, para comprobar lo que la API no expone. */
+  db: Base;
   get: (ruta: string) => Promise<Respuesta>;
   post: (ruta: string, cuerpo?: unknown) => Promise<Respuesta>;
   put: (ruta: string, cuerpo?: unknown) => Promise<Respuesta>;
@@ -73,6 +76,7 @@ export async function iniciar(opciones: { sinSesion?: boolean } = {}): Promise<C
   };
 
   const cliente: Cliente = {
+    db,
     get: (ruta) => pedir("GET", ruta),
     post: (ruta, cuerpo = {}) => pedir("POST", ruta, cuerpo),
     put: (ruta, cuerpo = {}) => pedir("PUT", ruta, cuerpo),

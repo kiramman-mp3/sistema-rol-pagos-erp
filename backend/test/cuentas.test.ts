@@ -37,6 +37,7 @@ describe("registro de una empresa", () => {
       assert.equal(r.status, 201);
       assert.deepEqual(r.json, {
         autenticado: true, email: "nomina@empresa.com", empresa: { nombre: REGISTRO.empresa, ruc: REGISTRO.ruc },
+        rol: "administrador", permisos: ["ver", "editar", "validar", "aprobar", "publicar", "pagar", "usuarios"],
       });
       assert.match(r.cabeceras.getSetCookie()[0], /^rol_sesion=.*HttpOnly/i);
       assert.equal((await api.get("/api/empleados")).status, 200);
@@ -107,10 +108,10 @@ describe("datos de la empresa", () => {
   it("se leen y se editan, validando nombre y RUC", async () => {
     const api = await iniciar();
     try {
-      assert.deepEqual((await api.get("/api/cuenta")).json, { nombre: REGISTRO.empresa, ruc: REGISTRO.ruc });
+      assert.deepEqual((await api.get("/api/cuenta")).json, { nombre: REGISTRO.empresa, ruc: REGISTRO.ruc, separarFunciones: false });
       const r = await api.put("/api/cuenta", { empresa: "Nuevo Nombre S.A.", ruc: "1790010937001" });
       assert.equal(r.status, 200);
-      assert.deepEqual(r.json, { nombre: "Nuevo Nombre S.A.", ruc: "1790010937001" });
+      assert.deepEqual(r.json, { nombre: "Nuevo Nombre S.A.", ruc: "1790010937001", separarFunciones: false });
       assert.equal((await api.get("/api/parametros")).json.empresa.nombre, "Nuevo Nombre S.A.");
       assert.equal((await api.put("/api/cuenta", { empresa: "X", ruc: "1" })).status, 400);
       assert.equal((await api.get("/api/cuenta")).json.nombre, "Nuevo Nombre S.A.");

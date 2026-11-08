@@ -7,6 +7,7 @@ import { firstValueFrom } from 'rxjs';
 import { Api, ParametrosLey, valorSeguro } from '../../core/api';
 import type { NovedadEnviada } from '../../core/api';
 import { Avisos } from '../../core/avisos';
+import { Sesion } from '../../core/sesion';
 import { DineroPipe } from '../../core/dinero.pipe';
 import { esInmutable } from '../../core/estado-rol';
 import type { Periodo } from '../../core/modelos';
@@ -132,7 +133,7 @@ const COLUMNAS: { campo: Campo; etiqueta: string; corte?: boolean; extra?: boole
             </p>
             <div class="acciones">
               <a class="boton boton-claro" routerLink="/sistema/roles">Cancelar</a>
-              <button class="boton boton-sol" [disabled]="generando()">
+              <button class="boton boton-sol" [disabled]="generando() || !sesion.puede('editar')">
                 {{ generando() ? 'Generando…' : datos()?.existe ? 'Recalcular el rol' : 'Generar el rol' }}
               </button>
             </div>
@@ -179,6 +180,7 @@ export class NovedadesMes {
 
   private readonly api = inject(Api);
   private readonly avisos = inject(Avisos);
+  protected readonly sesion = inject(Sesion);
   private readonly router = inject(Router);
   private readonly parametros = inject(ParametrosLey).valor;
 
