@@ -1,6 +1,7 @@
 /** Datos de ejemplo: empleados del orgánico funcional y, para el seed, sus roles de pago. */
 import { Decimal } from "decimal.js";
 import { EMPLEADOS_DEMO } from "./config.ts";
+import { darPaso } from "./ciclo.ts";
 import { ejecutar } from "./db.ts";
 import type { Base } from "./db.ts";
 import { empleadosDelPeriodo, guardarRol } from "./rutas/roles.ts";
@@ -75,13 +76,26 @@ async function novedadesDemo(db: Base, cuentaId: number, anio: number, mes: numb
   return novedades;
 }
 
-/** Genera los roles de ejemplo de enero a septiembre. Devuelve cuántos generó. */
+/** Último mes de ejemplo ya pagado; el siguiente (septiembre) queda publicado y falta marcar su pago. */
+export const ULTIMO_MES_PAGADO_DEMO = 8;
+
+const PASOS_DEL_CICLO = ["validar", "aprobar", "publicar", "pagar"] as const;
+
+/**
+ * Genera los roles de ejemplo de enero a septiembre y los lleva por el ciclo como «sistema»:
+ * enero a agosto quedan pagados y septiembre publicado, para que la demostración muestre cada estado.
+ * Devuelve cuántos generó.
+ */
 export async function generarRolesDemo(db: Base, cuentaId: number): Promise<number> {
   let generados = 0;
   for (const mes of MESES_DEMO) {
     const empleados = await empleadosDelPeriodo(db, cuentaId, ANIO_DEMO, mes);
     if (!empleados.length) continue;
-    await guardarRol(db, cuentaId, ANIO_DEMO, mes, empleados, await novedadesDemo(db, cuentaId, ANIO_DEMO, mes));
+    const { rolId } = await guardarRol(
+      db, cuentaId, ANIO_DEMO, mes, empleados, await novedadesDemo(db, cuentaId, ANIO_DEMO, mes),
+    );
+    const pasos = mes <= ULTIMO_MES_PAGADO_DEMO ? PASOS_DEL_CICLO : PASOS_DEL_CICLO.slice(0, 3);
+    for (const paso of pasos) await darPaso(db, cuentaId, null, rolId, paso);
     generados += 1;
   }
   return generados;

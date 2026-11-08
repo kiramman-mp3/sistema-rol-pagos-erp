@@ -25,6 +25,24 @@ describe("seed de ejemplo", () => {
     }
   });
 
+  it("los roles de ejemplo recorren el ciclo: enero a agosto pagados y septiembre publicado", async () => {
+    const db = await abrirBase(":memory:");
+    try {
+      const { cuentaId } = await registrarCuenta(db, REGISTRO);
+      await cargarEmpleadosDemo(db, cuentaId);
+      await generarRolesDemo(db, cuentaId);
+      const estados = await consultar(db, "SELECT mes, estado FROM roles_cabecera ORDER BY mes");
+      assert.deepEqual(estados.map((r) => r.estado), [...Array(8).fill("pagado"), "publicado"]);
+      // Cada paso quedó en la auditoría como hecho por el sistema.
+      const [enero] = await consultar(db, "SELECT id FROM roles_cabecera WHERE mes = 1");
+      const pasos = await consultar(db, "SELECT accion, usuario_id FROM audit_logs WHERE entidad_id = ? ORDER BY id", Number(enero.id));
+      assert.deepEqual(pasos.map((p) => p.accion), ["rol.calculado", "rol.validado", "rol.aprobado", "rol.publicado", "rol.pagado"]);
+      assert.ok(pasos.every((p) => p.usuario_id === null));
+    } finally {
+      await db.cerrar();
+    }
+  });
+
   it("los roles de ejemplo traen horas extras y un neto positivo para cada empleado", async () => {
     const db = await abrirBase(":memory:");
     try {
