@@ -115,11 +115,11 @@ export async function guardarRol(
       nuevoId = await insertar(
         tx,
         `INSERT INTO roles_cabecera (cuenta_id, anio, mes, generado_en, num_empleados, total_ingresos,
-         total_descuentos, total_neto, total_provisiones, total_costo)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         total_descuentos, total_neto, total_provisiones, total_costo, generado_por)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         cuentaId, anio, mes, new Date().toISOString().slice(0, 19), calculos.length,
         total("totalIngresos"), total("totalDescuentos"), total("netoPagar"),
-        total("totalProvisiones"), total("costoEmpleador"),
+        total("totalProvisiones"), total("costoEmpleador"), usuarioId,
       );
     } catch (error) {
       if (esDuplicado(error)) throw errorRolInmutable(anio, mes, "publicado");
@@ -348,9 +348,20 @@ export function rutasRoles(db: Base): Router {
     res.json({ valido: !errores.length, estado: actual.estado, errores, avisos });
   });
 
+  /** Con la separación de funciones activada, quien generó el rol no puede aprobarlo ni publicarlo. */
+  const exigirOtraPersona = async (cuentaId: number, cabecera: Fila, usuarioId: number) => {
+    const cuenta = await uno(db, "SELECT separar_funciones FROM cuentas WHERE id = ?", cuentaId);
+    if (Boolean(cuenta?.separar_funciones) && cabecera.generado_por === usuarioId) {
+      throw new ErrorApi(403, [
+        "Con la separación de funciones activada, quien generó el rol no puede aprobarlo ni publicarlo.",
+      ]);
+    }
+  };
+
   router.post("/:id/aprobar", async (req, res) => {
     const cuentaId = cuentaDe(res);
     const { cabecera } = await cargar(cuentaId, req.params.id);
+    await exigirOtraPersona(cuentaId, cabecera, usuarioDe(res));
     await darPaso(db, cuentaId, usuarioDe(res), Number(cabecera.id), "aprobar");
     await responderCabecera(cuentaId, Number(cabecera.id), res);
   });
@@ -360,6 +371,7 @@ export function rutasRoles(db: Base): Router {
     const cuentaId = cuentaDe(res);
     const { cabecera, detalle } = await cargar(cuentaId, req.params.id);
     exigirPaso(cabecera, "publicar");
+    await exigirOtraPersona(cuentaId, cabecera, usuarioDe(res));
     const { errores } = await revisar(cuentaId, cabecera, detalle);
     if (errores.length) throw new ErrorApi(409, ["No se puede publicar el rol:", ...errores]);
     await darPaso(db, cuentaId, usuarioDe(res), Number(cabecera.id), "publicar");

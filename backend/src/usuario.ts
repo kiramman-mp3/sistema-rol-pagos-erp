@@ -3,7 +3,7 @@
  *
  *   npm --prefix backend run usuario -- --listar
  *       muestra cada cuenta con su empresa, sus usuarios y cuántos empleados tiene
- *   npm --prefix backend run usuario -- <correo> <contraseña> --cuenta <id>
+ *   npm --prefix backend run usuario -- <correo> <contraseña> --cuenta <id> [--rol administrador|aprobador|lector]
  *       agrega un usuario a una cuenta que ya existe (por ejemplo «Empresa anterior», la que
  *       recibió los datos de antes de que hubiera cuentas y no tiene a nadie que entre)
  *
@@ -15,6 +15,7 @@ import { fileURLToPath } from "node:url";
 import { hashClave } from "./auth.ts";
 import { CLAVE_MINIMA, CUENTA_PLANTILLA } from "./cuentas.ts";
 import { abrirBase, consultar, descripcionDeDestino, esDuplicado, insertar } from "./db.ts";
+import { esRolUsuario, ROLES_USUARIO } from "./permisos.ts";
 import { emailValido } from "./validaciones.ts";
 
 const aqui = (ruta: string) => fileURLToPath(new URL(ruta, import.meta.url));
@@ -33,7 +34,7 @@ const salir = (mensaje: string): never => {
 };
 
 if (!argumentos.includes("--listar") && !(posicionales.length === 2 && opcion("--cuenta"))) {
-  salir("Uso:\n  usuario -- --listar\n  usuario -- <correo> <contraseña> --cuenta <id>");
+  salir("Uso:\n  usuario -- --listar\n  usuario -- <correo> <contraseña> --cuenta <id> [--rol administrador|aprobador|lector]");
 }
 
 const db = await abrirBase(destino);
@@ -54,14 +55,16 @@ try {
   } else {
     const [email, clave] = posicionales;
     const cuentaId = Number(opcion("--cuenta"));
+    const rol = opcion("--rol") ?? "administrador";
+    if (!esRolUsuario(rol)) salir(`--rol debe ser uno de: ${ROLES_USUARIO.join(", ")}.`);
     if (!emailValido(email)) salir("El correo no es válido.");
     if (clave.length < CLAVE_MINIMA) salir(`La contraseña debe tener al menos ${CLAVE_MINIMA} caracteres.`);
     if (!Number.isInteger(cuentaId) || cuentaId === CUENTA_PLANTILLA) salir("--cuenta debe ser el id de una cuenta de empresa.");
     if (!(await consultar(db, "SELECT 1 FROM cuentas WHERE id = ?", cuentaId)).length) salir(`No existe la cuenta ${cuentaId}.`);
     try {
       await insertar(
-        db, "INSERT INTO usuarios (cuenta_id, email, clave_hash) VALUES (?, ?, ?)",
-        cuentaId, email.toLowerCase(), await hashClave(clave),
+        db, "INSERT INTO usuarios (cuenta_id, email, clave_hash, rol) VALUES (?, ?, ?, ?)",
+        cuentaId, email.toLowerCase(), await hashClave(clave), rol,
       );
       console.log(`Listo: ${email.toLowerCase()} ya puede entrar a la cuenta ${cuentaId}.`);
     } catch (error) {
