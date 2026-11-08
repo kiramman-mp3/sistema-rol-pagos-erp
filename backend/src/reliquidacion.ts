@@ -148,7 +148,9 @@ export async function reliquidar(
       ajustado[campo] = diferencia;
       if (diferencia !== 0) cambia = true;
     }
-    return cambia ? [{ ...c, resultado: ajustado as unknown as ResultadoRol, empleadoId: base.empleado_id as number | null }] : [];
+    // La traza explica el cálculo completo del mes con los cambios; el detalle guarda solo la diferencia.
+    const traza = { ...c.traza, contexto: { ...c.traza.contexto, ajuste: true } };
+    return cambia ? [{ ...c, traza, resultado: ajustado as unknown as ResultadoRol, empleadoId: base.empleado_id as number | null }] : [];
   });
   if (!diferencias.length) throw new ErrorApi(400, ["Con esos cambios el rol no varía: no hay nada que ajustar."]);
 
