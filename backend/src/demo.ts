@@ -5,7 +5,7 @@ import { darPaso } from "./ciclo.ts";
 import { ejecutar } from "./db.ts";
 import type { Base } from "./db.ts";
 import { empleadosDelPeriodo, guardarRol } from "./rutas/roles.ts";
-import type { Novedad } from "./rutas/roles.ts";
+import type { Novedad } from "./nomina.ts";
 
 /** Inserta los empleados de ejemplo que falten (por cédula) con su puesto y su grado, y deja a cada puesto su responsable. Devuelve cuántos agregó. */
 export async function cargarEmpleadosDemo(db: Base, cuentaId: number): Promise<number> {
