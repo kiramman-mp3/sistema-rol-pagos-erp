@@ -11,7 +11,7 @@ class Vacio {}
 
 const SIN_NOVEDADES = { horasSuplementarias: 0, horasExtraordinarias: 0, horasDescanso: 0, horasNocturnas: 0, comisiones: 0, otrosDescuentos: 0 };
 const PERIODO = {
-  anio: 2026, mes: 10, existe: true,
+  anio: 2026, mes: 10, existe: true, estado: 'calculado',
   empleados: [{
     id: 1, nombres: 'Ana Prueba', cargo: 'Analista', sueldoBase: 1000,
     regimen: 'CODIGO_TRABAJO', regimenAplicado: 'CODIGO_TRABAJO', recibeHorasExtras: true,
@@ -75,7 +75,7 @@ describe('NovedadesMes', () => {
     http.expectOne('/api/parametros').flush({ regimenes: [], meses: [] });
     http.expectOne('/api/roles/periodo/2026/10').flush({
       ...PERIODO,
-      existe: false,
+      existe: false, estado: null,
       empleados: [{ ...PERIODO.empleados[0], recibeHorasExtras: false }],
     });
     await fixture.whenStable();
@@ -91,6 +91,22 @@ describe('NovedadesMes', () => {
     expect(entrada('Comisiones y bonos').disabled).toBe(false);
   });
 
+  it('un mes con el rol publicado no deja digitar novedades', async () => {
+    const fixture = TestBed.createComponent(NovedadesMes);
+    fixture.componentRef.setInput('anio', '2026');
+    fixture.componentRef.setInput('mes', '10');
+    fixture.detectChanges();
+    TestBed.tick();
+    http.expectOne('/api/parametros').flush({ regimenes: [], meses: [] });
+    http.expectOne('/api/roles/periodo/2026/10').flush({ ...PERIODO, estado: 'publicado' });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.textContent).toContain('ya está publicado: no se puede recalcular');
+    expect(el.querySelector('form')).toBeNull();
+  });
+
   it('si el servidor rechaza una novedad, no navega y muestra el motivo', async () => {
     const fixture = TestBed.createComponent(NovedadesMes);
     fixture.componentRef.setInput('anio', '2026');
@@ -98,7 +114,7 @@ describe('NovedadesMes', () => {
     fixture.detectChanges();
     TestBed.tick();
     http.expectOne('/api/parametros').flush({ regimenes: [], meses: [] });
-    http.expectOne('/api/roles/periodo/2026/10').flush({ ...PERIODO, existe: false });
+    http.expectOne('/api/roles/periodo/2026/10').flush({ ...PERIODO, existe: false, estado: null });
     await fixture.whenStable();
     fixture.detectChanges();
 
