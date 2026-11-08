@@ -92,6 +92,20 @@ function baseDePglite(db: PGlite): Base {
 }
 
 /**
+ * TLS hacia el servidor. Siempre se verifica el certificado, salvo que se pida lo contrario:
+ *  - `DATABASE_SSL_CA`: certificado de la autoridad (el texto PEM o la ruta del archivo). Supabase
+ *    firma con su propia CA (`prod-ca-2021.crt`, en Database Settings), que Node no trae de fábrica.
+ *  - `DATABASE_SSL_INSECURE=1`: no verifica. Solo como salida de emergencia: un intermediario
+ *    podría leer y alterar la conexión.
+ */
+export function opcionesSsl(entorno: Record<string, string | undefined>): pg.ClientConfig["ssl"] {
+  if (entorno.DATABASE_SSL_INSECURE === "1") return { rejectUnauthorized: false };
+  const ca = entorno.DATABASE_SSL_CA?.trim();
+  if (!ca) return { rejectUnauthorized: true };
+  return { rejectUnauthorized: true, ca: ca.includes("BEGIN CERTIFICATE") ? ca : readFileSync(ca, "utf8") };
+}
+
+/**
  * Abre la base y deja el esquema al día. `destino` es una URL `postgres://…` (Supabase),
  * `:memory:` (pruebas) o una carpeta donde PGlite guarda los datos.
  */
@@ -100,7 +114,7 @@ export async function abrirBase(destino: string): Promise<Base> {
   if (/^postgres(ql)?:\/\//.test(destino)) {
     db = baseDePg(new pg.Pool({
       connectionString: destino,
-      ssl: { rejectUnauthorized: false }, // Supabase exige TLS
+      ssl: opcionesSsl(process.env),
       max: 3,
     }));
   } else {
