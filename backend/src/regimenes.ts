@@ -67,12 +67,16 @@ function aRegimen(f: Fila): Regimen {
   };
 }
 
-export async function listarRegimenes(db: Base): Promise<Regimen[]> {
-  return (await consultar(db, "SELECT * FROM regimenes ORDER BY CASE codigo WHEN 'CODIGO_TRABAJO' THEN 0 ELSE 1 END, nombre")).map(aRegimen);
+export async function listarRegimenes(db: Base, cuentaId: number): Promise<Regimen[]> {
+  return (await consultar(
+    db,
+    "SELECT * FROM regimenes WHERE cuenta_id = ? ORDER BY CASE codigo WHEN 'CODIGO_TRABAJO' THEN 0 ELSE 1 END, nombre",
+    cuentaId,
+  )).map(aRegimen);
 }
 
-export async function buscarRegimen(db: Base, codigo: string): Promise<Regimen | undefined> {
-  const fila = await uno(db, "SELECT * FROM regimenes WHERE codigo = ?", codigo);
+export async function buscarRegimen(db: Base, cuentaId: number, codigo: string): Promise<Regimen | undefined> {
+  const fila = await uno(db, "SELECT * FROM regimenes WHERE cuenta_id = ? AND codigo = ?", cuentaId, codigo);
   return fila ? aRegimen(fila) : undefined;
 }
 
@@ -148,8 +152,8 @@ export function opcionesDe(
 type Cuerpo = Record<string, unknown>;
 
 /** Valida y guarda los cambios de un régimen; devuelve el régimen actualizado. */
-export async function actualizarRegimen(db: Base, codigo: string, cuerpo: Cuerpo): Promise<Regimen> {
-  const actual = await buscarRegimen(db, codigo);
+export async function actualizarRegimen(db: Base, cuentaId: number, codigo: string, cuerpo: Cuerpo): Promise<Regimen> {
+  const actual = await buscarRegimen(db, cuentaId, codigo);
   if (!actual) throw new ErrorApi(404, ["El régimen no existe."]);
   const errores: string[] = [];
 
@@ -181,7 +185,7 @@ export async function actualizarRegimen(db: Base, codigo: string, cuerpo: Cuerpo
   const notas = texto("notas", 1000);
 
   if (actual.tipo === "mixto") {
-    const destinos = new Map((await listarRegimenes(db)).map((r) => [r.codigo, r]));
+    const destinos = new Map((await listarRegimenes(db, cuentaId)).map((r) => [r.codigo, r]));
     const valido = (campo: string, etiqueta: string) => {
       const d = String(cuerpo[campo] ?? "");
       if (destinos.get(d)?.tipo !== "reglas") errores.push(`${etiqueta}: elige un régimen con reglas propias.`);
@@ -190,9 +194,9 @@ export async function actualizarRegimen(db: Base, codigo: string, cuerpo: Cuerpo
     const servidor = valido("regimenServidor", "Régimen de los servidores");
     const obrero = valido("regimenObrero", "Régimen de los obreros");
     if (errores.length) throw new ErrorApi(400, errores);
-    await ejecutar(db, "UPDATE regimenes SET nombre = ?, regimen_servidor = ?, regimen_obrero = ?, verificado = ?, notas = ? WHERE codigo = ?",
-      nombre, servidor, obrero, verificado, notas, codigo);
-    return (await buscarRegimen(db, codigo))!;
+    await ejecutar(db, "UPDATE regimenes SET nombre = ?, regimen_servidor = ?, regimen_obrero = ?, verificado = ?, notas = ? WHERE cuenta_id = ? AND codigo = ?",
+      nombre, servidor, obrero, verificado, notas, cuentaId, codigo);
+    return (await buscarRegimen(db, cuentaId, codigo))!;
   }
 
   const iessPersonal = rango("iessPersonal", "Aporte personal al IESS", 0, 1);
@@ -214,10 +218,10 @@ export async function actualizarRegimen(db: Base, codigo: string, cuerpo: Cuerpo
        recargo_extraordinarias = ?, recargo_descanso = ?, recargo_nocturno = ?, tope_suplementarias_mes = ?,
        tope_extraordinarias_mes = ?, dias_vacaciones = ?, fondos_reserva = ?, meses_para_fondos = ?,
        aplica_decimo_tercero = ?, aplica_decimo_cuarto = ?, aplica_fondos_reserva = ?, aplica_horas_extras = ?,
-       verificado = ?, notas = ? WHERE codigo = ?`,
+       verificado = ?, notas = ? WHERE cuenta_id = ? AND codigo = ?`,
     nombre, iessPersonal, iessPatronal, recSup, recExt, recDes, recNoc, topeSup, topeExt, dias, fondos, meses,
     bool("aplicaDecimoTercero"), bool("aplicaDecimoCuarto"), bool("aplicaFondosReserva"), bool("aplicaHorasExtras"),
-    verificado, notas, codigo,
+    verificado, notas, cuentaId, codigo,
   );
-  return (await buscarRegimen(db, codigo))!;
+  return (await buscarRegimen(db, cuentaId, codigo))!;
 }

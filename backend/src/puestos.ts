@@ -32,49 +32,58 @@ const aPersona = (f: Fila): Persona => ({ id: Number(f.id), nombres: String(f.no
 
 /** Arma el puesto con lo que ya se consultó: sus ocupantes activos, cuántos empleados lo ocupan y su grado. */
 function armarPuesto(f: Fila, ocupantes: Persona[], empleados: number, referencia: Grado | null): Puesto {
-  const { responsableId, ...base } = filaACamel(f) as unknown as Puesto & { responsableId: number | null };
+  const { responsableId, cuentaId: _cuenta, ...base } = filaACamel(f) as unknown as Puesto & {
+    responsableId: number | null; cuentaId: number;
+  };
   return { ...base, referencia, empleados, responsable: ocupantes.find((o) => o.id === responsableId) ?? null, ocupantes };
 }
 
-/** Todos los puestos con cuatro consultas, sin importar cuántos haya (no una o tres por puesto). */
-export async function listarPuestos(db: Base): Promise<Puesto[]> {
-  const filas = await consultar(db, "SELECT * FROM puestos ORDER BY id");
+/** Todos los puestos de la cuenta con cuatro consultas, sin importar cuántos haya (no una o tres por puesto). */
+export async function listarPuestos(db: Base, cuentaId: number): Promise<Puesto[]> {
+  const filas = await consultar(db, "SELECT * FROM puestos WHERE cuenta_id = ? ORDER BY id", cuentaId);
   const ocupantes = new Map<number, Persona[]>();
   for (const o of await consultar(
-    db, "SELECT id, nombres, puesto_id FROM empleados WHERE puesto_id IS NOT NULL AND activo = 1 ORDER BY nombres",
+    db,
+    "SELECT id, nombres, puesto_id FROM empleados WHERE cuenta_id = ? AND puesto_id IS NOT NULL AND activo = 1 ORDER BY nombres",
+    cuentaId,
   )) {
     const puestoId = Number(o.puesto_id);
     ocupantes.set(puestoId, [...(ocupantes.get(puestoId) ?? []), aPersona(o)]);
   }
   const totales = new Map(
-    (await consultar(db, "SELECT puesto_id, COUNT(*) AS n FROM empleados WHERE puesto_id IS NOT NULL GROUP BY puesto_id"))
-      .map((t) => [Number(t.puesto_id), Number(t.n)]),
+    (await consultar(
+      db,
+      "SELECT puesto_id, COUNT(*) AS n FROM empleados WHERE cuenta_id = ? AND puesto_id IS NOT NULL GROUP BY puesto_id",
+      cuentaId,
+    )).map((t) => [Number(t.puesto_id), Number(t.n)]),
   );
-  const grados = new Map((await listarEscala(db)).map((g) => [g.id, g]));
+  const grados = new Map((await listarEscala(db, cuentaId)).map((g) => [g.id, g]));
   return filas.map((f) => armarPuesto(
     f, ocupantes.get(Number(f.id)) ?? [], totales.get(Number(f.id)) ?? 0,
     f.escala_id === null ? null : (grados.get(Number(f.escala_id)) ?? null),
   ));
 }
 
-export async function buscarPuesto(db: Base, id: number): Promise<Puesto | undefined> {
+export async function buscarPuesto(db: Base, cuentaId: number, id: number): Promise<Puesto | undefined> {
   if (!esId(id)) return undefined; // el id viene del cuerpo de una petición: puede ser NaN o enorme
-  const fila = await uno(db, "SELECT * FROM puestos WHERE id = ?", id);
+  const fila = await uno(db, "SELECT * FROM puestos WHERE cuenta_id = ? AND id = ?", cuentaId, id);
   if (!fila) return undefined;
   const ocupantes = (await consultar(
-    db, "SELECT id, nombres FROM empleados WHERE puesto_id = ? AND activo = 1 ORDER BY nombres", id,
+    db, "SELECT id, nombres FROM empleados WHERE cuenta_id = ? AND puesto_id = ? AND activo = 1 ORDER BY nombres", cuentaId, id,
   )).map(aPersona);
-  const empleados = Number((await uno(db, "SELECT COUNT(*) AS n FROM empleados WHERE puesto_id = ?", id))?.n ?? 0);
-  const referencia = fila.escala_id === null ? null : ((await buscarGrado(db, Number(fila.escala_id))) ?? null);
+  const empleados = Number(
+    (await uno(db, "SELECT COUNT(*) AS n FROM empleados WHERE cuenta_id = ? AND puesto_id = ?", cuentaId, id))?.n ?? 0,
+  );
+  const referencia = fila.escala_id === null ? null : ((await buscarGrado(db, cuentaId, Number(fila.escala_id))) ?? null);
   return armarPuesto(fila, ocupantes, empleados, referencia);
 }
 
 /** ¿Algún puesto del orgánico tiene como referencia un grado de la escala de este régimen? */
-export async function hayPuestosDelRegimen(db: Base, regimen: string): Promise<boolean> {
+export async function hayPuestosDelRegimen(db: Base, cuentaId: number, regimen: string): Promise<boolean> {
   return (await uno(
     db,
-    "SELECT 1 AS ok FROM puestos p JOIN escala_salarial e ON e.id = p.escala_id WHERE e.regimen = ? LIMIT 1",
-    regimen,
+    "SELECT 1 AS ok FROM puestos p JOIN escala_salarial e ON e.id = p.escala_id WHERE p.cuenta_id = ? AND e.regimen = ? LIMIT 1",
+    cuentaId, regimen,
   )) !== undefined;
 }
 
@@ -88,19 +97,19 @@ interface DatosPuesto {
 }
 
 /** ¿`candidato` es `id` o está por debajo de él en el orgánico? Impide ciclos al elegir superior. */
-async function cuelgaDe(db: Base, candidato: number, id: number): Promise<boolean> {
+async function cuelgaDe(db: Base, cuentaId: number, candidato: number, id: number): Promise<boolean> {
   const vistos = new Set<number>();
   let actual: number | null = candidato;
   while (actual !== null && !vistos.has(actual)) {
     if (actual === id) return true;
     vistos.add(actual);
-    actual = ((await uno(db, "SELECT superior_id FROM puestos WHERE id = ?", actual))?.superior_id as number | null) ?? null;
+    actual = ((await uno(db, "SELECT superior_id FROM puestos WHERE cuenta_id = ? AND id = ?", cuentaId, actual))?.superior_id as number | null) ?? null;
   }
   return false;
 }
 
 /** Valida el cuerpo de un puesto; reporta todos los problemas juntos. */
-async function validarPuesto(db: Base, cuerpo: Record<string, unknown>, id?: number): Promise<DatosPuesto> {
+async function validarPuesto(db: Base, cuentaId: number, cuerpo: Record<string, unknown>, id?: number): Promise<DatosPuesto> {
   const errores: string[] = [];
   const texto = (campo: string) => String(cuerpo[campo] ?? "").trim();
   const nombre = texto("nombre");
@@ -116,8 +125,8 @@ async function validarPuesto(db: Base, cuerpo: Record<string, unknown>, id?: num
   let superiorId: number | null = null;
   if (!vacio(cuerpo.superiorId)) {
     superiorId = Number(cuerpo.superiorId);
-    if (!(await buscarPuesto(db, superiorId))) errores.push("El puesto superior no existe.");
-    else if (id !== undefined && (await cuelgaDe(db, superiorId, id))) {
+    if (!(await buscarPuesto(db, cuentaId, superiorId))) errores.push("El puesto superior no existe.");
+    else if (id !== undefined && (await cuelgaDe(db, cuentaId, superiorId, id))) {
       errores.push("Un puesto no puede depender de sí mismo ni de uno que depende de él.");
     }
   }
@@ -127,7 +136,7 @@ async function validarPuesto(db: Base, cuerpo: Record<string, unknown>, id?: num
     errores.push("Elige el nivel de la escala salarial que sirve de referencia.");
   } else {
     escalaId = Number(cuerpo.escalaId);
-    if (!(await buscarGrado(db, escalaId))) errores.push("El nivel de la escala salarial no existe.");
+    if (!(await buscarGrado(db, cuentaId, escalaId))) errores.push("El nivel de la escala salarial no existe.");
   }
 
   if (errores.length) throw new ErrorApi(400, errores);
@@ -137,7 +146,7 @@ async function validarPuesto(db: Base, cuerpo: Record<string, unknown>, id?: num
   };
 }
 
-/** Traduce el choque con UNIQUE(nombre) a un 409 legible. */
+/** Traduce el choque con UNIQUE(cuenta, nombre) a un 409 legible. */
 async function conDuplicados<T>(accion: () => Promise<T>): Promise<T> {
   try {
     return await accion();
@@ -149,56 +158,60 @@ async function conDuplicados<T>(accion: () => Promise<T>): Promise<T> {
   }
 }
 
-export async function crearPuesto(db: Base, cuerpo: Record<string, unknown>): Promise<Puesto> {
-  const d = await validarPuesto(db, cuerpo);
+export async function crearPuesto(db: Base, cuentaId: number, cuerpo: Record<string, unknown>): Promise<Puesto> {
+  const d = await validarPuesto(db, cuentaId, cuerpo);
   const id = await conDuplicados(() =>
     insertar(
       db,
-      "INSERT INTO puestos (nombre, superior_id, funcion, responsabilidad, sector, escala_id) VALUES (?, ?, ?, ?, ?, ?)",
-      d.nombre, d.superiorId, d.funcion, d.responsabilidad, d.sector, d.escalaId,
+      "INSERT INTO puestos (cuenta_id, nombre, superior_id, funcion, responsabilidad, sector, escala_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      cuentaId, d.nombre, d.superiorId, d.funcion, d.responsabilidad, d.sector, d.escalaId,
     ),
   );
-  return (await buscarPuesto(db, id))!;
+  return (await buscarPuesto(db, cuentaId, id))!;
 }
 
-export async function actualizarPuesto(db: Base, id: number, cuerpo: Record<string, unknown>): Promise<Puesto> {
-  if (!(await buscarPuesto(db, id))) throw new ErrorApi(404, ["El puesto no existe."]);
-  const d = await validarPuesto(db, cuerpo, id);
+export async function actualizarPuesto(db: Base, cuentaId: number, id: number, cuerpo: Record<string, unknown>): Promise<Puesto> {
+  if (!(await buscarPuesto(db, cuentaId, id))) throw new ErrorApi(404, ["El puesto no existe."]);
+  const d = await validarPuesto(db, cuentaId, cuerpo, id);
   await conDuplicados(() =>
     ejecutar(
       db,
-      "UPDATE puestos SET nombre = ?, superior_id = ?, funcion = ?, responsabilidad = ?, sector = ?, escala_id = ? WHERE id = ?",
-      d.nombre, d.superiorId, d.funcion, d.responsabilidad, d.sector, d.escalaId, id,
+      "UPDATE puestos SET nombre = ?, superior_id = ?, funcion = ?, responsabilidad = ?, sector = ?, escala_id = ? WHERE cuenta_id = ? AND id = ?",
+      d.nombre, d.superiorId, d.funcion, d.responsabilidad, d.sector, d.escalaId, cuentaId, id,
     ),
   );
-  return (await buscarPuesto(db, id))!;
+  return (await buscarPuesto(db, cuentaId, id))!;
 }
 
-export async function eliminarPuesto(db: Base, id: number) {
-  if (!(await buscarPuesto(db, id))) throw new ErrorApi(404, ["El puesto no existe."]);
-  await ejecutar(db, "DELETE FROM puestos WHERE id = ?", id);
+export async function eliminarPuesto(db: Base, cuentaId: number, id: number) {
+  if (!(await buscarPuesto(db, cuentaId, id))) throw new ErrorApi(404, ["El puesto no existe."]);
+  await ejecutar(db, "DELETE FROM puestos WHERE cuenta_id = ? AND id = ?", cuentaId, id);
 }
 
 /** Pone o quita (`null`) al responsable de un puesto. Solo puede serlo un empleado activo que lo ocupa. */
-export async function asignarResponsable(db: Base, id: number, empleadoId: unknown): Promise<Puesto> {
-  if (!(await buscarPuesto(db, id))) throw new ErrorApi(404, ["El puesto no existe."]);
+export async function asignarResponsable(db: Base, cuentaId: number, id: number, empleadoId: unknown): Promise<Puesto> {
+  if (!(await buscarPuesto(db, cuentaId, id))) throw new ErrorApi(404, ["El puesto no existe."]);
   if (empleadoId === null || empleadoId === undefined || empleadoId === "") {
-    await ejecutar(db, "UPDATE puestos SET responsable_id = NULL WHERE id = ?", id);
+    await ejecutar(db, "UPDATE puestos SET responsable_id = NULL WHERE cuenta_id = ? AND id = ?", cuentaId, id);
   } else {
     const idEmpleado = Number(empleadoId);
     const empleado = esId(idEmpleado)
-      ? await uno(db, "SELECT id, nombres, activo, puesto_id FROM empleados WHERE id = ?", idEmpleado)
+      ? await uno(db, "SELECT id, nombres, activo, puesto_id FROM empleados WHERE cuenta_id = ? AND id = ?", cuentaId, idEmpleado)
       : undefined;
     if (!empleado) throw new ErrorApi(400, ["El empleado no existe."]);
     if (empleado.puesto_id !== id || empleado.activo !== 1) {
       throw new ErrorApi(400, [`${empleado.nombres} no puede ser responsable: debe ser un empleado activo que ocupe este puesto.`]);
     }
-    await ejecutar(db, "UPDATE puestos SET responsable_id = ? WHERE id = ?", empleado.id, id);
+    await ejecutar(db, "UPDATE puestos SET responsable_id = ? WHERE cuenta_id = ? AND id = ?", empleado.id, cuentaId, id);
   }
-  return (await buscarPuesto(db, id))!;
+  return (await buscarPuesto(db, cuentaId, id))!;
 }
 
 /** Quita a un empleado como responsable de cualquier puesto que ya no ocupa (o de todos si queda inactivo). */
-export async function soltarResponsable(db: Base, empleadoId: number, puestoQueOcupa: number | null) {
-  await ejecutar(db, "UPDATE puestos SET responsable_id = NULL WHERE responsable_id = ? AND id IS DISTINCT FROM ?", empleadoId, puestoQueOcupa);
+export async function soltarResponsable(db: Base, cuentaId: number, empleadoId: number, puestoQueOcupa: number | null) {
+  await ejecutar(
+    db,
+    "UPDATE puestos SET responsable_id = NULL WHERE cuenta_id = ? AND responsable_id = ? AND id IS DISTINCT FROM ?",
+    cuentaId, empleadoId, puestoQueOcupa,
+  );
 }

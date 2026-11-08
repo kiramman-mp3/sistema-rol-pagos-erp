@@ -3,7 +3,8 @@ import { Router } from "express";
 import { calcularRol, MODALIDADES } from "../calculos.ts";
 import type { Base } from "../db.ts";
 import type { Modalidad } from "../calculos.ts";
-import { CONTRATOS, EMPRESA, MESES } from "../config.ts";
+import { CONTRATOS, MESES } from "../config.ts";
+import { buscarCuenta } from "../cuentas.ts";
 import {
   aniosConParametros, guardarParametros, parametrosDelAnio, validarTablaIr,
 } from "../parametros.ts";
@@ -11,31 +12,36 @@ import {
   buscarRegimen, CATEGORIAS_LOEP, indexarRegimenes, listarRegimenes, opcionesDe, regimenAplicado, reglasDe,
 } from "../regimenes.ts";
 import { aDecimal, ErrorApi } from "../validaciones.ts";
+import { cuentaDe } from "./auth.ts";
 
 export function rutasParametros(db: Base): Router {
   const router = Router();
 
   /** Reglas de ley de un año (por defecto el actual): el frontend las muestra sin repetirlas. */
   router.get("/parametros", async (req, res) => {
+    const cuentaId = cuentaDe(res);
     const pedido = Number(req.query.anio ?? new Date().getFullYear());
-    const { parametros, exacto } = await parametrosDelAnio(db, Number.isInteger(pedido) ? pedido : new Date().getFullYear());
-    const ct = await buscarRegimen(db, "CODIGO_TRABAJO");
+    const { parametros, exacto } = await parametrosDelAnio(
+      db, cuentaId, Number.isInteger(pedido) ? pedido : new Date().getFullYear(),
+    );
+    const ct = await buscarRegimen(db, cuentaId, "CODIGO_TRABAJO");
+    const cuenta = await buscarCuenta(db, cuentaId);
     res.json({
       anio: parametros.anio,
       anioSolicitado: pedido,
       exacto,
-      anios: await aniosConParametros(db),
+      anios: await aniosConParametros(db, cuentaId),
       sbu: parametros.sbu,
       fuente: parametros.fuente,
       // Resumen del Código del Trabajo; el detalle por régimen está en `regimenes`.
       iessPersonal: ct?.iessPersonal ?? 0,
       iessPatronal: ct?.iessPatronal ?? 0,
       fondosReserva: ct?.fondosReserva ?? 0,
-      regimenes: await listarRegimenes(db),
+      regimenes: await listarRegimenes(db, cuentaId),
       categoriasLoep: CATEGORIAS_LOEP,
       fraccionExentaIr: parametros.tablaIr[0].hasta,
       tablaIr: parametros.tablaIr,
-      empresa: EMPRESA,
+      empresa: { nombre: cuenta?.nombre ?? "", ruc: cuenta?.ruc ?? "" },
       meses: MESES,
       contratos: CONTRATOS,
     });
@@ -43,6 +49,7 @@ export function rutasParametros(db: Base): Router {
 
   /** Crea o actualiza los parámetros de un año (SBU y tabla del IR). */
   router.put("/parametros/:anio", async (req, res) => {
+    const cuentaId = cuentaDe(res);
     const anio = Number(req.params.anio);
     if (!Number.isInteger(anio) || anio < 2000 || anio > 2100) throw new ErrorApi(400, ["Año inválido."]);
     const cuerpo = req.body ?? {};
@@ -56,8 +63,8 @@ export function rutasParametros(db: Base): Router {
     }
     if (errores.length) throw new ErrorApi(400, errores);
     const tabla = validarTablaIr(cuerpo.tablaIr);
-    await guardarParametros(db, anio, sbu, tabla, String(cuerpo.fuente ?? "").slice(0, 300));
-    res.json((await parametrosDelAnio(db, anio)).parametros);
+    await guardarParametros(db, cuentaId, anio, sbu, tabla, String(cuerpo.fuente ?? "").slice(0, 300));
+    res.json((await parametrosDelAnio(db, cuentaId, anio)).parametros);
   });
 
   /**
@@ -65,6 +72,7 @@ export function rutasParametros(db: Base): Router {
    * No guarda nada: sirve para la demostración de la página de inicio.
    */
   router.post("/simulacion", async (req, res) => {
+    const cuentaId = cuentaDe(res);
     const cuerpo = req.body ?? {};
     const errores: string[] = [];
     const campo = (nombre: string, minimo: number, maximo: number, etiqueta: string) => {
@@ -81,7 +89,7 @@ export function rutasParametros(db: Base): Router {
     const horasSuplementarias = campo("horasSuplementarias", 0, 100, "Horas suplementarias");
     const horasExtraordinarias = campo("horasExtraordinarias", 0, 100, "Horas extraordinarias");
     const comisiones = campo("comisiones", 0, 100000, "Comisiones");
-    const regimenes = indexarRegimenes(await listarRegimenes(db));
+    const regimenes = indexarRegimenes(await listarRegimenes(db, cuentaId));
     const aplicado = regimenAplicado(
       regimenes, String(cuerpo.regimen ?? "CODIGO_TRABAJO"), cuerpo.categoriaLoep ? String(cuerpo.categoriaLoep) : null,
     );
@@ -96,7 +104,7 @@ export function rutasParametros(db: Base): Router {
       ...calcularRol({
         sueldoBase, horasSuplementarias, horasExtraordinarias, comisiones,
         fechaIngreso: "2020-01-01", anio: 2026, mes: 10,
-      }, reglasDe((await parametrosDelAnio(db, 2026)).parametros, aplicado), opcionesDe(aplicado, {
+      }, reglasDe((await parametrosDelAnio(db, cuentaId, 2026)).parametros, aplicado), opcionesDe(aplicado, {
         pago_decimo_tercero: decimos, pago_decimo_cuarto: decimos, pago_fondos_reserva: decimos,
       })),
       regimenAplicado: aplicado.nombre,
