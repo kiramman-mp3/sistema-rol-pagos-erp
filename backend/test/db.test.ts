@@ -40,8 +40,8 @@ describe("migraciones del esquema", () => {
     try {
       const nuevo = await uno(
         db,
-        `INSERT INTO puestos (nombre, funcion, responsabilidad, sector, escala_id)
-         VALUES ('Nuevo', 'f', 'r', 's', NULL) RETURNING id`,
+        `INSERT INTO puestos (cuenta_id, nombre, funcion, responsabilidad, sector, escala_id)
+         VALUES (1, 'Nuevo', 'f', 'r', 's', NULL) RETURNING id`,
       );
       assert.equal(nuevo?.id, 6);
       assert.equal((await consultar(db, "SELECT id FROM puestos ORDER BY id")).length, 6);
@@ -120,7 +120,7 @@ describe("destino de la base", () => {
   it("el seed se niega a reiniciar un servidor sin confirmación y no se conecta", () => {
     const r = spawnSync(
       process.execPath,
-      [fileURLToPath(new URL("../src/seed.ts", import.meta.url)), "--reiniciar"],
+      [fileURLToPath(new URL("../src/seed.ts", import.meta.url)), "demo@empresa.com", "--reiniciar"],
       { env: { ...process.env, DATABASE_URL: "postgresql://u:secreto@127.0.0.1:1/x" }, encoding: "utf8" },
     );
     assert.equal(r.status, 1);

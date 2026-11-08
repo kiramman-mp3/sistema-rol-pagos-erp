@@ -1,15 +1,19 @@
 import { Router } from "express";
-import type { CookieOptions, Request, RequestHandler } from "express";
+import type { CookieOptions, Request, RequestHandler, Response } from "express";
 
 import {
-  crearSesion, DURACION_SESION_MS, leerSesion, LimiteIntentos, textosIguales, verificarClave,
+  crearSesion, DURACION_SESION_MS, hashClave, leerSesion, LimiteIntentos, verificarClave,
 } from "../auth.ts";
-import type { ConfigAuth } from "../auth.ts";
+import { buscarCuenta, buscarUsuario, buscarUsuarioPorEmail, CUENTA_PLANTILLA, registrarCuenta } from "../cuentas.ts";
+import type { Base } from "../db.ts";
 import { ErrorApi } from "../validaciones.ts";
 
 const COOKIE = "rol_sesion";
 
-/** Estas rutas son públicas: la página de inicio las usa sin haber entrado. */
+/**
+ * Estas rutas se pueden usar sin haber entrado: la página de inicio las usa. Con sesión responden con
+ * los datos de la cuenta; sin ella, con los de la plantilla de ley.
+ */
 const PUBLICAS: readonly (readonly [metodo: string, ruta: string])[] = [
   ["GET", "/parametros"],
   ["POST", "/simulacion"],
@@ -31,50 +35,100 @@ const opcionesCookie = (req: Request): CookieOptions => ({
   path: "/",
 });
 
-/** Deja pasar solo a quien trae una sesión válida, salvo las rutas públicas. */
-export function exigirSesion(auth: ConfigAuth): RequestHandler {
-  return (req, _res, next) => {
+/** La cuenta de la petición, que `exigirSesion` dejó en `res.locals`. Todo dato se pide con ella. */
+export function cuentaDe(res: Response): number {
+  const id = res.locals.cuentaId;
+  if (typeof id !== "number") throw new ErrorApi(401, ["Inicia sesión para continuar."]);
+  return id;
+}
+
+/**
+ * Deja pasar solo a quien trae una sesión válida y anota su cuenta. Las rutas públicas pasan siempre:
+ * con sesión usan los datos de su cuenta; sin ella, los de la plantilla.
+ */
+export function exigirSesion(secreto: string): RequestHandler {
+  return (req, res, next) => {
     const ruta = req.path.replace(/\/+$/, "").toLowerCase();
-    if (PUBLICAS.some(([metodo, publica]) => metodo === req.method && publica === ruta)) return next();
-    if (!leerSesion(leerCookie(req, COOKIE), auth.secreto)) {
-      return next(new ErrorApi(401, ["Inicia sesión para continuar."]));
+    const sesion = leerSesion(leerCookie(req, COOKIE), secreto);
+    if (sesion) {
+      res.locals.cuentaId = sesion.cuentaId;
+      res.locals.usuarioId = sesion.usuarioId;
+      return next();
     }
-    next();
+    if (PUBLICAS.some(([metodo, publica]) => metodo === req.method && publica === ruta)) {
+      res.locals.cuentaId = CUENTA_PLANTILLA;
+      return next();
+    }
+    next(new ErrorApi(401, ["Inicia sesión para continuar."]));
   };
 }
 
-/** Entrar, salir y saber si hay sesión. Sin `auth`, la API está abierta y `yo` lo dice. */
-export function rutasAuth(auth: ConfigAuth | null): Router {
+/** Registrarse, entrar, salir y saber quién es el usuario de la sesión. */
+export function rutasAuth(db: Base, secreto: string): Router {
   const router = Router();
-  const limite = new LimiteIntentos();
+  const limiteEntrar = new LimiteIntentos();
+  const limiteRegistro = new LimiteIntentos();
+  // Para que entrar con un correo que no existe tarde lo mismo que con uno que sí existe.
+  const hashFalso = hashClave("sin-usuario");
 
-  router.get("/yo", (req, res) => {
-    if (!auth) return void res.json({ autenticado: true, usuario: null, protegida: false });
-    const sesion = leerSesion(leerCookie(req, COOKIE), auth.secreto);
-    res.json({ autenticado: sesion !== null, usuario: sesion?.usuario ?? null, protegida: true });
-  });
+  const abrirSesion = (req: Request, res: Response, usuarioId: number, cuentaId: number) =>
+    res.cookie(COOKIE, crearSesion(usuarioId, cuentaId, secreto), { ...opcionesCookie(req), maxAge: DURACION_SESION_MS });
 
-  router.post("/entrar", async (req, res) => {
-    if (!auth) throw new ErrorApi(400, ["El inicio de sesión no está configurado."]);
-    const ip = req.ip ?? "desconocida";
+  const datosDeSesion = async (usuarioId: number) => {
+    const usuario = await buscarUsuario(db, usuarioId);
+    const cuenta = usuario && (await buscarCuenta(db, usuario.cuentaId));
+    return usuario && cuenta
+      ? { autenticado: true, email: usuario.email, empresa: { nombre: cuenta.nombre, ruc: cuenta.ruc } }
+      : null;
+  };
+
+  const bloqueo = (limite: LimiteIntentos, ip: string, mensaje: string, res: Response) => {
     const espera = limite.segundosDeEspera(ip);
     if (espera > 0) {
       res.set("Retry-After", String(espera));
-      throw new ErrorApi(429, [`Demasiados intentos fallidos. Vuelve a intentar en ${Math.ceil(espera / 60)} minutos.`]);
+      throw new ErrorApi(429, [`${mensaje} Vuelve a intentar en ${Math.ceil(espera / 60)} minutos.`]);
+    }
+  };
+
+  router.get("/yo", async (req, res) => {
+    const sesion = leerSesion(leerCookie(req, COOKIE), secreto);
+    const datos = sesion && (await datosDeSesion(sesion.usuarioId));
+    res.json(datos ?? { autenticado: false, email: null, empresa: null });
+  });
+
+  /** Crea la cuenta de una empresa con su primer usuario y deja la sesión abierta. */
+  router.post("/registro", async (req, res) => {
+    const ip = req.ip ?? "desconocida";
+    bloqueo(limiteRegistro, ip, "Demasiados registros desde esta conexión.", res);
+    const cuerpo = req.body ?? {};
+    try {
+      const { cuentaId, usuarioId } = await registrarCuenta(db, cuerpo);
+      limiteRegistro.fallo(ip);
+      abrirSesion(req, res, usuarioId, cuentaId);
+      res.status(201).json(await datosDeSesion(usuarioId));
+    } catch (error) {
+      // Un correo repetido cuenta como intento: así no sirve para averiguar qué correos están registrados.
+      if (error instanceof ErrorApi && error.status === 409) limiteRegistro.fallo(ip);
+      throw error;
+    }
+  });
+
+  router.post("/entrar", async (req, res) => {
+    const ip = req.ip ?? "desconocida";
+    bloqueo(limiteEntrar, ip, "Demasiados intentos fallidos.", res);
+
+    const texto = (campo: string) => (typeof req.body?.[campo] === "string" ? req.body[campo].slice(0, 254) : "");
+    const usuario = await buscarUsuarioPorEmail(db, texto("email").trim());
+    // La contraseña se verifica siempre, aunque el correo no exista: así no se distingue por el tiempo.
+    const claveCorrecta = await verificarClave(texto("clave"), usuario?.claveHash ?? (await hashFalso));
+    if (!usuario || !claveCorrecta) {
+      limiteEntrar.fallo(ip);
+      throw new ErrorApi(401, ["Correo o contraseña incorrectos."]);
     }
 
-    const texto = (campo: string) => (typeof req.body?.[campo] === "string" ? req.body[campo].slice(0, 200) : "");
-    const usuario = texto("usuario");
-    // La contraseña se verifica siempre, aunque el usuario no exista: así no se distingue por el tiempo.
-    const claveCorrecta = await verificarClave(texto("clave"), auth.claveHash);
-    if (!(claveCorrecta && textosIguales(usuario, auth.usuario))) {
-      limite.fallo(ip);
-      throw new ErrorApi(401, ["Usuario o contraseña incorrectos."]);
-    }
-
-    limite.exito(ip);
-    res.cookie(COOKIE, crearSesion(auth.usuario, auth.secreto), { ...opcionesCookie(req), maxAge: DURACION_SESION_MS });
-    res.json({ autenticado: true, usuario: auth.usuario, protegida: true });
+    limiteEntrar.exito(ip);
+    abrirSesion(req, res, usuario.id, usuario.cuentaId);
+    res.json(await datosDeSesion(usuario.id));
   });
 
   router.post("/salir", (req, res) => {

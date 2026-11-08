@@ -19,6 +19,11 @@ export const routes: Routes = [
     loadComponent: () => import('./entrar/entrar').then((m) => m.Entrar),
   },
   {
+    path: 'registro',
+    title: 'Registrar mi empresa | Rol de pagos Ecuador',
+    loadComponent: () => import('./registro/registro').then((m) => m.Registro),
+  },
+  {
     path: 'sistema',
     canActivate: [sesionActiva],
     loadComponent: () => import('./sistema/shell').then((m) => m.Shell),

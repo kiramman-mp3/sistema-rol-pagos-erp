@@ -24,30 +24,33 @@ describe('Shell', () => {
     http = TestBed.inject(HttpTestingController);
   });
 
-  const abrir = (protegida: boolean) => {
-    TestBed.inject(Sesion).protegida.set(protegida);
+  const abrir = async () => {
     const fixture = TestBed.createComponent(Shell);
     fixture.detectChanges();
+    TestBed.tick();
+    await new Promise((resolver) => setTimeout(resolver, 0)); // el recurso pide las reglas tras un ciclo
     http.match('/api/parametros').forEach((r) => r.flush({ empresa: { nombre: 'Casa Demo', ruc: '1' } }));
+    await new Promise((resolver) => setTimeout(resolver, 0));
+    TestBed.tick();
+    fixture.detectChanges();
     return fixture;
   };
 
-  it('muestra Salir cuando el servidor pide iniciar sesión', () => {
-    const el = abrir(true).nativeElement as HTMLElement;
+  it('muestra el nombre de la empresa y el botón Salir', async () => {
+    const el = (await abrir()).nativeElement as HTMLElement;
+    expect(el.querySelector('.empresa strong')?.textContent).toContain('Casa Demo');
     expect(el.querySelector('.salir')?.textContent).toContain('Salir');
   });
 
-  it('no muestra Salir cuando el servidor trabaja sin inicio de sesión', () => {
-    const el = abrir(false).nativeElement as HTMLElement;
-    expect(el.querySelector('.salir')).toBeNull();
-  });
-
   it('Salir cierra la sesión en el servidor y lleva al inicio de sesión', async () => {
-    const fixture = abrir(true);
+    const fixture = await abrir();
     const sesion = TestBed.inject(Sesion);
     sesion.autenticado.set(true);
     (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>('.salir')!.click();
     http.expectOne('/api/auth/salir').flush(null, { status: 204, statusText: 'No Content' });
+    TestBed.tick();
+    await new Promise((resolver) => setTimeout(resolver, 0));
+    http.match('/api/parametros').forEach((r) => r.flush({})); // al salir se piden de nuevo las reglas públicas
     await fixture.whenStable();
     expect(sesion.autenticado()).toBe(false);
     expect(TestBed.inject(Router).url).toBe('/entrar');

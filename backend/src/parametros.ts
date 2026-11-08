@@ -18,8 +18,9 @@ const aParametros = (fila: Fila): ParametrosAnio => ({
   fuente: String(fila.fuente ?? ""),
 });
 
-export async function aniosConParametros(db: Base): Promise<number[]> {
-  return (await consultar(db, "SELECT anio FROM parametros_anuales ORDER BY anio DESC")).map((f) => Number(f.anio));
+export async function aniosConParametros(db: Base, cuentaId: number): Promise<number[]> {
+  return (await consultar(db, "SELECT anio FROM parametros_anuales WHERE cuenta_id = ? ORDER BY anio DESC", cuentaId))
+    .map((f) => Number(f.anio));
 }
 
 /**
@@ -27,12 +28,12 @@ export async function aniosConParametros(db: Base): Promise<number[]> {
  * avisa (`exacto: false`); si no hay ninguno anterior, se usa el más antiguo.
  */
 export async function parametrosDelAnio(
-  db: Base, anio: number,
+  db: Base, cuentaId: number, anio: number,
 ): Promise<{ parametros: ParametrosAnio; exacto: boolean }> {
   const fila =
-    (await uno(db, "SELECT * FROM parametros_anuales WHERE anio = ?", anio)) ??
-    (await uno(db, "SELECT * FROM parametros_anuales WHERE anio < ? ORDER BY anio DESC LIMIT 1", anio)) ??
-    (await uno(db, "SELECT * FROM parametros_anuales ORDER BY anio LIMIT 1"));
+    (await uno(db, "SELECT * FROM parametros_anuales WHERE cuenta_id = ? AND anio = ?", cuentaId, anio)) ??
+    (await uno(db, "SELECT * FROM parametros_anuales WHERE cuenta_id = ? AND anio < ? ORDER BY anio DESC LIMIT 1", cuentaId, anio)) ??
+    (await uno(db, "SELECT * FROM parametros_anuales WHERE cuenta_id = ? ORDER BY anio LIMIT 1", cuentaId));
   if (!fila) throw new ErrorApi(500, ["No hay parámetros anuales cargados."]);
   const parametros = aParametros(fila);
   return { parametros, exacto: parametros.anio === anio };
@@ -80,12 +81,12 @@ export function validarTablaIr(tabla: unknown): TramoIR[] {
 }
 
 export async function guardarParametros(
-  db: Base, anio: number, sbu: number, tablaIr: TramoIR[], fuente: string,
+  db: Base, cuentaId: number, anio: number, sbu: number, tablaIr: TramoIR[], fuente: string,
 ) {
   await ejecutar(
     db,
-    `INSERT INTO parametros_anuales (anio, sbu, tabla_ir, fuente) VALUES (?, ?, ?, ?)
-     ON CONFLICT(anio) DO UPDATE SET sbu = excluded.sbu, tabla_ir = excluded.tabla_ir, fuente = excluded.fuente`,
-    anio, sbu, JSON.stringify(tablaIr), fuente,
+    `INSERT INTO parametros_anuales (cuenta_id, anio, sbu, tabla_ir, fuente) VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(cuenta_id, anio) DO UPDATE SET sbu = excluded.sbu, tabla_ir = excluded.tabla_ir, fuente = excluded.fuente`,
+    cuentaId, anio, sbu, JSON.stringify(tablaIr), fuente,
   );
 }
