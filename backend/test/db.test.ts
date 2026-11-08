@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { readdirSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 
-import { abrirBase, aPlaceholders, consultar, migrar, uno, versionEsquema } from "../src/db.ts";
+import { abrirBase, aPlaceholders, consultar, migrar, opcionesSsl, uno, versionEsquema } from "../src/db.ts";
 
 const ULTIMA = readdirSync(new URL("../src/migraciones/", import.meta.url))
   .filter((f) => f.endsWith(".sql"))
@@ -75,5 +76,28 @@ describe("placeholders", () => {
       aPlaceholders("SELECT * FROM t WHERE a = ? AND b = '¿?' AND c = ?"),
       "SELECT * FROM t WHERE a = $1 AND b = '¿?' AND c = $2",
     );
+  });
+});
+
+describe("TLS hacia el servidor", () => {
+  const PEM = "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----";
+
+  it("verifica el certificado por defecto", () => {
+    assert.deepEqual(opcionesSsl({}), { rejectUnauthorized: true });
+  });
+
+  it("usa la CA que viene como texto PEM", () => {
+    assert.deepEqual(opcionesSsl({ DATABASE_SSL_CA: PEM }), { rejectUnauthorized: true, ca: PEM });
+  });
+
+  it("lee la CA desde un archivo", () => {
+    const ruta = fileURLToPath(new URL("../src/migraciones/001_base.sql", import.meta.url));
+    const { ca } = opcionesSsl({ DATABASE_SSL_CA: ruta }) as { ca: string };
+    assert.match(ca, /CREATE TABLE/);
+  });
+
+  it("solo deja de verificar con DATABASE_SSL_INSECURE=1", () => {
+    assert.deepEqual(opcionesSsl({ DATABASE_SSL_INSECURE: "1" }), { rejectUnauthorized: false });
+    assert.deepEqual(opcionesSsl({ DATABASE_SSL_INSECURE: "true" }), { rejectUnauthorized: true });
   });
 });
