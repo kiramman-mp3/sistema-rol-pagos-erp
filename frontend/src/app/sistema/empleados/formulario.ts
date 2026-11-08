@@ -149,6 +149,15 @@ const familiaDeNivel = (g: Grado) => g.denominacion.trim().charAt(0).toUpperCase
             <input class="entrada" id="fechaIngreso" type="date" formControlName="fechaIngreso" />
             <span class="ayuda">Si ingresa a mitad de mes, el primer rol paga solo los días trabajados.</span>
           </div>
+          <div class="campo c3">
+            <label for="fechaSalida">Fecha de salida (opcional)</label>
+            <input class="entrada" id="fechaSalida" type="date" formControlName="fechaSalida"
+                   [min]="form.controls.fechaIngreso.value" />
+            <span class="ayuda">
+              Déjala vacía si sigue en la empresa. En el mes de salida se pagan solo los días hasta esa fecha y
+              después ya no entra al rol.
+            </span>
+          </div>
           <fieldset class="campo c6 beneficios">
             <legend>Beneficios de este empleado</legend>
             <p class="ayuda">
@@ -211,6 +220,7 @@ export class FormularioEmpleado {
     recibeHorasExtras: [''],
     sueldoBase: [null as number | null, [Validators.required, Validators.min(0.01)]],
     fechaIngreso: ['', Validators.required],
+    fechaSalida: [''],
   });
 
   protected readonly beneficios = [
@@ -309,6 +319,7 @@ export class FormularioEmpleado {
       if (e) {
         this.form.patchValue({
           ...e,
+          fechaSalida: e.fechaSalida ?? '',
           categoriaLoep: e.categoriaLoep ?? '',
           escalaId: e.escalaId ? String(e.escalaId) : '',
           puestoId: e.puestoId ? String(e.puestoId) : '',
@@ -388,7 +399,7 @@ export class FormularioEmpleado {
     this.avisos.limpiar();
     const {
       categoriaLoep, escalaId, puestoId, pagoDecimoTercero, pagoDecimoCuarto, pagoFondosReserva, recibeHorasExtras,
-      ...resto
+      fechaSalida, ...resto
     } = this.form.getRawValue();
     if (this.esMixto() && !categoriaLoep) {
       this.avisos.error('Elige si el empleado es servidor u obrero.');
@@ -415,6 +426,7 @@ export class FormularioEmpleado {
     }
     const datos = {
       ...resto,
+      fechaSalida: fechaSalida || null,
       categoriaLoep: this.esMixto() ? categoriaLoep : null,
       escalaId: escalaId ? Number(escalaId) : null,
       puestoId: this.usaPuestos() && puestoId ? Number(puestoId) : null,
