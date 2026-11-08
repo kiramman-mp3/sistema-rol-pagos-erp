@@ -4,6 +4,7 @@ import { firstValueFrom } from 'rxjs';
 
 import { Api, ParametrosLey, valorSeguro } from '../../core/api';
 import { Avisos } from '../../core/avisos';
+import { Sesion } from '../../core/sesion';
 import type { Parametros, TramoIr } from '../../core/modelos';
 
 /** Un tramo de la tabla del IR tal como se escribe en pantalla (el porcentaje va en %). */
@@ -47,7 +48,7 @@ interface FilaTramo {
               <input class="entrada num" id="anio-nuevo" type="number" min="2000" max="2100"
                      placeholder="2027" [value]="nuevoAnio()" (input)="nuevoAnio.set($any($event.target).value)" />
             </div>
-            <button class="boton boton-claro" type="button" (click)="agregarAnio()">
+            <button class="boton boton-claro" type="button" [disabled]="!sesion.puede('editar')" (click)="agregarAnio()">
               Crear copiando el año {{ p.anio }}
             </button>
           </div>
@@ -118,7 +119,7 @@ interface FilaTramo {
             </div>
 
             <div class="acciones">
-              <button class="boton" [disabled]="guardando()">Guardar los valores de {{ anioEdicion() }}</button>
+              <button class="boton" [disabled]="guardando() || !sesion.puede('editar')">Guardar los valores de {{ anioEdicion() }}</button>
             </div>
           </form>
         } @else if (recurso.error()) {
@@ -133,6 +134,7 @@ interface FilaTramo {
 export class ParametrosAnuales {
   private readonly api = inject(Api);
   private readonly avisos = inject(Avisos);
+  protected readonly sesion = inject(Sesion);
   private readonly general = inject(ParametrosLey);
 
   /** Año pedido al servidor; null = el vigente. */

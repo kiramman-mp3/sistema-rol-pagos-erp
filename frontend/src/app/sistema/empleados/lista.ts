@@ -5,6 +5,7 @@ import { firstValueFrom } from 'rxjs';
 
 import { Api, ParametrosLey, valorSeguro } from '../../core/api';
 import { Avisos } from '../../core/avisos';
+import { Sesion } from '../../core/sesion';
 import { DineroPipe } from '../../core/dinero.pipe';
 import type { Empleado } from '../../core/modelos';
 
@@ -32,14 +33,16 @@ import type { Empleado } from '../../core/modelos';
         <h1>Empleados</h1>
         <p class="apoyo">Solo los empleados activos entran al rol de cada mes.</p>
       </div>
-      <div class="acciones">
-        @if (!lista().length && !empleados.isLoading()) {
-          <button class="boton boton-claro" type="button" (click)="cargarDemo()">
-            Cargar datos de ejemplo
-          </button>
-        }
-        <a class="boton" routerLink="/sistema/empleados/nuevo">Agregar empleado</a>
-      </div>
+      @if (sesion.puede('editar')) {
+        <div class="acciones">
+          @if (!lista().length && !empleados.isLoading()) {
+            <button class="boton boton-claro" type="button" (click)="cargarDemo()">
+              Cargar datos de ejemplo
+            </button>
+          }
+          <a class="boton" routerLink="/sistema/empleados/nuevo">Agregar empleado</a>
+        </div>
+      }
     </div>
 
     @if (lista().length) {
@@ -103,7 +106,7 @@ import type { Empleado } from '../../core/modelos';
                       <button class="boton-texto boton-peligro" type="button" (click)="eliminar(e)">Sí, eliminar</button>
                       <button class="boton-texto" type="button" (click)="porEliminar.set(null)">No</button>
                     </span>
-                  } @else {
+                  } @else if (sesion.puede('editar')) {
                     <a class="boton-texto" [routerLink]="['/sistema/empleados', e.id, 'editar']">Editar</a>
                     <button class="boton-texto" type="button" (click)="cambiarEstado(e)">
                       {{ e.activo ? 'Desactivar' : 'Activar' }}
@@ -138,6 +141,7 @@ import type { Empleado } from '../../core/modelos';
 export class ListaEmpleados {
   private readonly api = inject(Api);
   private readonly avisos = inject(Avisos);
+  protected readonly sesion = inject(Sesion);
   private readonly parametros = inject(ParametrosLey).valor;
   protected readonly empleados = httpResource<Empleado[]>(() => '/api/empleados');
   private readonly cargados = valorSeguro(this.empleados);
