@@ -246,11 +246,39 @@ export interface ResultadoRol {
   costoEmpleador: number;
 }
 
+/** Un paso del cálculo: qué se calculó, con qué fórmula, con qué números y cuánto dio. */
+export interface PasoCalculo {
+  /** Campo del resultado al que corresponde (`aporteIess`, `netoPagar`...). */
+  clave: keyof ResultadoRol;
+  concepto: string;
+  /** La regla en palabras. */
+  formula: string;
+  /** La misma regla con los números de este empleado. */
+  detalle: string;
+  resultado: number;
+  /** De dónde sale la regla, cuando el código la cita. */
+  fuente?: string;
+}
+
+/** Cómo se llegó a cada valor del rol de un empleado, en el orden en que se calcularon. */
+export interface TrazaCalculo {
+  pasos: PasoCalculo[];
+}
+
 export function calcularRol(
   entrada: EntradaRol,
   reglas: ReglasRol = REGLAS_CT_2026,
   opciones: OpcionesRol = OPCIONES_ACUMULADAS,
 ): ResultadoRol {
+  return calcularRolConTraza(entrada, reglas, opciones).resultado;
+}
+
+/** Igual que `calcularRol`, y además cuenta paso a paso cómo salió cada valor. */
+export function calcularRolConTraza(
+  entrada: EntradaRol,
+  reglas: ReglasRol = REGLAS_CT_2026,
+  opciones: OpcionesRol = OPCIONES_ACUMULADAS,
+): { resultado: ResultadoRol; traza: TrazaCalculo } {
   const sbu = D(reglas.sbu);
   const horasMes = D(reglas.horasMes);
   const sueldoBase = D(entrada.sueldoBase);
@@ -316,7 +344,7 @@ export function calcularRol(
   const patronal = q(aportables.times(reglas.iessPatronal));
   const provisiones = beneficiosAcumulados.plus(vacaciones).plus(patronal);
 
-  return {
+  const resultado: ResultadoRol = {
     diasTrabajados: dias,
     mesesServicio: meses,
     valorHora: q(valorHora).toNumber(),
@@ -351,6 +379,94 @@ export function calcularRol(
     totalProvisiones: provisiones.toNumber(),
     costoEmpleador: totalIngresos.plus(provisiones).toNumber(),
   };
+
+  // --- La traza: las mismas variables de arriba, contadas en el orden en que se calcularon. ---
+  const m = (valor: Decimal) => valor.toFixed(2);
+  const pct = (fraccion: Monto) => `${D(fraccion).times(100).toDecimalPlaces(4).toString()} %`;
+  const pasos: PasoCalculo[] = [];
+  const paso = (clave: keyof ResultadoRol, concepto: string, formula: string, detalle: string, valor: number, fuente?: string) =>
+    pasos.push({ clave, concepto, formula, detalle, resultado: valor, ...(fuente ? { fuente } : {}) });
+
+  paso("diasTrabajados", "Días trabajados",
+    "30, salvo en el mes de ingreso (desde ese día) y en el de salida (hasta ese día); nunca menos de 1",
+    dias < 30 ? `${dias} de 30 días` : "mes completo: 30 días", dias);
+  paso("mesesServicio", "Meses de servicio", "meses calendario entre el mes de ingreso y el período",
+    `${entrada.fechaIngreso} a ${entrada.anio}-${String(entrada.mes).padStart(2, "0")} = ${meses} meses`, meses);
+  paso("valorHora", "Valor de la hora", "sueldo base ÷ horas del mes",
+    `${m(sueldoBase)} ÷ ${horasMes.toString()} = ${m(valorHora)}`, q(valorHora).toNumber());
+  paso("sueldo", "Sueldo del mes", "sueldo base × días trabajados ÷ 30",
+    `${m(sueldoBase)} × ${dias} ÷ 30 = ${m(sueldo)}`, sueldo.toNumber());
+  if (horasSuplementarias.gt(0)) {
+    paso("valorHorasSuplementarias", "Horas suplementarias", "horas × sueldo base × (1 + recargo) ÷ horas del mes",
+      `${horasSuplementarias} × ${m(sueldoBase)} × ${D(1).plus(reglas.recargoSuplementarias)} ÷ ${horasMes} = ${m(vSuplementarias)}`,
+      vSuplementarias.toNumber());
+  }
+  if (horasExtraordinarias.gt(0)) {
+    paso("valorHorasExtraordinarias", "Horas extraordinarias", "horas × sueldo base × (1 + recargo) ÷ horas del mes",
+      `${horasExtraordinarias} × ${m(sueldoBase)} × ${D(1).plus(reglas.recargoExtraordinarias)} ÷ ${horasMes} = ${m(vExtraordinarias)}`,
+      vExtraordinarias.toNumber());
+  }
+  if (horasDescanso.gt(0)) {
+    paso("valorHorasDescanso", "Horas de sábado, domingo y feriado", "horas × sueldo base × (1 + recargo) ÷ horas del mes",
+      `${horasDescanso} × ${m(sueldoBase)} × ${D(1).plus(reglas.recargoDescanso)} ÷ ${horasMes} = ${m(vDescanso)}`,
+      vDescanso.toNumber());
+  }
+  if (horasNocturnas.gt(0)) {
+    paso("valorRecargoNocturno", "Recargo nocturno", "horas × sueldo base × recargo ÷ horas del mes (la hora base ya está en el sueldo)",
+      `${horasNocturnas} × ${m(sueldoBase)} × ${D(reglas.recargoNocturno)} ÷ ${horasMes} = ${m(vNoc)}`, vNoc.toNumber());
+  }
+  if (comisiones.gt(0)) paso("comisiones", "Comisiones", "valor digitado", m(comisiones), comisiones.toNumber());
+  paso("ingresosAportables", "Ingresos aportables", "sueldo + horas con recargo + comisiones: la base del IESS, del impuesto, del décimo tercero y de las vacaciones",
+    `${m(sueldo)} + ${m(vSuplementarias.plus(vExtraordinarias).plus(vDescanso).plus(vNoc))} + ${m(comisiones)} = ${m(aportables)}`,
+    aportables.toNumber());
+
+  const comoSePaga = (modalidad: Modalidad) =>
+    modalidad === "mensual" ? "se paga en el rol" : modalidad === "acumulado" ? "se provisiona" : "no lo recibe";
+  paso("decimoTercero", "Décimo tercero", `ingresos aportables ÷ 12 (${comoSePaga(opciones.decimoTercero)})`,
+    opciones.decimoTercero === "no" ? "no lo recibe: 0.00" : `${m(aportables)} ÷ 12 = ${m(decimoTercero)}`, decimoTercero.toNumber(),
+    "Código del Trabajo arts. 112 y 114: no paga IESS ni impuesto cuando se recibe en el rol");
+  paso("decimoCuarto", "Décimo cuarto", `SBU × días trabajados ÷ 360 (${comoSePaga(opciones.decimoCuarto)})`,
+    opciones.decimoCuarto === "no" ? "no lo recibe: 0.00" : `${m(sbu)} × ${dias} ÷ 360 = ${m(decimoCuarto)}`, decimoCuarto.toNumber());
+  paso("fondosReserva", "Fondos de reserva",
+    `ingresos aportables × ${pct(reglas.fondosReserva)} desde el mes ${reglas.mesesParaFondos} de servicio (${comoSePaga(opciones.fondosReserva)})`,
+    opciones.fondosReserva === "no"
+      ? "no los recibe: 0.00"
+      : meses >= reglas.mesesParaFondos
+        ? `${m(aportables)} × ${pct(reglas.fondosReserva)} = ${m(fondos)}`
+        : `${meses} meses de servicio, aún menos de ${reglas.mesesParaFondos}: 0.00`,
+    fondos.toNumber());
+  paso("beneficiosMensuales", "Beneficios pagados en el rol", "suma de los beneficios con modalidad «mensual»",
+    m(beneficiosMensuales), beneficiosMensuales.toNumber());
+  paso("totalIngresos", "Total de ingresos", "ingresos aportables + beneficios pagados en el rol",
+    `${m(aportables)} + ${m(beneficiosMensuales)} = ${m(totalIngresos)}`, totalIngresos.toNumber());
+
+  paso("aporteIess", "Aporte personal al IESS", "ingresos aportables × tasa personal del régimen",
+    `${m(aportables)} × ${pct(reglas.iessPersonal)} = ${m(iess)}`, iess.toNumber());
+  paso("baseIrAnual", "Base anual del impuesto a la renta", "(ingresos aportables − IESS) × 12",
+    `(${m(aportables)} − ${m(iess)}) × 12 = ${m(ir.baseAnual)}`, ir.baseAnual.toNumber());
+  const tramo = reglas.tablaIr.find((t) => t.hasta === null || ir.baseAnual.lte(t.hasta));
+  paso("irAnual", "Impuesto a la renta anual", "cuota del tramo + (base − inicio del tramo) × porcentaje del tramo",
+    !tramo || ir.baseAnual.lte(0)
+      ? "la base no supera cero: 0.00"
+      : `${m(D(tramo.cuota))} + (${m(ir.baseAnual)} − ${m(D(tramo.desde))}) × ${pct(tramo.porcentaje)} = ${m(ir.irAnual)}`,
+    ir.irAnual.toNumber(), "Tabla del impuesto a la renta del año");
+  paso("impuestoRenta", "Impuesto a la renta del mes", "impuesto anual ÷ 12", `${m(ir.irAnual)} ÷ 12 = ${m(ir.irMensual)}`, ir.irMensual.toNumber());
+  if (otrosDescuentos.gt(0)) paso("otrosDescuentos", "Otros descuentos", "valor digitado", m(otrosDescuentos), otrosDescuentos.toNumber());
+  paso("totalDescuentos", "Total de descuentos", "IESS + impuesto a la renta + otros descuentos",
+    `${m(iess)} + ${m(ir.irMensual)} + ${m(otrosDescuentos)} = ${m(totalDescuentos)}`, totalDescuentos.toNumber());
+  paso("netoPagar", "Neto a pagar", "total de ingresos − total de descuentos",
+    `${m(totalIngresos)} − ${m(totalDescuentos)} = ${m(neto)}`, neto.toNumber());
+
+  paso("vacaciones", "Provisión de vacaciones", "ingresos aportables × días de vacaciones ÷ 360",
+    `${m(aportables)} × ${reglas.diasVacaciones} ÷ 360 = ${m(vacaciones)}`, vacaciones.toNumber(), "Código del Trabajo art. 71");
+  paso("aportePatronal", "Aporte patronal al IESS", "ingresos aportables × tasa patronal del régimen",
+    `${m(aportables)} × ${pct(reglas.iessPatronal)} = ${m(patronal)}`, patronal.toNumber());
+  paso("totalProvisiones", "Total de provisiones", "beneficios acumulados + vacaciones + aporte patronal",
+    `${m(beneficiosAcumulados)} + ${m(vacaciones)} + ${m(patronal)} = ${m(provisiones)}`, provisiones.toNumber());
+  paso("costoEmpleador", "Costo del empleador", "total de ingresos + total de provisiones",
+    `${m(totalIngresos)} + ${m(provisiones)} = ${m(totalIngresos.plus(provisiones))}`, totalIngresos.plus(provisiones).toNumber());
+
+  return { resultado, traza: { pasos } };
 }
 
 /** Horas del mes que un empleado trabajó fuera de su jornada. */
