@@ -113,6 +113,8 @@ a:hover { color: var(--noche); }
 .empresa strong { color: #fff; font-weight: 700; }
 .empresa a { color: #fff; }
 .empresa a:hover { color: var(--sol); }
+.empresa .salir { color: #fff; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .35); }
+.empresa .salir:hover { color: var(--tinta); background: var(--sol); box-shadow: none; }
 
 .pagina { max-width: 1180px; margin: 0 auto; padding: 2rem 1rem 5rem; }
 .encabezado { display: flex; justify-content: space-between; align-items: flex-end; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
