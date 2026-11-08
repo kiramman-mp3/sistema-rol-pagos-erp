@@ -5,6 +5,7 @@ import { provideRouter } from '@angular/router';
 
 import type { Empleado } from '../../core/modelos';
 import { ListaEmpleados } from './lista';
+import { Sesion } from '../../core/sesion';
 
 const ANA: Empleado = {
   id: 1, cedula: '1801234566', nombres: 'Ana Prueba', cargo: 'Analista', sueldoBase: 1000,
@@ -21,6 +22,7 @@ describe('ListaEmpleados', () => {
       providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting()],
     });
     http = TestBed.inject(HttpTestingController);
+    TestBed.inject(Sesion).permisos.set(['ver', 'editar', 'validar', 'aprobar', 'publicar', 'pagar', 'usuarios']);
   });
 
   const cargar = async (empleados: Empleado[]) => {
@@ -39,6 +41,15 @@ describe('ListaEmpleados', () => {
     const filas = el.querySelectorAll('tbody tr');
     expect(filas[0].textContent).not.toContain('Salida');
     expect(filas[1].textContent).toContain('Salida:');
+  });
+
+  it('un lector consulta la lista sin botones para agregar, editar, desactivar ni eliminar', async () => {
+    TestBed.inject(Sesion).permisos.set(['ver']);
+    const { el } = await cargar([ANA]);
+    expect(el.textContent).toContain('Ana Prueba');
+    expect(el.textContent).not.toContain('Agregar empleado');
+    const acciones = [...el.querySelectorAll('tbody button, tbody a')].map((x) => x.textContent?.trim());
+    expect(acciones.some((t) => ['Editar', 'Desactivar', 'Eliminar'].includes(t ?? ''))).toBe(false);
   });
 
   it('lista a los empleados con su sueldo y estado', async () => {

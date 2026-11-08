@@ -245,14 +245,17 @@ describe("protecciones de la base", () => {
   }
 
   it("un rol publicado solo admite pasar a «pagado»", () =>
-    conRolEnero(async (db, id) => {
-      await ejecutar(db, "UPDATE roles_cabecera SET total_neto = 1 WHERE id = ?", id); // calculado: se puede
-      await ejecutar(db, "UPDATE roles_cabecera SET estado = 'publicado' WHERE id = ?", id);
-      await assert.rejects(ejecutar(db, "UPDATE roles_cabecera SET total_neto = 2 WHERE id = ?", id), /no se puede modificar/);
-      await assert.rejects(ejecutar(db, "UPDATE roles_cabecera SET estado = 'calculado' WHERE id = ?", id), /no se puede modificar/);
-      await assert.rejects(ejecutar(db, "UPDATE roles_detalle SET neto_pagar = 1 WHERE rol_id = ?", id), /su detalle no se puede modificar/);
-      await ejecutar(db, "UPDATE roles_cabecera SET estado = 'pagado', pagado_en = '2026-02-01T00:00:00' WHERE id = ?", id);
-      await assert.rejects(ejecutar(db, "UPDATE roles_cabecera SET estado = 'publicado' WHERE id = ?", id), /no se puede modificar/);
+    conRolEnero(async (db) => {
+      // El seed deja enero pagado y septiembre publicado.
+      const [{ id }] = await consultar(db, "SELECT id FROM roles_cabecera WHERE estado = 'publicado'");
+      const [{ id: pagado }] = await consultar(db, "SELECT id FROM roles_cabecera WHERE mes = 1");
+      await assert.rejects(ejecutar(db, "UPDATE roles_cabecera SET total_neto = 2 WHERE id = ?", Number(id)), /no se puede modificar/);
+      await assert.rejects(ejecutar(db, "UPDATE roles_cabecera SET estado = 'calculado' WHERE id = ?", Number(id)), /no se puede modificar/);
+      await assert.rejects(ejecutar(db, "UPDATE roles_detalle SET neto_pagar = 1 WHERE rol_id = ?", Number(id)), /su detalle no se puede modificar/);
+      await ejecutar(db, "UPDATE roles_cabecera SET estado = 'pagado', pagado_en = '2026-10-01T00:00:00' WHERE id = ?", Number(id));
+      // Pagado ya no cambia ni siquiera de estado.
+      await assert.rejects(ejecutar(db, "UPDATE roles_cabecera SET estado = 'publicado' WHERE id = ?", Number(pagado)), /no se puede modificar/);
+      await assert.rejects(ejecutar(db, "UPDATE roles_cabecera SET total_neto = 2 WHERE id = ?", Number(pagado)), /no se puede modificar/);
     }));
 
   it("el registro de auditoría no se modifica ni se borra", () =>

@@ -5,6 +5,7 @@ import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 
 import { NovedadesMes } from './novedades';
+import { Sesion } from '../../core/sesion';
 
 @Component({ template: '' })
 class Vacio {}
@@ -31,6 +32,7 @@ describe('NovedadesMes', () => {
       ],
     });
     http = TestBed.inject(HttpTestingController);
+    TestBed.inject(Sesion).permisos.set(['ver', 'editar', 'validar', 'aprobar', 'publicar', 'pagar', 'usuarios']);
   });
 
   it('avisa que reemplazará el rol, envía lo digitado y abre el rol generado', async () => {

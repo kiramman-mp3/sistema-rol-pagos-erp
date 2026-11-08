@@ -5,7 +5,7 @@ import express from "express";
 import type { ErrorRequestHandler } from "express";
 
 import type { Base } from "./db.ts";
-import { exigirSesion, rutasAuth } from "./rutas/auth.ts";
+import { exigirPermiso, exigirSesion, rutasAuth } from "./rutas/auth.ts";
 import { rutasCuenta } from "./rutas/cuenta.ts";
 import { rutasEmpleados } from "./rutas/empleados.ts";
 import { rutasEscala } from "./rutas/escala.ts";
@@ -13,6 +13,7 @@ import { rutasParametros } from "./rutas/parametros.ts";
 import { rutasPuestos } from "./rutas/puestos.ts";
 import { rutasRegimenes } from "./rutas/regimenes.ts";
 import { rutasRoles } from "./rutas/roles.ts";
+import { rutasUsuarios } from "./rutas/usuarios.ts";
 import { ErrorApi } from "./validaciones.ts";
 
 interface Opciones {
@@ -43,9 +44,11 @@ export function crearApp(db: Base, { carpetaFrontend, secreto, confiarEnProxy = 
   app.use(express.json({ limit: "100kb" }));
 
   app.use("/api/auth", rutasAuth(db, secreto));
-  app.use("/api", exigirSesion(secreto));
+  app.use("/api", exigirSesion(db, secreto));
+  app.use("/api", exigirPermiso);
 
   app.use("/api/cuenta", rutasCuenta(db));
+  app.use("/api/usuarios", rutasUsuarios(db));
 
   app.use("/api/empleados", rutasEmpleados(db));
   app.use("/api/roles", rutasRoles(db));

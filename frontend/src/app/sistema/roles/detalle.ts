@@ -6,6 +6,8 @@ import { firstValueFrom } from 'rxjs';
 
 import { Api, ParametrosLey, valorSeguro } from '../../core/api';
 import { Avisos } from '../../core/avisos';
+import { Sesion } from '../../core/sesion';
+import type { Permiso } from '../../core/sesion';
 import { DineroPipe, sumar } from '../../core/dinero.pipe';
 import { claseEstado, esInmutable, ESTADOS_ROL, etiquetaEstado } from '../../core/estado-rol';
 import { etiquetaRegimen } from '../../core/regimen';
@@ -14,11 +16,11 @@ import type { EventoRol, Modalidad, PlanillaIess, RevisionRol, RolCompleto, RolD
 type Accion = 'validar' | 'aprobar' | 'publicar' | 'pagar';
 
 /** Qué paso sigue en cada estado y cómo se llama su botón. */
-const SIGUIENTE: Record<string, { accion: Accion; texto: string; trabajando: string; hecho: string } | undefined> = {
-  calculado: { accion: 'validar', texto: 'Validar el rol', trabajando: 'Validando…', hecho: 'Rol validado.' },
-  validado: { accion: 'aprobar', texto: 'Aprobar', trabajando: 'Aprobando…', hecho: 'Rol aprobado.' },
-  aprobado: { accion: 'publicar', texto: 'Publicar', trabajando: 'Publicando…', hecho: 'Rol publicado. Ya no se puede recalcular.' },
-  publicado: { accion: 'pagar', texto: 'Marcar como pagado', trabajando: 'Guardando…', hecho: 'Rol marcado como pagado.' },
+const SIGUIENTE: Record<string, { accion: Accion; permiso: Permiso; texto: string; trabajando: string; hecho: string } | undefined> = {
+  calculado: { accion: 'validar', permiso: 'validar', texto: 'Validar el rol', trabajando: 'Validando…', hecho: 'Rol validado.' },
+  validado: { accion: 'aprobar', permiso: 'aprobar', texto: 'Aprobar', trabajando: 'Aprobando…', hecho: 'Rol aprobado.' },
+  aprobado: { accion: 'publicar', permiso: 'publicar', texto: 'Publicar', trabajando: 'Publicando…', hecho: 'Rol publicado. Ya no se puede recalcular.' },
+  publicado: { accion: 'pagar', permiso: 'pagar', texto: 'Marcar como pagado', trabajando: 'Guardando…', hecho: 'Rol marcado como pagado.' },
 };
 
 const TEXTO_EVENTO: Record<string, string> = {
@@ -70,11 +72,13 @@ const TEXTO_EVENTO: Record<string, string> = {
           <a class="boton boton-sol" [href]="'/api/roles/' + r.id + '/csv'" download>Descargar CSV</a>
           <a class="boton boton-claro" [href]="'/api/roles/' + r.id + '/iess.csv'" download>Aportes para el IESS</a>
           <button class="boton boton-claro" type="button" (click)="imprimir()">Imprimir</button>
-          @if (!inmutable()) {
+          @if (!inmutable() && sesion.puede('editar')) {
             <a class="boton boton-claro" [routerLink]="['/sistema/roles/novedades', r.anio, r.mes]">Recalcular</a>
           }
           @if (inmutable()) {
             <span class="apoyo">Publicado: ya no se recalcula ni se elimina.</span>
+          } @else if (!sesion.puede('editar')) {
+            <!-- solo consulta -->
           } @else if (confirmandoEliminar()) {
             <span class="confirmar" role="alert">
               ¿Eliminar el rol de {{ nombreMes() }}?
@@ -110,7 +114,11 @@ const TEXTO_EVENTO: Record<string, string> = {
           </ol>
 
           @if (siguiente(); as paso) {
-            @if (confirmandoPublicar()) {
+            @if (!sesion.puede(paso.permiso)) {
+              <p class="apoyo" style="margin: 0">
+                El siguiente paso es «{{ paso.texto }}»; tu rol no lo permite.
+              </p>
+            } @else if (confirmandoPublicar()) {
               <span class="confirmar" role="alert">
                 ¿Publicar el rol de {{ nombreMes() }}? Ya no se podrá recalcular ni eliminar.
                 <button class="boton-texto boton-peligro" type="button" [disabled]="trabajando()" (click)="avanzar(paso)">Sí, publicar</button>
@@ -410,6 +418,7 @@ export class DetalleRol {
 
   private readonly api = inject(Api);
   private readonly avisos = inject(Avisos);
+  protected readonly sesion = inject(Sesion);
   private readonly router = inject(Router);
   protected readonly parametros = inject(ParametrosLey).valor;
   protected readonly rol = httpResource<RolCompleto>(() => `/api/roles/${this.id()}`);

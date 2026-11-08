@@ -5,6 +5,7 @@ import { firstValueFrom } from 'rxjs';
 import { Api, ParametrosLey, valorSeguro } from '../../core/api';
 import type { DatosGrado } from '../../core/api';
 import { Avisos } from '../../core/avisos';
+import { Sesion } from '../../core/sesion';
 import { DineroPipe } from '../../core/dinero.pipe';
 import type { Grado } from '../../core/modelos';
 
@@ -71,8 +72,10 @@ const VACIO: Borrador = { id: null, grado: '', denominacion: '', rmu: '', rmuMax
                   </td>
                   <td class="apoyo pequeno">{{ g.fuente }}</td>
                   <td class="num">
-                    <button class="boton-texto" type="button" (click)="editar(g)">Editar</button>
-                    <button class="boton-texto boton-peligro" type="button" (click)="eliminar(g)">Eliminar</button>
+                    @if (sesion.puede('editar')) {
+                      <button class="boton-texto" type="button" (click)="editar(g)">Editar</button>
+                      <button class="boton-texto boton-peligro" type="button" (click)="eliminar(g)">Eliminar</button>
+                    }
                   </td>
                 </tr>
               } @empty {
@@ -128,7 +131,7 @@ const VACIO: Borrador = { id: null, grado: '', denominacion: '', rmu: '', rmuMax
                    [value]="borrador().fuente" (input)="cambiar('fuente', $any($event.target).value)" />
           </div>
           <div class="acciones">
-            <button class="boton" [disabled]="guardando()">
+            <button class="boton" [disabled]="guardando() || !sesion.puede('editar')">
               {{ borrador().id === null ? 'Agregar grado' : 'Guardar cambios' }}
             </button>
             @if (borrador().id !== null) {
@@ -143,6 +146,7 @@ const VACIO: Borrador = { id: null, grado: '', denominacion: '', rmu: '', rmuMax
 export class EscalaSalarial {
   private readonly api = inject(Api);
   private readonly avisos = inject(Avisos);
+  protected readonly sesion = inject(Sesion);
   private readonly general = inject(ParametrosLey);
 
   protected readonly escala = httpResource<Grado[]>(() => '/api/escala');

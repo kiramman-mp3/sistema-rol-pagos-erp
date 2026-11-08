@@ -5,9 +5,10 @@ import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 
-import { Sesion, sesionActiva, sesionVencida } from './sesion';
+import { conPermiso, Sesion, sesionActiva, sesionVencida } from './sesion';
 
 const ESTADO = { autenticado: true, email: 'ana@empresa.com', empresa: { nombre: 'Casa Demo', ruc: '1790010937001' } };
+const APROBADOR = { ...ESTADO, rol: 'aprobador', permisos: ['ver', 'validar', 'aprobar', 'publicar'] };
 const SIN_SESION = { autenticado: false, email: null, empresa: null };
 
 @Component({ template: '' })
@@ -39,6 +40,54 @@ describe('sesión', () => {
     TestBed.tick();
     http.match('/api/parametros');
     http.verify();
+  });
+
+  describe('rol y permisos', () => {
+    it('guarda el rol y los permisos que informa el servidor', () => {
+      sesion.entrar('ana@empresa.com', 'x').subscribe();
+      http.expectOne('/api/auth/entrar').flush(APROBADOR);
+      expect(sesion.rol()).toBe('aprobador');
+      expect(sesion.puede('aprobar')).toBe(true);
+      expect(sesion.puede('editar')).toBe(false);
+      expect(sesion.puede('usuarios')).toBe(false);
+    });
+
+    it('sin permisos en la respuesta, no puede nada', () => {
+      sesion.entrar('ana@empresa.com', 'x').subscribe();
+      http.expectOne('/api/auth/entrar').flush(ESTADO);
+      expect(sesion.rol()).toBeNull();
+      expect(sesion.puede('ver')).toBe(false);
+    });
+
+    it('al expirar la sesión, el rol y los permisos se olvidan', () => {
+      sesion.entrar('ana@empresa.com', 'x').subscribe();
+      http.expectOne('/api/auth/entrar').flush(APROBADOR);
+      sesion.expirar();
+      expect(sesion.rol()).toBeNull();
+      expect(sesion.permisos()).toEqual([]);
+    });
+
+    it('conPermiso deja pasar a quien lo tiene y manda al inicio a quien no', async () => {
+      TestBed.resetTestingModule();
+      TestBed.configureTestingModule({
+        providers: [
+          provideRouter([
+            { path: 'sistema/inicio', component: Vacio },
+            { path: 'sistema/usuarios', component: Vacio, canActivate: [conPermiso('usuarios')] },
+          ]),
+          provideHttpClient(),
+          provideHttpClientTesting(),
+        ],
+      });
+      const otra = TestBed.inject(Sesion);
+      const harness = await RouterTestingHarness.create();
+      await harness.navigateByUrl('/sistema/usuarios');
+      expect(TestBed.inject(Router).url).toBe('/sistema/inicio');
+
+      otra.permisos.set(['ver', 'usuarios']);
+      await harness.navigateByUrl('/sistema/usuarios');
+      expect(TestBed.inject(Router).url).toBe('/sistema/usuarios');
+    });
   });
 
   describe('guard', () => {

@@ -12,12 +12,12 @@ export function rutasCuenta(db: Base): Router {
   router.get("/", async (_req, res) => {
     const cuenta = await buscarCuenta(db, cuentaDe(res));
     if (!cuenta) throw new ErrorApi(404, ["La cuenta no existe."]);
-    res.json({ nombre: cuenta.nombre, ruc: cuenta.ruc });
+    res.json({ nombre: cuenta.nombre, ruc: cuenta.ruc, separarFunciones: cuenta.separarFunciones });
   });
 
   router.put("/", async (req, res) => {
     const cuenta = await actualizarEmpresa(db, cuentaDe(res), req.body ?? {});
-    res.json({ nombre: cuenta.nombre, ruc: cuenta.ruc });
+    res.json({ nombre: cuenta.nombre, ruc: cuenta.ruc, separarFunciones: cuenta.separarFunciones });
   });
 
   return router;
