@@ -11,7 +11,7 @@ const SECRETO = "s".repeat(40);
 describe("contraseñas", () => {
   it("la contraseña correcta coincide y las demás no", async () => {
     const hash = await hashClave("clave-segura");
-    assert.match(hash, /^scrypt\$16384\$8\$1\$/);
+    assert.match(hash, /^scrypt\.16384\.8\.1\.[\w-]+\.[\w-]+$/);
     assert.equal(await verificarClave("clave-segura", hash), true);
     assert.equal(await verificarClave("clave-segurA", hash), false);
     assert.equal(await verificarClave("", hash), false);
@@ -22,7 +22,7 @@ describe("contraseñas", () => {
   });
 
   it("un hash mal formado nunca coincide", async () => {
-    for (const malo of ["", "texto", "bcrypt$a$b", "scrypt$0$8$1$AA==$AA==", "scrypt$16384$8$1$$"]) {
+    for (const malo of ["", "texto", "bcrypt.a.b", "scrypt.0.8.1.AA.AA", "scrypt.16384.8.1..", "scrypt$16384$8$1$AA$AA"]) {
       assert.equal(await verificarClave("x", malo), false, malo);
     }
   });
@@ -80,14 +80,14 @@ describe("límite de intentos", () => {
 });
 
 describe("configuración desde el entorno", () => {
-  const completo = { ADMIN_USUARIO: "admin", ADMIN_CLAVE_HASH: "scrypt$x", SESION_SECRETO: SECRETO };
+  const completo = { ADMIN_USUARIO: "admin", ADMIN_CLAVE_HASH: "scrypt.x", SESION_SECRETO: SECRETO };
 
   it("sin variables, la autenticación queda apagada", () => {
     assert.equal(authDeEntorno({}), null);
   });
 
   it("con las tres, devuelve la configuración", () => {
-    assert.deepEqual(authDeEntorno(completo), { usuario: "admin", claveHash: "scrypt$x", secreto: SECRETO });
+    assert.deepEqual(authDeEntorno(completo), { usuario: "admin", claveHash: "scrypt.x", secreto: SECRETO });
   });
 
   it("con alguna sola es un error que dice cuál falta", () => {

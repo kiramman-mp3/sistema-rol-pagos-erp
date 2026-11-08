@@ -17,22 +17,25 @@ const R = 8;
 const P = 1;
 const LARGO_HASH = 64;
 
-/** `scrypt$N$r$p$sal$hash`, con sal y hash en base64: lo que se guarda en `ADMIN_CLAVE_HASH`. */
+/**
+ * `scrypt.N.r.p.sal.hash`, con sal y hash en base64url: lo que se guarda en `ADMIN_CLAVE_HASH`.
+ * Sin `$` ni comillas, para que se pueda pegar en un `export`, un `.env` o el panel de Vercel.
+ */
 export async function hashClave(clave: string): Promise<string> {
   const sal = randomBytes(16);
   const hash = await scryptAsync(clave, sal, LARGO_HASH, { N, r: R, p: P });
-  return ["scrypt", N, R, P, sal.toString("base64"), hash.toString("base64")].join("$");
+  return ["scrypt", N, R, P, sal.toString("base64url"), hash.toString("base64url")].join(".");
 }
 
 /** Compara una contraseña con su hash guardado. Un hash mal formado nunca coincide. */
 export async function verificarClave(clave: string, guardado: string): Promise<boolean> {
-  const [esquema, n, r, p, sal, hash] = guardado.split("$");
+  const [esquema, n, r, p, sal, hash] = guardado.split(".");
   if (esquema !== "scrypt" || !sal || !hash) return false;
   const parametros = { N: Number(n), r: Number(r), p: Number(p) };
   if (!Object.values(parametros).every((v) => Number.isInteger(v) && v > 0)) return false;
-  const esperado = Buffer.from(hash, "base64");
+  const esperado = Buffer.from(hash, "base64url");
   try {
-    const calculado = await scryptAsync(clave, Buffer.from(sal, "base64"), esperado.length, parametros);
+    const calculado = await scryptAsync(clave, Buffer.from(sal, "base64url"), esperado.length, parametros);
     return calculado.length === esperado.length && timingSafeEqual(calculado, esperado);
   } catch {
     return false;
