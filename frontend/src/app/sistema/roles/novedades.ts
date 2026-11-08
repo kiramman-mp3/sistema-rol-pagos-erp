@@ -8,6 +8,7 @@ import { Api, ParametrosLey, valorSeguro } from '../../core/api';
 import type { NovedadEnviada } from '../../core/api';
 import { Avisos } from '../../core/avisos';
 import { DineroPipe } from '../../core/dinero.pipe';
+import { esInmutable } from '../../core/estado-rol';
 import type { Periodo } from '../../core/modelos';
 import { etiquetaRegimen } from '../../core/regimen';
 
@@ -57,13 +58,18 @@ const COLUMNAS: { campo: Campo; etiqueta: string; corte?: boolean; extra?: boole
     </div>
 
     @if (datos(); as p) {
-      @if (p.existe) {
+      @if (p.existe && !bloqueado()) {
         <div class="aviso aviso-warning" role="status">
           Este mes ya tiene un rol generado. Al continuar, se <strong>reemplazará</strong> con los valores de esta pantalla.
         </div>
       }
 
-      @if (!filas().length) {
+      @if (bloqueado()) {
+        <div class="aviso aviso-danger" role="status">
+          El rol de {{ nombreMes() }} {{ anio() }} ya está {{ p.estado }}: no se puede recalcular.
+          <a routerLink="/sistema/roles">Volver a roles de pago</a>
+        </div>
+      } @else if (!filas().length) {
         <div class="hoja">
           <div class="hoja-cuerpo">
             <p>No hay empleados activos para este período.</p>
@@ -182,6 +188,7 @@ export class NovedadesMes {
   protected readonly conNovedades = computed(
     () => this.filas().filter((f) => COLUMNAS.some((c) => Number(f[c.campo]) > 0)).length,
   );
+  protected readonly bloqueado = computed(() => esInmutable(this.datos()?.estado));
   protected readonly nombreMes = computed(() => this.parametros()?.meses[Number(this.mes()) - 1] ?? '');
   protected readonly reglasPropias = computed(
     () => this.parametros()?.regimenes.filter((r) => r.tipo === 'reglas') ?? [],
