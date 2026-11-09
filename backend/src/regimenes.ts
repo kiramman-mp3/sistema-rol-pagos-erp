@@ -146,6 +146,7 @@ export function reglasDe(parametros: ParametrosAnio, regimen: Regimen): ReglasRo
   };
   return {
     sbu: parametros.sbu,
+    canastaBasica: parametros.canastaBasica,
     tablaIr: parametros.tablaIr,
     horasMes: REGLAS_CT_2026.horasMes,
     iessPersonal: dato(regimen.iessPersonal, "aporte personal"),

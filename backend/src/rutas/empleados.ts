@@ -31,11 +31,16 @@ interface DatosEmpleado {
   pagoDecimoCuarto: Modalidad | null;
   pagoFondosReserva: Modalidad | null;
   recibeHorasExtras: boolean | null;
+  /** Gastos personales del año que declaró para el impuesto a la renta */
+  gastosPersonales: number;
+  /** 0 a 5 */
+  cargasFamiliares: number;
+  enfermedadCatastrofica: boolean;
 }
 
 /** Reglas de negocio del formulario. Devuelve los datos limpios y los avisos no bloqueantes. */
 async function validar(
-  db: Base, cuentaId: number, cuerpo: Record<string, unknown>,
+  db: Base, cuentaId: number, cuerpo: Record<string, unknown>, actual?: Fila,
 ): Promise<{ datos: DatosEmpleado; avisos: string[] }> {
   const texto = (campo: string) => String(cuerpo[campo] ?? "").trim();
   const errores: string[] = [];
@@ -137,6 +142,30 @@ async function validar(
   }
   const recibeHorasExtras = typeof horas === "boolean" ? horas : null;
 
+  // Gastos personales: si el cuerpo no los trae, se conserva lo que el empleado ya tenía (0 si es nuevo).
+  const falta = (campo: string) => cuerpo[campo] === undefined || cuerpo[campo] === null || cuerpo[campo] === "";
+  let gastosPersonales = Number(actual?.gastos_personales ?? 0);
+  if (!falta("gastosPersonales")) {
+    try {
+      gastosPersonales = aDecimal(cuerpo.gastosPersonales, 0).toNumber();
+      if (gastosPersonales > 10_000_000) errores.push("Gastos personales: el valor es demasiado grande.");
+    } catch (error) {
+      errores.push(`Gastos personales: ${(error as Error).message}.`);
+    }
+  }
+  let cargasFamiliares = Number(actual?.cargas_familiares ?? 0);
+  if (!falta("cargasFamiliares")) {
+    const cargas = Number(cuerpo.cargasFamiliares);
+    if (!Number.isInteger(cargas) || cargas < 0 || cargas > 5) errores.push("Cargas familiares: un número entero de 0 a 5.");
+    else cargasFamiliares = cargas;
+  }
+  let enfermedadCatastrofica = Number(actual?.enfermedad_catastrofica ?? 0) === 1;
+  if (cuerpo.enfermedadCatastrofica !== undefined) {
+    if (typeof cuerpo.enfermedadCatastrofica !== "boolean") {
+      errores.push("Enfermedad catastrófica: indica si aplica (sí o no).");
+    } else enfermedadCatastrofica = cuerpo.enfermedadCatastrofica;
+  }
+
   let sueldoBase = 0;
   try {
     sueldoBase = aDecimal(cuerpo.sueldoBase).toNumber();
@@ -170,6 +199,7 @@ async function validar(
     datos: {
       cedula, nombres, cargo, sueldoBase, fechaIngreso, fechaSalida, tipoContrato, regimen, categoriaLoep, escalaId, puestoId,
       pagoDecimoTercero, pagoDecimoCuarto, pagoFondosReserva, recibeHorasExtras,
+      gastosPersonales, cargasFamiliares, enfermedadCatastrofica,
     },
     avisos,
   };
@@ -182,6 +212,7 @@ const aApi = (fila: Fila) => ({
   ...filaACamel(fila),
   activo: fila.activo === 1,
   recibeHorasExtras: fila.recibe_horas_extras === null ? null : fila.recibe_horas_extras === 1,
+  enfermedadCatastrofica: fila.enfermedad_catastrofica === 1,
 });
 
 export function rutasEmpleados(db: Base): Router {
@@ -225,11 +256,13 @@ export function rutasEmpleados(db: Base): Router {
         db,
         `INSERT INTO empleados (cuenta_id, cedula, nombres, cargo, sueldo_base, fecha_ingreso, fecha_salida, tipo_contrato,
          regimen, categoria_loep, escala_id, puesto_id, pago_decimo_tercero, pago_decimo_cuarto,
-         pago_fondos_reserva, recibe_horas_extras) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         pago_fondos_reserva, recibe_horas_extras, gastos_personales, cargas_familiares, enfermedad_catastrofica)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         cuentaId, datos.cedula, datos.nombres, datos.cargo, datos.sueldoBase, datos.fechaIngreso, datos.fechaSalida,
         datos.tipoContrato, datos.regimen, datos.categoriaLoep, datos.escalaId, datos.puestoId,
         datos.pagoDecimoTercero, datos.pagoDecimoCuarto, datos.pagoFondosReserva,
         datos.recibeHorasExtras === null ? null : Number(datos.recibeHorasExtras),
+        datos.gastosPersonales, datos.cargasFamiliares, Number(datos.enfermedadCatastrofica),
       ),
     );
     res.status(201).json({ ...aApi(await buscar(cuentaId, String(id))), avisos });
@@ -238,18 +271,20 @@ export function rutasEmpleados(db: Base): Router {
   router.put("/:id", async (req, res) => {
     const cuentaId = cuentaDe(res);
     const actual = await buscar(cuentaId, req.params.id);
-    const { datos, avisos } = await validar(db, cuentaId, req.body ?? {});
+    const { datos, avisos } = await validar(db, cuentaId, req.body ?? {}, actual);
     await guardar(async () => {
       await ejecutar(
         db,
         `UPDATE empleados SET cedula = ?, nombres = ?, cargo = ?, sueldo_base = ?,
          fecha_ingreso = ?, fecha_salida = ?, tipo_contrato = ?, regimen = ?, categoria_loep = ?, escala_id = ?, puesto_id = ?,
-         pago_decimo_tercero = ?, pago_decimo_cuarto = ?, pago_fondos_reserva = ?, recibe_horas_extras = ?
+         pago_decimo_tercero = ?, pago_decimo_cuarto = ?, pago_fondos_reserva = ?, recibe_horas_extras = ?,
+         gastos_personales = ?, cargas_familiares = ?, enfermedad_catastrofica = ?
          WHERE cuenta_id = ? AND id = ?`,
         datos.cedula, datos.nombres, datos.cargo, datos.sueldoBase, datos.fechaIngreso, datos.fechaSalida,
         datos.tipoContrato, datos.regimen, datos.categoriaLoep, datos.escalaId, datos.puestoId,
         datos.pagoDecimoTercero, datos.pagoDecimoCuarto, datos.pagoFondosReserva,
-        datos.recibeHorasExtras === null ? null : Number(datos.recibeHorasExtras), cuentaId, actual.id,
+        datos.recibeHorasExtras === null ? null : Number(datos.recibeHorasExtras),
+        datos.gastosPersonales, datos.cargasFamiliares, Number(datos.enfermedadCatastrofica), cuentaId, actual.id,
       );
       await soltarResponsable(db, cuentaId, Number(actual.id), datos.puestoId); // si cambió de puesto, ya no lo encabeza
     });

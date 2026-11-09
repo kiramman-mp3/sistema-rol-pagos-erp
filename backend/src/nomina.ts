@@ -78,6 +78,9 @@ export async function calcularMes(
       horasNocturnas: n?.horasNocturnas ?? cero,
       comisiones: n?.comisiones ?? cero,
       otrosDescuentos: n?.otrosDescuentos ?? cero,
+      gastosPersonales: Number(e.gastos_personales ?? 0),
+      cargasFamiliares: Number(e.cargas_familiares ?? 0),
+      enfermedadCatastrofica: Number(e.enfermedad_catastrofica ?? 0) === 1,
     }, reglas, opciones);
     const contexto: ContextoCalculo = {
       regimen: aplicado.codigo, vigenteDesde: aplicado.vigenteDesde, anioParametros: parametros.anio, sbu: parametros.sbu,
@@ -92,6 +95,10 @@ export async function calcularMes(
   });
   const sinParametros = avisoDeAnioSinParametros(anio, parametros);
   if (sinParametros) avisos.unshift(sinParametros);
+  // Quien declaró gastos personales no recibe la rebaja si el año no tiene canasta básica definida.
+  if (parametros.canastaBasica <= 0 && entradas.some(({ e }) => Number(e.gastos_personales ?? 0) > 0)) {
+    avisos.unshift(`Hay empleados con gastos personales, pero los parámetros de ${parametros.anio} no tienen canasta básica: no se aplicó la rebaja del impuesto a la renta.`);
+  }
 
   return { calculos: reglasYOpciones.map(({ e, resultado, n, aplicado, traza }) => ({ e, resultado, n, aplicado, traza })), avisos };
 }
@@ -112,6 +119,9 @@ export async function insertarDetalle(
     regimen: e.regimen, regimen_aplicado: aplicado.codigo,
     tasa_iess_personal: aplicado.iessPersonal, tasa_iess_patronal: aplicado.iessPatronal,
     traza: c.traza ? JSON.stringify(c.traza) : null,
+    // Lo que el empleado declaró, como se usó en este rol.
+    gastos_personales: e.gastos_personales ?? 0, cargas_familiares: e.cargas_familiares ?? 0,
+    enfermedad_catastrofica: e.enfermedad_catastrofica ?? 0,
     ...Object.fromEntries(Object.entries(resultado).map(([k, v]) => [aSnake(k), v])),
   };
   const columnas = Object.keys(fila);

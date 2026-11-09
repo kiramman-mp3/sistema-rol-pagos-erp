@@ -32,6 +32,7 @@ export function rutasParametros(db: Base): Router {
       exacto,
       anios: await aniosConParametros(db, cuentaId),
       sbu: parametros.sbu,
+      canastaBasica: parametros.canastaBasica,
       fuente: parametros.fuente,
       // Resumen del Código del Trabajo; el detalle por régimen está en `regimenes`.
       iessPersonal: ct?.iessPersonal ?? 0,
@@ -61,9 +62,18 @@ export function rutasParametros(db: Base): Router {
     } catch (error) {
       errores.push(`SBU: ${(error as Error).message}.`);
     }
+    // La canasta básica es opcional: sin ella se conserva la del año.
+    let canastaBasica: number | undefined;
+    if (cuerpo.canastaBasica !== undefined && cuerpo.canastaBasica !== null && cuerpo.canastaBasica !== "") {
+      try {
+        canastaBasica = aDecimal(cuerpo.canastaBasica, 0).toNumber();
+      } catch (error) {
+        errores.push(`Canasta básica: ${(error as Error).message}.`);
+      }
+    }
     if (errores.length) throw new ErrorApi(400, errores);
     const tabla = validarTablaIr(cuerpo.tablaIr);
-    await guardarParametros(db, cuentaId, anio, sbu, tabla, String(cuerpo.fuente ?? "").slice(0, 300));
+    await guardarParametros(db, cuentaId, anio, sbu, tabla, String(cuerpo.fuente ?? "").slice(0, 300), canastaBasica);
     res.json((await parametrosDelAnio(db, cuentaId, anio)).parametros);
   });
 
