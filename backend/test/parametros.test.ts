@@ -84,7 +84,7 @@ describe("parámetros anuales", () => {
 });
 
 describe("aviso de año sin parámetros", () => {
-  const usados = { anio: 2026, sbu: 482, tablaIr: [], fuente: "" };
+  const usados = { anio: 2026, sbu: 482, tablaIr: [], fuente: "", canastaBasica: 0 };
 
   it("no avisa cuando se usan los parámetros del año pedido", () => {
     assert.equal(avisoDeAnioSinParametros(2026, usados), null);
