@@ -28,6 +28,9 @@ const PASO_DEL_CICLO = /^\/roles\/[^/]+\/(validar|aprobar|publicar|pagar)$/;
 export function permisoQueExige(metodo: string, ruta: string): Permiso {
   const limpia = ruta.replace(/\/+$/, "").toLowerCase();
   if (limpia === "/usuarios" || limpia.startsWith("/usuarios/")) return "usuarios";
+  // Llevarse todos los datos de la empresa o borrarla es cosa del administrador.
+  if (metodo === "GET" && limpia === "/cuenta/exportar") return "usuarios";
+  if (metodo === "DELETE" && limpia === "/cuenta") return "usuarios";
   if (metodo === "GET" || metodo === "HEAD" || metodo === "OPTIONS") return "ver";
   // El simulador de la página de inicio no cambia nada.
   if (metodo === "POST" && limpia === "/simulacion") return "ver";
