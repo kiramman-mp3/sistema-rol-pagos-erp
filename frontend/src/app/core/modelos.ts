@@ -24,6 +24,12 @@ export interface Empleado {
   pagoFondosReserva: Modalidad | null;
   /** null = lo que diga el régimen */
   recibeHorasExtras: boolean | null;
+  /** Gastos personales del año que declaró para el impuesto a la renta (USD) */
+  gastosPersonales: number;
+  /** 0 a 5 */
+  cargasFamiliares: number;
+  /** Enfermedad catastrófica, rara o huérfana del empleado o de una carga */
+  enfermedadCatastrofica: boolean;
   activo: boolean;
   /** Solo viene al crear o editar: avisos que no bloquean el guardado. */
   avisos?: string[];
@@ -97,6 +103,8 @@ export interface Parametros {
   anios: number[];
   fuente: string;
   sbu: number;
+  /** Canasta familiar básica de enero (INEC): topa los gastos personales. 0 = sin definir, no hay rebaja */
+  canastaBasica: number;
   iessPersonal: number;
   iessPatronal: number;
   fondosReserva: number;

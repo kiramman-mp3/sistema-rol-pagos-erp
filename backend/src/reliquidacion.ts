@@ -129,6 +129,8 @@ export async function reliquidar(
         fecha_salida: actual?.fecha_salida ?? null,
         pago_decimo_tercero: v.decimo_tercero_modalidad, pago_decimo_cuarto: v.decimo_cuarto_modalidad,
         pago_fondos_reserva: v.fondos_reserva_modalidad,
+        gastos_personales: v.gastos_personales, cargas_familiares: v.cargas_familiares,
+        enfermedad_catastrofica: v.enfermedad_catastrofica,
         recibe_horas_extras: pagaExtras ? 1 : (actual?.recibe_horas_extras ?? null),
       } as Fila,
       aplicadoCodigo: String(v.regimen_aplicado),
