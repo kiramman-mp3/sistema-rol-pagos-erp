@@ -12,7 +12,7 @@ export interface Cliente {
   post: (ruta: string, cuerpo?: unknown) => Promise<Respuesta>;
   put: (ruta: string, cuerpo?: unknown) => Promise<Respuesta>;
   patch: (ruta: string, cuerpo?: unknown) => Promise<Respuesta>;
-  del: (ruta: string) => Promise<Respuesta>;
+  del: (ruta: string, cuerpo?: unknown) => Promise<Respuesta>;
   /** Desde aquí, todas las peticiones llevan esta cookie (`null` la quita). */
   usarCookie: (cookie: string | null) => void;
   /** Registra otra empresa y, si sale bien, deja la sesión abierta en ella. */
@@ -94,7 +94,7 @@ export async function iniciar(opciones: { sinSesion?: boolean } = {}): Promise<C
     post: (ruta, cuerpo = {}) => pedir("POST", ruta, cuerpo),
     put: (ruta, cuerpo = {}) => pedir("PUT", ruta, cuerpo),
     patch: (ruta, cuerpo) => pedir("PATCH", ruta, cuerpo),
-    del: (ruta) => pedir("DELETE", ruta),
+    del: (ruta, cuerpo) => pedir("DELETE", ruta, cuerpo),
     usarCookie: (cookie) => {
       cookieActual = cookie;
     },
