@@ -171,6 +171,68 @@ export const GRUPOS_FUENTES: GrupoFuentes[] = [
     ],
   },
   {
+    id: 'gastos',
+    titulo: 'Rebaja por gastos personales (por confirmar)',
+    descripcion:
+      'Rebaja del 18 % de los gastos personales, con tope por canastas básicas según las cargas familiares (canasta de enero de 2026: $821,80). No se encontró el artículo ni la resolución que la fundamentan.',
+    fuentes: [
+      {
+        titulo: 'Primicias: guía para pagar el impuesto a la renta 2026, gastos personales y cargas familiares',
+        url: 'https://www.primicias.ec/economia/guia-pago-impuesto-renta-2026-gastos-personales-cargas-familiares-contribuyentes-sri-113193/',
+        uso: 'Tasa del 18 % y topes en canastas según las cargas familiares.',
+        leida: true,
+      },
+      {
+        titulo: 'Primicias: tabla de descuento por gastos personales y canastas básicas',
+        url: 'https://www.primicias.ec/economia/tabla-decuento-gastos-personales-impuesto-renta-canastas-basicas-sri-115251/',
+        uso: 'Canasta de $821,80 y el tope de cada número de cargas.',
+        leida: true,
+      },
+      {
+        titulo: 'Siigo: gastos personales en Ecuador',
+        url: 'https://www.siigo.com/ec/blog/obligaciones-fiscales/gastos-personales-ecuador/',
+        uso: 'Categorías de gastos y enfermedades catastróficas (100 canastas).',
+        leida: true,
+      },
+      {
+        titulo: 'Bloomberg Línea: cómo aplicar la rebaja por gastos personales en 2026',
+        url: 'https://www.bloomberglinea.com/latinoamerica/ecuador/paso-a-paso-como-aplicar-la-rebaja-del-impuesto-a-la-renta-por-gastos-personales-en-2026/',
+        uso: 'Paso a paso de la rebaja. Sus cifras son las del ejercicio 2025; no se usaron para 2026.',
+        leida: true,
+      },
+      {
+        titulo: 'Primicias: formulario de proyección de gastos personales del SRI',
+        url: 'https://www.primicias.ec/economia/sri-formulario-proyeccion-gastos-personales-impuesto-renta-descarga-115519/',
+        uso: 'Apareció al buscar el formulario de proyección; no se abrió.',
+        leida: false,
+      },
+      {
+        titulo: 'Primicias: el SRI abre el formulario de gastos personales en junio',
+        url: 'https://www.primicias.ec/economia/sri-gastos-personales-formulario-junio-pago-impuesto-renta-ecuador-124214/',
+        uso: 'Apareció al buscar la actualización de la proyección; no se abrió.',
+        leida: false,
+      },
+      {
+        titulo: 'El Diario: gastos personales y deducciones del SRI en 2026',
+        url: 'https://www.eldiario.ec/centro/gastos-personales-sri-deducciones-2026-06022026/',
+        uso: 'Apareció al buscar las deducciones; no se abrió.',
+        leida: false,
+      },
+      {
+        titulo: 'El Diario: cómo aprovechar los gastos personales para reducir el pago del impuesto',
+        url: 'https://www.eldiario.ec/centro/impuesto-a-la-renta-como-aprovechar-los-gastos-personales-para-reducir-el-pago-08022026/',
+        uso: 'Apareció al buscar las deducciones; no se abrió.',
+        leida: false,
+      },
+      {
+        titulo: 'Vistazo: el SRI habilita el formulario de proyección de gastos personales',
+        url: 'https://www.vistazo.com/actualidad/nacional/2026-02-06-sri-formulario-proyeccion-gastos-personales-reducir-impuesto-renta-IA10670833',
+        uso: 'Apareció al buscar el formulario de proyección; no se abrió.',
+        leida: false,
+      },
+    ],
+  },
+  {
     id: 'iess-publico',
     titulo: 'Aporte al IESS del sector público (por confirmar)',
     descripcion:
