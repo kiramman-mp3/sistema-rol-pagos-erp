@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 
 import { Avisos } from '../core/avisos';
@@ -41,6 +41,24 @@ import { Sesion } from '../core/sesion';
           {{ sesion.puede('aprobar') ? 'puedes consultar, validar, aprobar y publicar roles, pero no cambiar datos.' : 'solo puedes consultar.' }}
         </div>
       }
+      @if (!sesion.emailVerificado()) {
+        <div class="aviso aviso-info no-imprimir" role="status">
+          Aún no verificas tu correo{{ sesion.email() ? ' (' + sesion.email() + ')' : '' }}.
+          @switch (reenvio()) {
+            @case ('enviado') {
+              Te enviamos un enlace nuevo.
+            }
+            @case ('error') {
+              No se pudo enviar el enlace; inténtalo más tarde.
+            }
+            @default {
+              <button type="button" class="boton-texto" [disabled]="reenvio() === 'enviando'" (click)="reenviar()">
+                Reenviar el enlace
+              </button>
+            }
+          }
+        </div>
+      }
       @for (aviso of avisos.lista(); track aviso.id) {
         <div class="aviso aviso-{{ aviso.tipo }} no-imprimir" role="status">{{ aviso.texto }}</div>
       }
@@ -53,6 +71,16 @@ export class Shell {
   protected readonly parametros = inject(ParametrosLey).valor;
   protected readonly sesion = inject(Sesion);
   private readonly router = inject(Router);
+
+  protected readonly reenvio = signal<'' | 'enviando' | 'enviado' | 'error'>('');
+
+  protected reenviar() {
+    this.reenvio.set('enviando');
+    this.sesion.reenviarVerificacion().subscribe({
+      next: () => this.reenvio.set('enviado'),
+      error: () => this.reenvio.set('error'),
+    });
+  }
 
   protected salir() {
     this.sesion.salir().subscribe(() => void this.router.navigateByUrl('/entrar'));

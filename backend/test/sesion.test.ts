@@ -60,7 +60,7 @@ describe("API con cuentas y sesión", () => {
     api.usarCookie(null);
     const r = await api.get("/api/auth/yo");
     assert.equal(r.status, 200);
-    assert.deepEqual(r.json, { autenticado: false, email: null, empresa: null, rol: null, permisos: [] });
+    assert.deepEqual(r.json, { autenticado: false, email: null, empresa: null, rol: null, permisos: [], emailVerificado: false });
   });
 
   it("rechaza correo o contraseña incorrectos con el mismo mensaje", async () => {
@@ -87,7 +87,7 @@ describe("API con cuentas y sesión", () => {
     assert.equal(r.status, 200);
     assert.deepEqual(r.json, {
       autenticado: true, email: REGISTRO.email, empresa: { nombre: REGISTRO.empresa, ruc: REGISTRO.ruc },
-      rol: "administrador", permisos: ["ver", "editar", "validar", "aprobar", "publicar", "pagar", "usuarios"],
+      rol: "administrador", permisos: ["ver", "editar", "validar", "aprobar", "publicar", "pagar", "usuarios"], emailVerificado: false,
     });
     const cookie = r.cabeceras.getSetCookie()[0];
     assert.match(cookie, /^rol_sesion=/);

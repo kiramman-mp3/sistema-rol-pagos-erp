@@ -19,6 +19,21 @@ export const routes: Routes = [
     loadComponent: () => import('./entrar/entrar').then((m) => m.Entrar),
   },
   {
+    path: 'recuperar',
+    title: 'Recuperar contraseña | Rol de pagos Ecuador',
+    loadComponent: () => import('./acceso/recuperar').then((m) => m.Recuperar),
+  },
+  {
+    path: 'restablecer',
+    title: 'Nueva contraseña | Rol de pagos Ecuador',
+    loadComponent: () => import('./acceso/restablecer').then((m) => m.Restablecer),
+  },
+  {
+    path: 'verificar',
+    title: 'Verificar correo | Rol de pagos Ecuador',
+    loadComponent: () => import('./acceso/verificar').then((m) => m.Verificar),
+  },
+  {
     path: 'registro',
     title: 'Registrar mi empresa | Rol de pagos Ecuador',
     loadComponent: () => import('./registro/registro').then((m) => m.Registro),
