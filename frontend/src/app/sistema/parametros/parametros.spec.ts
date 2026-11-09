@@ -30,7 +30,7 @@ const TABLA = [
 ];
 
 const PARAMETROS = {
-  anio: 2026, anioSolicitado: 2026, exacto: true, anios: [2026], fuente: 'Acuerdo MDT-2025-195', sbu: 482,
+  anio: 2026, anioSolicitado: 2026, exacto: true, anios: [2026], fuente: 'Acuerdo MDT-2025-195', sbu: 482, canastaBasica: 821.8,
   iessPersonal: 0.0945, iessPatronal: 0.1115, fondosReserva: 0.0833, fraccionExentaIr: 12208, tablaIr: TABLA,
   empresa: { nombre: 'Empresa Demo S.A.', ruc: '1790000000001' }, meses: [], contratos: [],
   categoriasLoep: ['servidor', 'obrero'], regimenes: [CT, LOSEP, LOEP],
@@ -87,6 +87,15 @@ describe('parámetros', () => {
       expect(el.querySelectorAll('tbody tr').length).toBe(3);
       expect(el.querySelector<HTMLInputElement>('input[aria-label="Porcentaje del tramo 2"]')!.value).toBe('5');
       expect(el.textContent).toContain('En adelante');
+    });
+
+    it('muestra la canasta básica y la envía al guardar', async () => {
+      const { fixture, el } = await abrir();
+      expect(el.querySelector<HTMLInputElement>('#canasta')!.value).toBe('821.8');
+      escribir(el, '#canasta', '830.5');
+      fixture.detectChanges();
+      el.querySelector('form')!.dispatchEvent(new Event('submit'));
+      expect(http.expectOne('/api/parametros/2026').request.body.canastaBasica).toBe(830.5);
     });
 
     it('guarda con el porcentaje como fracción, el desde encadenado y el último tramo abierto', async () => {
