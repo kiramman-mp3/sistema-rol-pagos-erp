@@ -134,7 +134,7 @@ rol-pagos-ecuador/
 │   │   ├── seed.ts            # Script: crea una cuenta de ejemplo y la llena
 │   │   ├── usuario.ts         # Script: lista las cuentas y agrega usuarios a una cuenta
 │   │   ├── rutas/             # auth, cuenta, empleados, roles, parámetros, regímenes, escala y puestos
-│   │   ├── migraciones/       # Esquema versionado: 001 a 018 (SQL numerado)
+│   │   ├── migraciones/       # Esquema versionado: 001 a 019 (SQL numerado)
 │   │   ├── validaciones.ts    # Cédula, RUC, correo, números y fechas
 │   │   ├── server.ts          # Arranque local
 │   │   └── vercel.ts          # Entrada del backend en Vercel
@@ -197,6 +197,9 @@ rol-pagos-ecuador/
     | `DATABASE_SSL_CA` | Certificado de la autoridad de la base (el texto PEM o la ruta del archivo). Supabase firma con su propia CA (`prod-ca-2021.crt`, en *Database Settings*): sin él, la conexión se rechaza |
     | `DATABASE_SSL_INSECURE` | `1` desactiva la verificación del certificado. Solo como salida de emergencia: permite que un intermediario lea la conexión |
     | `SESION_SECRETO` | Firma las sesiones. Obligatorio con una base remota |
+    | `CORREO_SMTP_URL` | Servidor SMTP para los correos (`smtp://usuario:clave@servidor:587`; `smtps://` para el puerto 465). Sin él, los correos se escriben en la consola del servidor |
+    | `CORREO_REMITENTE` | Quién firma los correos, por ejemplo `Rol de pagos <no-responder@tu-dominio.com>`. Va junto con `CORREO_SMTP_URL` |
+    | `APP_URL` | Dirección pública de la aplicación (`https://rol.tu-dominio.com`), para los enlaces de los correos. Obligatoria si hay `CORREO_SMTP_URL` |
 
 5.  **Cargar los datos de ejemplo** (opcional): crea la cuenta de una empresa de ejemplo, con 12 empleados y los roles de enero a septiembre de 2026. Con tu correo y una contraseña de al menos 10 caracteres:
     ```bash
@@ -245,10 +248,13 @@ El proyecto se despliega en **Vercel** como un solo proyecto con dos servicios (
 vercel env add DATABASE_URL production --sensitive       # cadena del pooler de Supabase
 vercel env add DATABASE_SSL_CA production --sensitive    # certificado de Supabase (prod-ca-2021.crt)
 vercel env add SESION_SECRETO production --sensitive     # al menos 32 caracteres aleatorios
+vercel env add CORREO_SMTP_URL production --sensitive    # servidor SMTP de tu proveedor de correo
+vercel env add CORREO_REMITENTE production               # "Rol de pagos <no-responder@tu-dominio.com>"
+vercel env add APP_URL production                        # https://tu-dominio.com
 vercel deploy --prod
 ```
 
-El backend no arranca en Vercel sin `DATABASE_URL` y `SESION_SECRETO`. Las empresas no se configuran en la plataforma: se registran desde la página y quedan guardadas en la base. Si la conexión a la base se rechaza por el certificado, define `DATABASE_SSL_CA`.
+El backend no arranca en Vercel sin `DATABASE_URL` y `SESION_SECRETO`, ni con `CORREO_SMTP_URL` sin `APP_URL`. Sin las variables de correo la aplicación arranca, pero recuperar la contraseña no llega a nadie (el mensaje queda en el registro de la función): defínelas antes de dar acceso a otras personas. Las empresas no se configuran en la plataforma: se registran desde la página y quedan guardadas en la base. Si la conexión a la base se rechaza por el certificado, define `DATABASE_SSL_CA`.
 
 ---
 
@@ -287,7 +293,11 @@ El backend no arranca en Vercel sin `DATABASE_URL` y `SESION_SECRETO`. Las empre
 | Método y ruta | Uso |
 |---|---|
 | `POST /api/auth/registro` | Crea la cuenta de una empresa y abre la sesión (`empresa`, `ruc`, `email`, `clave`). Correo repetido: `409` |
-| `GET /api/auth/yo`, `POST /api/auth/entrar`, `POST /api/auth/salir` | Estado de la sesión (con el `rol` y los `permisos` de quien entró), inicio (`email`, `clave`) y cierre de sesión |
+| `GET /api/auth/yo`, `POST /api/auth/entrar`, `POST /api/auth/salir` | Estado de la sesión (con el `rol`, los `permisos` y `emailVerificado` de quien entró), inicio (`email`, `clave`) y cierre de sesión |
+| `POST /api/auth/recuperar` | Manda por correo un enlace para elegir otra contraseña (`email`). Responde `202` con el mismo mensaje exista o no la cuenta. Límite: cinco solicitudes cada 15 minutos por IP (`429`) |
+| `POST /api/auth/restablecer` | Cambia la contraseña con el token del enlace (`token`, `clave`). Token desconocido, vencido o ya usado: `400`. Responde `204` |
+| `POST /api/auth/verificar` | Confirma el correo con el token del enlace (`token`). Responde `204` |
+| `POST /api/auth/reenviar-verificacion` | Con sesión: manda otro enlace de verificación. Si ya está verificado: `409`. Responde `202` |
 | `GET /api/cuenta`, `PUT /api/cuenta` | Nombre, RUC y `separarFunciones` de la empresa de la sesión (`empresa`, `ruc`, `separarFunciones` opcional) |
 | `GET /api/usuarios` | Usuarios de la cuenta y los roles posibles. Solo administrador |
 | `POST /api/usuarios` | Agrega un usuario (`email`, `clave`, `rol`). Correo en uso: `409` |
@@ -518,6 +528,22 @@ Cada valor del rol puede explicarse: de dónde salió, con qué fórmula y con q
 
 ---
 
+## ✉️ Recuperar la contraseña y verificar el correo
+
+| Concepto | Cómo funciona |
+|---|---|
+| Correos | Salen por SMTP (`nodemailer`), que ofrecen todos los proveedores: no hay uno obligatorio. Sin `CORREO_SMTP_URL`, el mensaje se escribe en la consola del servidor, útil para trabajar en local |
+| Enlaces | Un token aleatorio de 256 bits en la dirección. La base guarda solo su hash (SHA-256), así que quien lea la tabla `tokens_usuario` no puede usarlos. Cada token sirve una vez; pedir otro anula el anterior |
+| Vigencia | Recuperar la contraseña: 1 hora. Verificar el correo: 48 horas |
+| Recuperar | Pantalla `/recuperar` pide el correo; `/restablecer?token=…` elige la contraseña nueva. Quien recibe el correo es dueño del buzón, así que su correo también queda verificado. La auditoría registra `usuario.clave_restablecida` |
+| Sin revelar cuentas | `POST /api/auth/recuperar` responde igual exista o no el correo, y solo manda mensaje si existe |
+| Verificar | Al registrarse sale el correo de verificación. `/verificar?token=…` lo confirma al abrirlo. Mientras no esté verificado, el sistema muestra un aviso con el botón para reenviar el enlace; verificar no bloquea ninguna función |
+| Si el correo falla | Registrarse y pedir la recuperación responden igual y dejan el error en el registro del servidor |
+
+**Probado.** Las pruebas cubren el uso único del token (incluso con dos peticiones a la vez), el vencimiento, que un token de verificación no sirva para cambiar la contraseña, el límite de solicitudes y que la base no guarde el token. Las pruebas del envío real por SMTP no existen: se comprobó con un transporte de prueba.
+
+---
+
 ## 🗄️ Migraciones
 
 El esquema vive en `backend/src/migraciones/NNN_nombre.sql`. Las aplicadas quedan en la tabla `esquema_migraciones`, así que abrir la misma base dos veces no repite nada; cada una corre en una transacción con un candado, para que dos instancias que arrancan a la vez no la apliquen dos veces. Para cambiar el esquema se agrega el siguiente archivo numerado; no se edita uno ya aplicado.
@@ -542,6 +568,7 @@ El esquema vive en `backend/src/migraciones/NNN_nombre.sql`. Las aplicadas queda
 | 016 | Vigencia de las reglas: `regimenes.vigente_desde` (clave `cuenta_id`, `codigo`, `vigente_desde`; las filas existentes quedan desde `2000-01-01`) y `copiar_plantilla` copia todas las versiones |
 | 017 | Reliquidación: `tipo`, `rol_origen_id` y `motivo` en el rol; un solo rol ordinario por mes y un solo ajuste sin publicar por rol; disparador que valida el origen del ajuste |
 | 018 | Desglose del cálculo: `roles_detalle.traza` (JSON, vacío en los roles anteriores) |
+| 019 | Recuperar la contraseña y verificar el correo: `usuarios.email_verificado_en` y la tabla `tokens_usuario` (guarda el hash del token) |
 
 Los roles ya generados guardan una foto del régimen, de las tasas y de la modalidad con que se calcularon: si luego se editan las reglas, el historial no cambia.
 
@@ -572,7 +599,9 @@ Verifica todas las cifras con la norma y con el IESS antes de usar el sistema en
 - Los usuarios se agregan sin invitación por correo: el administrador define la contraseña inicial. La separación de funciones viene apagada, así que por defecto la misma persona puede generar, aprobar y publicar un rol; cada paso queda registrado con su correo.
 - La reliquidación corrige a los empleados que estaban en el rol: no agrega a quien se omitió por completo, y usa su fecha de salida y si recibe horas extras tal como están hoy. El ajuste no altera la planilla del IESS ya presentada: sus aportes salen como diferencias en su propio archivo.
 - El límite de intentos de contraseña y de registros vive en memoria: en Vercel cada instancia lleva su propia cuenta, así que frena el abuso pero no lo impide.
-- No hay recuperación de contraseña ni verificación del correo: el sistema no envía correos. Quien pierde la contraseña no puede recuperar la cuenta sin acceso a la base (`usuario` agrega un usuario nuevo, pero no cambia la contraseña de uno existente).
+- Cambiar la contraseña por el enlace del correo no cierra las sesiones que ya estaban abiertas: son cookies firmadas sin registro en el servidor y valen hasta que vencen (8 horas). Verificar el correo no bloquea nada: solo informa.
+- `POST /api/auth/recuperar` no tarda lo mismo si el correo existe (manda un mensaje) que si no: el tiempo de respuesta podría delatar qué correos tienen cuenta.
+- El administrador sigue definiendo la contraseña inicial de los usuarios que agrega. Con la sesión abierta, una persona no cambia su propia contraseña: lo hace el administrador desde **Usuarios**, o ella misma con «¿Olvidaste tu contraseña?».
 - El RUC se valida por su forma y su dígito verificador, no contra el SRI: cualquiera puede registrar un RUC que no es suyo.
 - Las sesiones no se guardan en el servidor: una sesión firmada vale hasta que vence (8 horas) o se cambia `SESION_SECRETO`; no hay forma de cerrarla desde otro lado.
 - No hay eliminación ni exportación de una cuenta completa desde la aplicación.
@@ -603,7 +632,7 @@ Verifica todas las cifras con la norma y con el IESS antes de usar el sistema en
 - [x] Varios usuarios por empresa con roles (administrador, aprobador, lector), permisos exigidos por el servidor y separación de funciones opcional.
 - [x] Reliquidación de un rol publicado con un ajuste vinculado al original, que guarda solo la diferencia y recorre el mismo ciclo.
 - [x] Desglose del cálculo: de dónde salió cada valor del rol, con su fórmula, sus números y su fuente.
-- [ ] Recuperar la contraseña y verificar el correo.
+- [x] Recuperar la contraseña y verificar el correo, por SMTP y con enlaces de un solo uso.
 - [ ] Eliminar o exportar una cuenta completa.
 - [ ] Gastos personales deducibles y rebajas del impuesto a la renta.
 - [ ] Préstamos del IESS, vacaciones gozadas y liquidaciones por salida.
@@ -617,7 +646,7 @@ Lista de contribuidores que han aportado commits al desarrollo de este repositor
 
 | Nombre | Commits |
 | :--- | :--- |
-| **kiramman-mp3** | 237 |
+| **kiramman-mp3** | 247 |
 
 ---
 
