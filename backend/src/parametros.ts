@@ -9,6 +9,8 @@ export interface ParametrosAnio {
   sbu: number;
   tablaIr: TramoIR[];
   fuente: string;
+  /** Canasta familiar básica de enero (INEC); 0 = sin definir */
+  canastaBasica: number;
 }
 
 const aParametros = (fila: Fila): ParametrosAnio => ({
@@ -16,6 +18,7 @@ const aParametros = (fila: Fila): ParametrosAnio => ({
   sbu: Number(fila.sbu),
   tablaIr: JSON.parse(String(fila.tabla_ir)) as TramoIR[],
   fuente: String(fila.fuente ?? ""),
+  canastaBasica: Number(fila.canasta_basica ?? 0),
 });
 
 export async function aniosConParametros(db: Base, cuentaId: number): Promise<number[]> {
@@ -81,12 +84,14 @@ export function validarTablaIr(tabla: unknown): TramoIR[] {
 }
 
 export async function guardarParametros(
-  db: Base, cuentaId: number, anio: number, sbu: number, tablaIr: TramoIR[], fuente: string,
+  db: Base, cuentaId: number, anio: number, sbu: number, tablaIr: TramoIR[], fuente: string, canastaBasica?: number,
 ) {
+  // Sin canasta en el pedido, se conserva la que el año ya tenía (0 si es un año nuevo).
   await ejecutar(
     db,
-    `INSERT INTO parametros_anuales (cuenta_id, anio, sbu, tabla_ir, fuente) VALUES (?, ?, ?, ?, ?)
-     ON CONFLICT(cuenta_id, anio) DO UPDATE SET sbu = excluded.sbu, tabla_ir = excluded.tabla_ir, fuente = excluded.fuente`,
-    cuentaId, anio, sbu, JSON.stringify(tablaIr), fuente,
+    `INSERT INTO parametros_anuales (cuenta_id, anio, sbu, tabla_ir, fuente, canasta_basica) VALUES (?, ?, ?, ?, ?, COALESCE(CAST(? AS NUMERIC), 0))
+     ON CONFLICT(cuenta_id, anio) DO UPDATE SET sbu = excluded.sbu, tabla_ir = excluded.tabla_ir, fuente = excluded.fuente,
+       canasta_basica = COALESCE(CAST(? AS NUMERIC), parametros_anuales.canasta_basica)`,
+    cuentaId, anio, sbu, JSON.stringify(tablaIr), fuente, canastaBasica ?? null, canastaBasica ?? null,
   );
 }
