@@ -4,6 +4,8 @@ import { join } from "node:path";
 import express from "express";
 import type { ErrorRequestHandler } from "express";
 
+import { correoEnConsola } from "./correo.ts";
+import type { Correo } from "./correo.ts";
 import type { Base } from "./db.ts";
 import { exigirPermiso, exigirSesion, rutasAuth } from "./rutas/auth.ts";
 import { rutasCuenta } from "./rutas/cuenta.ts";
@@ -23,9 +25,13 @@ interface Opciones {
   secreto: string;
   /** Detrás de un proxy (Vercel): la IP y el https del cliente vienen en las cabeceras X-Forwarded-*. */
   confiarEnProxy?: boolean;
+  /** Por dónde salen los correos (recuperar contraseña, verificar). Por defecto, la consola del servidor. */
+  correo?: Correo;
+  /** Dirección pública de la aplicación (`APP_URL`), para los enlaces de los correos. */
+  urlPublica?: string;
 }
 
-export function crearApp(db: Base, { carpetaFrontend, secreto, confiarEnProxy = false }: Opciones) {
+export function crearApp(db: Base, { carpetaFrontend, secreto, confiarEnProxy = false, correo = correoEnConsola, urlPublica }: Opciones) {
   const app = express();
   app.disable("x-powered-by");
   if (confiarEnProxy) app.set("trust proxy", 1);
@@ -43,7 +49,7 @@ export function crearApp(db: Base, { carpetaFrontend, secreto, confiarEnProxy = 
   });
   app.use(express.json({ limit: "100kb" }));
 
-  app.use("/api/auth", rutasAuth(db, secreto));
+  app.use("/api/auth", rutasAuth(db, secreto, correo, urlPublica));
   app.use("/api", exigirSesion(db, secreto));
   app.use("/api", exigirPermiso);
 

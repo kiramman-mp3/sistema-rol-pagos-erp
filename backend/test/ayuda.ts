@@ -1,6 +1,7 @@
 import type { AddressInfo } from "node:net";
 
 import { crearApp } from "../src/app.ts";
+import type { Mensaje } from "../src/correo.ts";
 import { abrirBase } from "../src/db.ts";
 import type { Base } from "../src/db.ts";
 
@@ -16,6 +17,10 @@ export interface Cliente {
   usarCookie: (cookie: string | null) => void;
   /** Registra otra empresa y, si sale bien, deja la sesión abierta en ella. */
   registrar: (datos?: Partial<typeof REGISTRO>) => Promise<Respuesta>;
+  /** Los correos que la API intentó mandar, en orden (con `fallaElCorreo`, los que intentó). */
+  correos: Mensaje[];
+  /** Desde aquí, mandar un correo falla (un servidor SMTP caído). */
+  fallaElCorreo: (falla: boolean) => void;
   cerrar: () => Promise<void>;
 }
 
@@ -46,7 +51,15 @@ export const REGISTRO = {
  */
 export async function iniciar(opciones: { sinSesion?: boolean } = {}): Promise<Cliente> {
   const db = await abrirBase(":memory:");
-  const app = crearApp(db, { secreto: SECRETO_PRUEBA });
+  const correos: Mensaje[] = [];
+  let correoFalla = false;
+  const correo = {
+    async enviar(m: Mensaje) {
+      correos.push(m);
+      if (correoFalla) throw new Error("SMTP caído");
+    },
+  };
+  const app = crearApp(db, { secreto: SECRETO_PRUEBA, correo, urlPublica: "https://rol.prueba.ec" });
   const servidor = await new Promise<ReturnType<typeof app.listen>>((resolver) => {
     const s = app.listen(0, () => resolver(s));
   });
@@ -90,6 +103,10 @@ export async function iniciar(opciones: { sinSesion?: boolean } = {}): Promise<C
       const r = await pedir("POST", "/api/auth/registro", { ...REGISTRO, ...datos });
       if (r.status === 201) cookieActual = r.cookie;
       return r;
+    },
+    correos,
+    fallaElCorreo: (falla) => {
+      correoFalla = falla;
     },
     cerrar: async () => {
       servidor.close();
