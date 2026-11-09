@@ -39,6 +39,9 @@ const opcionesCookie = (req: Request): CookieOptions => ({
   path: "/",
 });
 
+/** Borra la cookie de sesión del navegador. */
+export const cerrarCookie = (req: Request, res: Response) => res.clearCookie(COOKIE, opcionesCookie(req));
+
 /** La cuenta de la petición, que `exigirSesion` dejó en `res.locals`. Todo dato se pide con ella. */
 export function cuentaDe(res: Response): number {
   const id = res.locals.cuentaId;
@@ -207,7 +210,7 @@ export function rutasAuth(db: Base, secreto: string, correo: Correo, urlPublica?
   });
 
   router.post("/salir", (req, res) => {
-    res.clearCookie(COOKIE, opcionesCookie(req));
+    cerrarCookie(req, res);
     res.status(204).end();
   });
 

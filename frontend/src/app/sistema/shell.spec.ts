@@ -48,6 +48,7 @@ describe('Shell', () => {
     const el = (await abrir()).nativeElement as HTMLElement;
     const enlaces = () => [...el.querySelectorAll('nav a')].map((a) => a.textContent?.trim());
     expect(enlaces()).toContain('Usuarios');
+    expect(enlaces()).toContain('Cuenta');
     expect(el.querySelector('.aviso-warning')).toBeNull();
   });
 
@@ -57,6 +58,7 @@ describe('Shell', () => {
     sesion.permisos.set(['ver']);
     const el = (await abrir()).nativeElement as HTMLElement;
     expect([...el.querySelectorAll('nav a')].map((a) => a.textContent?.trim())).not.toContain('Usuarios');
+    expect([...el.querySelectorAll('nav a')].map((a) => a.textContent?.trim())).not.toContain('Cuenta');
     expect(el.querySelector('.aviso-warning')!.textContent).toContain('solo puedes consultar');
   });
 

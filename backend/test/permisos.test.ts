@@ -65,6 +65,9 @@ describe("tabla de permisos", () => {
       ["GET", "/usuarios", "usuarios"],
       ["PATCH", "/usuarios/2", "usuarios"],
       ["GET", "/Usuarios/", "usuarios"],
+      ["GET", "/cuenta", "ver"],
+      ["GET", "/cuenta/exportar", "usuarios"],
+      ["DELETE", "/cuenta", "usuarios"],
       ["POST", "/ruta-nueva-que-nadie-conoce", "editar"],
       ["PUT", "/roles/3/aprobar", "editar"], // el paso del ciclo solo vale con POST
     ];
@@ -90,6 +93,8 @@ describe("permisos en la API", () => {
     ["POST", "/api/escala", {}, ["administrador"]],
     ["POST", "/api/puestos", {}, ["administrador"]],
     ["PUT", "/api/cuenta", {}, ["administrador"]],
+    ["GET", "/api/cuenta/exportar", {}, ["administrador"]],
+    ["DELETE", "/api/cuenta", {}, ["administrador"]],
     ["POST", "/api/roles/generar", {}, ["administrador"]],
     ["DELETE", "/api/roles/999", {}, ["administrador"]],
     ["POST", "/api/roles/999/validar", {}, ["administrador", "aprobador"]],

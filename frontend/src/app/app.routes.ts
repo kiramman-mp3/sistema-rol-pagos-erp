@@ -83,6 +83,12 @@ export const routes: Routes = [
         loadComponent: () => import('./sistema/usuarios/usuarios').then((m) => m.Usuarios),
       },
       {
+        path: 'cuenta',
+        title: 'Cuenta | Rol de pagos',
+        canActivate: [conPermiso('usuarios')],
+        loadComponent: () => import('./sistema/cuenta/cuenta').then((m) => m.Cuenta),
+      },
+      {
         path: 'roles',
         title: 'Roles de pago | Rol de pagos',
         loadComponent: () => import('./sistema/roles/lista').then((m) => m.ListaRoles),
