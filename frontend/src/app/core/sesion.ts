@@ -105,6 +105,11 @@ export class Sesion {
     return this.http.post<{ mensaje: string }>('/api/auth/reenviar-verificacion', {});
   }
 
+  /** Elimina la empresa y todo lo suyo. El servidor pide el RUC y la contraseña; la sesión muere con la cuenta. */
+  eliminarCuenta(ruc: string, clave: string) {
+    return this.http.delete<void>('/api/cuenta', { body: { ruc, clave } }).pipe(tap(() => this.expirar()));
+  }
+
   salir() {
     return this.http.post<void>('/api/auth/salir', {}).pipe(tap(() => this.expirar()));
   }

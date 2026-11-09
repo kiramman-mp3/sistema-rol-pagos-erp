@@ -24,6 +24,7 @@ import { Sesion } from '../core/sesion';
           <a routerLink="/sistema/parametros" routerLinkActive ariaCurrentWhenActive="page">Parámetros</a>
           @if (sesion.puede('usuarios')) {
             <a routerLink="/sistema/usuarios" routerLinkActive ariaCurrentWhenActive="page">Usuarios</a>
+            <a routerLink="/sistema/cuenta" routerLinkActive ariaCurrentWhenActive="page">Cuenta</a>
           }
         </nav>
         <span class="empresa">
