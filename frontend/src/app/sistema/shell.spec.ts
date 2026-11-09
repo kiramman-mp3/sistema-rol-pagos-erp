@@ -68,6 +68,25 @@ describe('Shell', () => {
     expect(el.querySelector('.aviso-warning')!.textContent).toContain('validar, aprobar y publicar roles');
   });
 
+  it('avisa si el correo no está verificado y deja pedir otro enlace', async () => {
+    const sesion = TestBed.inject(Sesion);
+    sesion.email.set('ana@empresa.com');
+    const fixture = await abrir();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('.aviso-info')!.textContent).toContain('ana@empresa.com');
+    el.querySelector<HTMLButtonElement>('.aviso-info button')!.click();
+    http.expectOne('/api/auth/reenviar-verificacion').flush({ mensaje: 'x' }, { status: 202, statusText: 'Accepted' });
+    fixture.detectChanges();
+    expect(el.querySelector('.aviso-info')!.textContent).toContain('Te enviamos un enlace nuevo');
+    expect(el.querySelector('.aviso-info button')).toBeNull();
+  });
+
+  it('con el correo verificado no muestra el aviso', async () => {
+    TestBed.inject(Sesion).emailVerificado.set(true);
+    const el = (await abrir()).nativeElement as HTMLElement;
+    expect(el.querySelector('.aviso-info')).toBeNull();
+  });
+
   it('Salir cierra la sesión en el servidor y lleva al inicio de sesión', async () => {
     const fixture = await abrir();
     const sesion = TestBed.inject(Sesion);
