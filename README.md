@@ -134,7 +134,7 @@ rol-pagos-ecuador/
 │   │   ├── seed.ts            # Script: crea una cuenta de ejemplo y la llena
 │   │   ├── usuario.ts         # Script: lista las cuentas y agrega usuarios a una cuenta
 │   │   ├── rutas/             # auth, cuenta, empleados, roles, parámetros, regímenes, escala y puestos
-│   │   ├── migraciones/       # Esquema versionado: 001 a 019 (SQL numerado)
+│   │   ├── migraciones/       # Esquema versionado: 001 a 020 (SQL numerado)
 │   │   ├── validaciones.ts    # Cédula, RUC, correo, números y fechas
 │   │   ├── server.ts          # Arranque local
 │   │   └── vercel.ts          # Entrada del backend en Vercel
@@ -270,6 +270,7 @@ El backend no arranca en Vercel sin `DATABASE_URL` y `SESION_SECRETO`, ni con `C
 8. **Rol**: dos ecuaciones (`ingresos − descuentos = neto` e `ingresos + provisiones = costo empleador`), la planilla por empleado, el costo empleador aparte y la **conciliación con el IESS**. Arriba, el **ciclo del rol**: un botón con el paso que sigue (validar, aprobar, publicar, marcar como pagado) y el historial de quién lo hizo.
 9. **Boleta individual** imprimible en una hoja, y **descarga en CSV** del rol y de los aportes al IESS.
 10. **Usuarios (`/sistema/usuarios`)**, solo para administradores: agregar personas con su rol, cambiar roles y contraseñas, eliminar usuarios y activar la separación de funciones. Quien entra como aprobador o lector ve un aviso con lo que puede hacer.
+11. **Cuenta (`/sistema/cuenta`)**, solo para administradores: descargar todos los datos de la empresa en un archivo JSON o eliminarla para siempre.
 
 ---
 
@@ -299,6 +300,8 @@ El backend no arranca en Vercel sin `DATABASE_URL` y `SESION_SECRETO`, ni con `C
 | `POST /api/auth/verificar` | Confirma el correo con el token del enlace (`token`). Responde `204` |
 | `POST /api/auth/reenviar-verificacion` | Con sesión: manda otro enlace de verificación. Si ya está verificado: `409`. Responde `202` |
 | `GET /api/cuenta`, `PUT /api/cuenta` | Nombre, RUC y `separarFunciones` de la empresa de la sesión (`empresa`, `ruc`, `separarFunciones` opcional) |
+| `GET /api/cuenta/exportar` | Descarga un JSON con todo lo de la empresa (empleados, novedades, reglas, escala, orgánico, roles con su desglose, usuarios sin contraseñas y auditoría). Solo administrador |
+| `DELETE /api/cuenta` | Elimina la empresa y todo lo suyo, para siempre. Cuerpo: `ruc` y `clave` del usuario; si alguno no coincide: `400`; tras cinco fallos: `429`. Responde `204` y cierra la sesión. Solo administrador |
 | `GET /api/usuarios` | Usuarios de la cuenta y los roles posibles. Solo administrador |
 | `POST /api/usuarios` | Agrega un usuario (`email`, `clave`, `rol`). Correo en uso: `409` |
 | `PATCH /api/usuarios/:id` | Cambia el `rol`, la `clave` o ambos. Si deja a la cuenta sin administradores: `409` |
@@ -544,6 +547,20 @@ Cada valor del rol puede explicarse: de dónde salió, con qué fórmula y con q
 
 ---
 
+## 📦 Exportar y eliminar la cuenta
+
+| Concepto | Cómo funciona |
+|---|---|
+| Quién puede | Solo el administrador, desde **Cuenta** (`/sistema/cuenta`). El servidor lo exige: un aprobador o un lector reciben `403` |
+| Exportar | Un archivo `rol-pagos-<RUC>-<fecha>.json` con la empresa, usuarios (correo, rol y fecha de verificación; **sin contraseñas ni tokens**), empleados, novedades, reglas de ley, escala, orgánico, roles con su detalle y su desglose, y la auditoría |
+| Eliminar | Borra la cuenta y todo lo suyo, también los roles publicados y pagados y la auditoría. No se puede deshacer. Pide escribir el RUC de la empresa y la contraseña de quien la elimina; con cinco intentos fallidos, `429` |
+| Después | La sesión deja de valer, y el correo y el RUC quedan libres para registrarse de nuevo. Las demás empresas y la plantilla de ley no se tocan; la plantilla no se puede eliminar |
+| Auditoría | Es de solo inserción (migración 014). La migración 020 deja borrarla solo dentro de la transacción que elimina esa cuenta, marcada con `rolpagos.eliminando_cuenta`; borrar o modificar sus filas de cualquier otra forma sigue rechazado |
+
+**Probado en Postgres real.** Con PostgreSQL 17 se cargaron dos empresas de ejemplo con nueve roles publicados cada una; se exportó una, se eliminó, y la otra y la plantilla quedaron intactas. El borrado directo de la auditoría siguió rechazado antes y después. Esa misma prueba aplicó también la migración 019.
+
+---
+
 ## 🗄️ Migraciones
 
 El esquema vive en `backend/src/migraciones/NNN_nombre.sql`. Las aplicadas quedan en la tabla `esquema_migraciones`, así que abrir la misma base dos veces no repite nada; cada una corre en una transacción con un candado, para que dos instancias que arrancan a la vez no la apliquen dos veces. Para cambiar el esquema se agrega el siguiente archivo numerado; no se edita uno ya aplicado.
@@ -569,6 +586,7 @@ El esquema vive en `backend/src/migraciones/NNN_nombre.sql`. Las aplicadas queda
 | 017 | Reliquidación: `tipo`, `rol_origen_id` y `motivo` en el rol; un solo rol ordinario por mes y un solo ajuste sin publicar por rol; disparador que valida el origen del ajuste |
 | 018 | Desglose del cálculo: `roles_detalle.traza` (JSON, vacío en los roles anteriores) |
 | 019 | Recuperar la contraseña y verificar el correo: `usuarios.email_verificado_en` y la tabla `tokens_usuario` (guarda el hash del token) |
+| 020 | Eliminar una cuenta: el disparador de la auditoría deja borrar sus filas solo dentro de la transacción que elimina esa cuenta |
 
 Los roles ya generados guardan una foto del régimen, de las tasas y de la modalidad con que se calcularon: si luego se editan las reglas, el historial no cambia.
 
@@ -604,7 +622,8 @@ Verifica todas las cifras con la norma y con el IESS antes de usar el sistema en
 - El administrador sigue definiendo la contraseña inicial de los usuarios que agrega. Con la sesión abierta, una persona no cambia su propia contraseña: lo hace el administrador desde **Usuarios**, o ella misma con «¿Olvidaste tu contraseña?».
 - El RUC se valida por su forma y su dígito verificador, no contra el SRI: cualquiera puede registrar un RUC que no es suyo.
 - Las sesiones no se guardan en el servidor: una sesión firmada vale hasta que vence (8 horas) o se cambia `SESION_SECRETO`; no hay forma de cerrarla desde otro lado.
-- No hay eliminación ni exportación de una cuenta completa desde la aplicación.
+- Eliminar una cuenta no deja ningún rastro, ni siquiera de que existió: la auditoría se va con ella. Quien necesite conservar un comprobante debe descargar el archivo antes. Las copias de seguridad de la base (por ejemplo las de Supabase) siguen teniendo los datos hasta que ellas mismas vencen.
+- La exportación es un archivo JSON con los nombres de las tablas; no hay un formato para volver a importarlo.
 - Sin gastos personales deducibles ni rebajas del impuesto a la renta.
 - Sin préstamos del IESS, vacaciones gozadas ni liquidaciones (finiquito) por salida: la fecha de salida solo prorratea el último mes.
 - Una regla que cambia a mitad de mes se aplica a todo ese mes, sin prorratear por días. Los parámetros anuales (SBU e IR) tienen una versión por año, no por fecha.
@@ -633,7 +652,7 @@ Verifica todas las cifras con la norma y con el IESS antes de usar el sistema en
 - [x] Reliquidación de un rol publicado con un ajuste vinculado al original, que guarda solo la diferencia y recorre el mismo ciclo.
 - [x] Desglose del cálculo: de dónde salió cada valor del rol, con su fórmula, sus números y su fuente.
 - [x] Recuperar la contraseña y verificar el correo, por SMTP y con enlaces de un solo uso.
-- [ ] Eliminar o exportar una cuenta completa.
+- [x] Exportar y eliminar una cuenta completa, con confirmación por RUC y contraseña.
 - [ ] Gastos personales deducibles y rebajas del impuesto a la renta.
 - [ ] Préstamos del IESS, vacaciones gozadas y liquidaciones por salida.
 - [ ] Confirmar con las normas vigentes los datos marcados «por confirmar».
@@ -646,7 +665,7 @@ Lista de contribuidores que han aportado commits al desarrollo de este repositor
 
 | Nombre | Commits |
 | :--- | :--- |
-| **kiramman-mp3** | 247 |
+| **kiramman-mp3** | 254 |
 
 ---
 
