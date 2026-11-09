@@ -60,6 +60,7 @@ Para el área de talento humano o contabilidad de una empresa pequeña o mediana
 *   **Escala salarial y orgánico funcional:** el sueldo sale del grado elegido (exacto en la LOSEP, mínimo en el Código del Trabajo) y cada puesto del orgánico lleva su función, su responsable y su nivel de referencia.
 *   **Décimos y fondos a la medida:** por empleado, cada beneficio se paga cada mes en el rol, se acumula o no se recibe.
 *   **Horas extras por tipo:** suplementarias, extraordinarias, de sábado, domingo y feriado, y nocturnas, con el recargo y el tope de cada régimen. Los topes avisan, sin bloquear.
+*   **Rebaja por gastos personales:** el impuesto a la renta se rebaja el 18 % de los gastos que el empleado declaró, con un tope según sus cargas familiares y la canasta básica del año. Es opcional: sin gastos declarados no cambia nada.
 *   **Dinero exacto:** todo se calcula con `decimal.js`, se redondea a centavos en cada rubro y se guarda en columnas `NUMERIC`, sin errores de coma flotante.
 *   **Conciliación con el IESS:** materia gravada, aportes personal y patronal y fondos de reserva por empleado, descargables en CSV.
 *   **Boleta y CSV:** boleta individual imprimible en una hoja y exportación del rol para Excel.
@@ -134,7 +135,7 @@ rol-pagos-ecuador/
 │   │   ├── seed.ts            # Script: crea una cuenta de ejemplo y la llena
 │   │   ├── usuario.ts         # Script: lista las cuentas y agrega usuarios a una cuenta
 │   │   ├── rutas/             # auth, cuenta, empleados, roles, parámetros, regímenes, escala y puestos
-│   │   ├── migraciones/       # Esquema versionado: 001 a 020 (SQL numerado)
+│   │   ├── migraciones/       # Esquema versionado: 001 a 021 (SQL numerado)
 │   │   ├── validaciones.ts    # Cédula, RUC, correo, números y fechas
 │   │   ├── server.ts          # Arranque local
 │   │   └── vercel.ts          # Entrada del backend en Vercel
@@ -307,7 +308,7 @@ El backend no arranca en Vercel sin `DATABASE_URL` y `SESION_SECRETO`, ni con `C
 | `PATCH /api/usuarios/:id` | Cambia el `rol`, la `clave` o ambos. Si deja a la cuenta sin administradores: `409` |
 | `DELETE /api/usuarios/:id` | Elimina un usuario, que pierde el acceso al instante. No se puede eliminar uno mismo ni al último administrador (`409`) |
 | `GET /api/parametros?anio=` | Reglas de ley del año, tabla del IR, regímenes y datos de la empresa. Con sesión, los de la cuenta; sin ella, los de la plantilla |
-| `PUT /api/parametros/:anio` | Crea o actualiza el SBU y la tabla del IR de un año |
+| `PUT /api/parametros/:anio` | Crea o actualiza el SBU, la canasta familiar básica (`canastaBasica`, opcional) y la tabla del IR de un año |
 | `POST /api/simulacion` | Calcula un rol de ejemplo sin guardar nada (`regimen`, `categoriaLoep`, `decimos`) |
 | `GET /api/regimenes`, `GET /api/regimenes/:codigo` | Regímenes con todas sus reglas, en la versión que rige hoy o en la de `?fecha=AAAA-MM-DD` |
 | `GET /api/regimenes/:codigo/versiones` | Todas las versiones de un régimen, la más reciente primero |
@@ -317,7 +318,7 @@ El backend no arranca en Vercel sin `DATABASE_URL` y `SESION_SECRETO`, ni con `C
 | `POST /api/escala`, `PUT/DELETE /api/escala/:id` | Alta, edición y baja de un grado |
 | `GET/POST /api/puestos`, `GET/PUT/DELETE /api/puestos/:id` | Puestos del orgánico funcional |
 | `PATCH /api/puestos/:id/responsable` | Asigna o quita al responsable de un puesto |
-| `GET/POST /api/empleados` | Lista y alta |
+| `GET/POST /api/empleados` | Lista y alta. Cada empleado lleva `gastosPersonales`, `cargasFamiliares` y `enfermedadCatastrofica` para la rebaja del impuesto a la renta |
 | `GET/PUT/DELETE /api/empleados/:id` | Consulta, edición y baja |
 | `PATCH /api/empleados/:id/estado` | Activa o desactiva. Al desactivar registra la salida (`fechaSalida` del cuerpo, o hoy); al activar la borra |
 | `POST /api/empleados/demo` | Carga los 12 empleados de ejemplo en la cuenta (sin roles de pago) |
@@ -365,13 +366,26 @@ La **LOEP** no tiene tasas propias: sus servidores de carrera se rigen por la LO
 | Horas con recargo | hora × (1 + recargo del régimen); en las nocturnas solo se suma el recargo, porque la hora ya está en el sueldo |
 | Ingreso aportable | sueldo + horas extras + comisiones: la base del IESS, del impuesto, del décimo tercero y de las vacaciones |
 | Aporte personal IESS | tasa del régimen × ingreso aportable |
-| Impuesto a la renta | `(aportable − IESS) × 12` → tabla SRI del año (exento hasta $12.208 en 2026) → ÷ 12 |
+| Impuesto a la renta | `(aportable − IESS) × 12` → tabla SRI del año (exento hasta $12.208 en 2026) → menos la rebaja por gastos personales, si la hay → ÷ 12 |
 | Décimo tercero | ingreso aportable ÷ 12 |
 | Décimo cuarto | SBU ÷ 12 |
 | Vacaciones (provisión) | ingreso aportable × días de vacaciones ÷ 360 (15 días = 1/24, art. 71) |
 | Fondos de reserva | 8,33 % del aportable desde el mes 13 |
 | Mes de ingreso y de salida | sueldo y décimo cuarto proporcionales a los días (base 30): desde el día de ingreso o hasta el día de salida, nunca menos de un día |
 | Quién entra al rol de un mes | quien ingresó antes de que termine y no salió antes de que empiece; un inactivo sin fecha de salida queda fuera de todos |
+
+### Rebaja por gastos personales
+El empleado declara sus gastos del año (vivienda, educación, salud, alimentación, vestimenta y turismo). El sistema los guarda en su ficha, junto con el número de cargas familiares y si él o una carga tiene una enfermedad catastrófica, rara o huérfana. La rebaja es un crédito contra el impuesto anual, no una resta de la base:
+
+`rebaja anual = 18 % × mínimo(gastos declarados, canasta básica × canastas)`
+
+El impuesto anual sale de la tabla progresiva y la rebaja se le resta sin dejarlo por debajo de cero; el rol cobra la doceava parte del resultado. Las canastas que fijan el tope dependen de las cargas:
+
+| Cargas familiares | 0 | 1 | 2 | 3 | 4 | 5 o más | Enfermedad catastrófica, rara o huérfana |
+|---|---|---|---|---|---|---|---|
+| Canastas del tope | 7 | 9 | 11 | 14 | 17 | 20 | 100 |
+
+Con la canasta de enero de 2026 ($821,80), el tope sin cargas es $5.752,60 y la rebaja máxima $1.035,47 al año. La canasta se edita por año en **Parámetros**; con 0 no se aplica la rebaja y el rol avisa si había gastos declarados. Cada rol guarda una foto de los gastos, las cargas y la rebaja con que se calculó, y la reliquidación conserva los del rol original. El desglose «Cómo se calculó» muestra el paso de la rebaja.
 
 ### Vigencia de las reglas
 
@@ -587,6 +601,7 @@ El esquema vive en `backend/src/migraciones/NNN_nombre.sql`. Las aplicadas queda
 | 018 | Desglose del cálculo: `roles_detalle.traza` (JSON, vacío en los roles anteriores) |
 | 019 | Recuperar la contraseña y verificar el correo: `usuarios.email_verificado_en` y la tabla `tokens_usuario` (guarda el hash del token) |
 | 020 | Eliminar una cuenta: el disparador de la auditoría deja borrar sus filas solo dentro de la transacción que elimina esa cuenta |
+| 021 | Gastos personales: `parametros_anuales.canasta_basica`; `gastos_personales`, `cargas_familiares` y `enfermedad_catastrofica` en el empleado; la foto de esos datos y `rebaja_ir_anual` en el detalle del rol; `copiar_plantilla` copia la canasta |
 
 Los roles ya generados guardan una foto del régimen, de las tasas y de la modalidad con que se calcularon: si luego se editan las reglas, el historial no cambia.
 
@@ -608,6 +623,10 @@ Las tipografías (Bricolage Grotesque y Figtree) van incluidas en `frontend/publ
 | Escala salarial del sector público | No se encontró la escala oficial vigente de 20 grados | Carga una escala de ejemplo editable |
 | Recargo nocturno de la LOSEP | El art. 114 no lo menciona y no se encontró otra norma que lo fije para servidores públicos | Asume el 25 % del Código del Trabajo (art. 49); editable |
 | Reformas de la LOSEP posteriores a 2016 | La copia leída es de 2016 | Revisa el texto vigente antes de usarlo en una nómina real |
+| Base legal de la rebaja por gastos personales | No se encontró el artículo ni la resolución del SRI que la fundamentan; las cifras (18 %, canastas por cargas) salen de notas de prensa y blogs | Aplica las reglas de la sección «Rebaja por gastos personales»; la canasta se edita en Parámetros |
+| Discapacidad en los gastos personales | Las fuentes no coinciden en si la discapacidad del empleado o de una carga sube el tope a 100 canastas | Solo la enfermedad catastrófica, rara o huérfana lleva el tope a 100 canastas |
+| Cálculo mensual del impuesto con rebaja | El SRI proyecta el año y reparte la retención en cuotas; no se pudo leer la fórmula | Resta la rebaja al impuesto anual proyectado (×12) y divide entre 12 |
+| Alcance de los gastos de arte, cultura y turismo | Las notas de prensa los mencionan sin precisar topes ni condiciones | No distingue categorías: el empleado declara un solo total |
 | Formato de carga masiva del IESS | No se encontró un formato público de archivo | Entrega un cuadro de conciliación, no un archivo de carga |
 
 Verifica todas las cifras con la norma y con el IESS antes de usar el sistema en una nómina real.
@@ -624,7 +643,7 @@ Verifica todas las cifras con la norma y con el IESS antes de usar el sistema en
 - Las sesiones no se guardan en el servidor: una sesión firmada vale hasta que vence (8 horas) o se cambia `SESION_SECRETO`; no hay forma de cerrarla desde otro lado.
 - Eliminar una cuenta no deja ningún rastro, ni siquiera de que existió: la auditoría se va con ella. Quien necesite conservar un comprobante debe descargar el archivo antes. Las copias de seguridad de la base (por ejemplo las de Supabase) siguen teniendo los datos hasta que ellas mismas vencen.
 - La exportación es un archivo JSON con los nombres de las tablas; no hay un formato para volver a importarlo.
-- Sin gastos personales deducibles ni rebajas del impuesto a la renta.
+- Los gastos personales los declara el empleado una sola vez en su ficha y valen para todos los meses: el sistema no revisa facturas, no controla topes por categoría y no distingue la proyección de febrero de sus actualizaciones. El impuesto mensual sigue proyectando el año (×12) y dividiendo entre 12, sin las cuotas de febrero a diciembre del SRI.
 - Sin préstamos del IESS, vacaciones gozadas ni liquidaciones (finiquito) por salida: la fecha de salida solo prorratea el último mes.
 - Una regla que cambia a mitad de mes se aplica a todo ese mes, sin prorratear por días. Los parámetros anuales (SBU e IR) tienen una versión por año, no por fecha.
 - Los topes de horas extras avisan pero no bloquean: la LOSEP dice que si se obliga a trabajar sobre el límite, igual se pagan.
@@ -653,7 +672,7 @@ Verifica todas las cifras con la norma y con el IESS antes de usar el sistema en
 - [x] Desglose del cálculo: de dónde salió cada valor del rol, con su fórmula, sus números y su fuente.
 - [x] Recuperar la contraseña y verificar el correo, por SMTP y con enlaces de un solo uso.
 - [x] Exportar y eliminar una cuenta completa, con confirmación por RUC y contraseña.
-- [ ] Gastos personales deducibles y rebajas del impuesto a la renta.
+- [x] Gastos personales: rebaja del impuesto a la renta con tope por cargas familiares y canasta básica.
 - [ ] Préstamos del IESS, vacaciones gozadas y liquidaciones por salida.
 - [ ] Confirmar con las normas vigentes los datos marcados «por confirmar».
 
@@ -671,7 +690,7 @@ Lista de contribuidores que han aportado commits al desarrollo de este repositor
 
 ## 📚 Fuentes
 
-Esta lista es la misma que muestra la página de información del sistema (`/informacion`) y sale de `frontend/src/app/core/fuentes.ts`. Son 47 enlaces. Las 7 marcadas como **leída** se abrieron y se leyeron; de las demás solo se tomó el dato que indica cada una, a partir de los resultados de una búsqueda. Los textos legales pesan más que los blogs: cuando discrepan, mandan las normas.
+Esta lista es la misma que muestra la página de información del sistema (`/informacion`) y sale de `frontend/src/app/core/fuentes.ts`. Son 56 enlaces. Las 11 marcadas como **leída** se abrieron y se leyeron; de las demás solo se tomó el dato que indica cada una, a partir de los resultados de una búsqueda. Los textos legales pesan más que los blogs: cuando discrepan, mandan las normas.
 
 <details>
 <summary><b>Ver las fuentes por tema</b></summary>
@@ -715,6 +734,20 @@ Fracción básica desgravada de $12.208 y diez tramos, del 0 % al 37 %. Resoluci
 - [UQA: actualizaciones del SRI para el ejercicio fiscal 2026](https://uqa.com.ec/tablas-del-impuesto-a-la-renta-conoce-las-actualizaciones-del-sri-para-el-ejercicio-fiscal-2026/): Apareció al buscar la tabla; no se abrió.
 - [JEZL Auditores: tabla del IR 2026 y 2025](https://www.jezl-auditores.com/index.php/tributario/101-tabla-de-impuesto-a-la-renta-ir-2026-2025-personas-naturales-ecuador): Apareció al buscar la tabla; no se abrió.
 - [Tagline: impuesto a la renta en Ecuador 2025-2026](https://tagline-soluciones.com/blog/talento-humano/impuesto-a-la-renta-ecuador/): Equivalencia mensual: no paga quien gana menos de $1.017,33 al mes.
+
+#### Rebaja por gastos personales (por confirmar)
+
+Rebaja del 18 % de los gastos personales, con tope por canastas básicas según las cargas familiares (canasta de enero de 2026: $821,80). No se encontró el artículo ni la resolución que la fundamentan.
+
+- [Primicias: guía para pagar el impuesto a la renta 2026, gastos personales y cargas familiares](https://www.primicias.ec/economia/guia-pago-impuesto-renta-2026-gastos-personales-cargas-familiares-contribuyentes-sri-113193/) **(leída)**: Tasa del 18 % y topes en canastas según las cargas familiares.
+- [Primicias: tabla de descuento por gastos personales y canastas básicas](https://www.primicias.ec/economia/tabla-decuento-gastos-personales-impuesto-renta-canastas-basicas-sri-115251/) **(leída)**: Canasta de $821,80 y el tope de cada número de cargas.
+- [Siigo: gastos personales en Ecuador](https://www.siigo.com/ec/blog/obligaciones-fiscales/gastos-personales-ecuador/) **(leída)**: Categorías de gastos y enfermedades catastróficas (100 canastas).
+- [Bloomberg Línea: cómo aplicar la rebaja por gastos personales en 2026](https://www.bloomberglinea.com/latinoamerica/ecuador/paso-a-paso-como-aplicar-la-rebaja-del-impuesto-a-la-renta-por-gastos-personales-en-2026/) **(leída)**: Paso a paso de la rebaja. Sus cifras son las del ejercicio 2025; no se usaron para 2026.
+- [Primicias: formulario de proyección de gastos personales del SRI](https://www.primicias.ec/economia/sri-formulario-proyeccion-gastos-personales-impuesto-renta-descarga-115519/): Apareció al buscar el formulario de proyección; no se abrió.
+- [Primicias: el SRI abre el formulario de gastos personales en junio](https://www.primicias.ec/economia/sri-gastos-personales-formulario-junio-pago-impuesto-renta-ecuador-124214/): Apareció al buscar la actualización de la proyección; no se abrió.
+- [El Diario: gastos personales y deducciones del SRI en 2026](https://www.eldiario.ec/centro/gastos-personales-sri-deducciones-2026-06022026/): Apareció al buscar las deducciones; no se abrió.
+- [El Diario: cómo aprovechar los gastos personales para reducir el pago del impuesto](https://www.eldiario.ec/centro/impuesto-a-la-renta-como-aprovechar-los-gastos-personales-para-reducir-el-pago-08022026/): Apareció al buscar las deducciones; no se abrió.
+- [Vistazo: el SRI habilita el formulario de proyección de gastos personales](https://www.vistazo.com/actualidad/nacional/2026-02-06-sri-formulario-proyeccion-gastos-personales-reducir-impuesto-renta-IA10670833): Apareció al buscar el formulario de proyección; no se abrió.
 
 #### Aporte al IESS del sector público (por confirmar)
 
