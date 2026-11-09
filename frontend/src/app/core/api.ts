@@ -106,7 +106,7 @@ export class Api {
     return this.http.post<{ id: number; empleados: number; avisos: string[] }>(`/api/roles/${id}/reliquidar`, datos);
   }
 
-  guardarParametros(anio: number, datos: { sbu: number; tablaIr: TramoIr[]; fuente: string }) {
+  guardarParametros(anio: number, datos: { sbu: number; canastaBasica?: number; tablaIr: TramoIr[]; fuente: string }) {
     return this.http.put<unknown>(`/api/parametros/${anio}`, datos);
   }
   guardarRegimen(codigo: string, datos: Record<string, unknown>) {

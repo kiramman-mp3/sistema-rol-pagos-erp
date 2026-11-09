@@ -59,6 +59,14 @@ interface FilaTramo {
               <input class="entrada num" id="sbu" type="number" step="0.01" min="0.01"
                      [value]="sbu()" (input)="sbu.set($any($event.target).value)" />
             </div>
+            <div class="campo c2">
+              <label for="canasta">Canasta familiar básica (USD)</label>
+              <input class="entrada num" id="canasta" type="number" step="0.01" min="0"
+                     [value]="canasta()" (input)="canasta.set($any($event.target).value)" />
+              <span class="ayuda">
+                La de enero, del INEC. Topa la rebaja del impuesto por gastos personales; con 0 no se aplica.
+              </span>
+            </div>
             <div class="campo c4">
               <label for="fuente">Fuente</label>
               <input class="entrada" id="fuente" maxlength="300"
@@ -148,6 +156,7 @@ export class ParametrosAnuales {
   protected readonly esNuevo = signal(false);
   protected readonly nuevoAnio = signal('');
   protected readonly sbu = signal('');
+  protected readonly canasta = signal('');
   protected readonly fuente = signal('');
   protected readonly tramos = signal<FilaTramo[]>([]);
   protected readonly guardando = signal(false);
@@ -159,6 +168,7 @@ export class ParametrosAnuales {
       if (!p || this.esNuevo()) return;
       this.anioEdicion.set(p.anio);
       this.sbu.set(String(p.sbu));
+      this.canasta.set(String(p.canastaBasica ?? 0));
       this.fuente.set(p.fuente);
       this.tramos.set(p.tablaIr.map(aFila));
     });
@@ -216,7 +226,9 @@ export class ParametrosAnuales {
     try {
       const anio = this.anioEdicion();
       await firstValueFrom(
-        this.api.guardarParametros(anio, { sbu: Number(this.sbu()), tablaIr, fuente: this.fuente() }),
+        this.api.guardarParametros(anio, {
+          sbu: Number(this.sbu()), canastaBasica: Number(this.canasta() || 0), tablaIr, fuente: this.fuente(),
+        }),
       );
       this.avisos.exito(`Se guardaron los valores de ${anio}.`);
       this.esNuevo.set(false);
