@@ -53,7 +53,7 @@ function clavesIguales(grupo: AbstractControl): ValidationErrors | null {
               <input class="entrada" id="confirmar" type="password" formControlName="confirmar" autocomplete="new-password" />
             </div>
             <p class="apoyo">
-              Guarda bien la contraseña: por ahora no hay forma de recuperarla por correo.
+              Te enviaremos un correo para confirmar tu dirección; con ese mismo correo podrás recuperar la contraseña.
             </p>
             <div class="acciones">
               <button class="boton" type="submit" [disabled]="enviando()">

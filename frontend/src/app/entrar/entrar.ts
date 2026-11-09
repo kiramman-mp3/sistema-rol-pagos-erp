@@ -47,6 +47,7 @@ export function destinoSeguro(volver: string | undefined): string {
               <a class="boton boton-texto" routerLink="/">Volver al inicio</a>
             </div>
           </form>
+          <p class="apoyo"><a routerLink="/recuperar">¿Olvidaste tu contraseña?</a></p>
           <p class="apoyo">¿Tu empresa aún no tiene cuenta? <a routerLink="/registro">Regístrala aquí</a>.</p>
         </div>
       </div>
