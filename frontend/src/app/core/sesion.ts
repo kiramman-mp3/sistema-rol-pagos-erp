@@ -15,6 +15,7 @@ interface EstadoSesion {
   empresa: { nombre: string; ruc: string } | null;
   rol?: RolUsuario | null;
   permisos?: Permiso[];
+  emailVerificado?: boolean;
 }
 
 /** Lo que pide el registro de una empresa. */
@@ -38,6 +39,8 @@ export class Sesion {
   readonly empresa = signal<{ nombre: string; ruc: string } | null>(null);
   readonly rol = signal<RolUsuario | null>(null);
   readonly permisos = signal<Permiso[]>([]);
+  /** ¿Confirmó que el correo es suyo? Solo informa: no bloquea nada. */
+  readonly emailVerificado = signal(false);
 
   /** ¿Puede esta persona hacer eso? Solo ordena la pantalla: el servidor es quien lo exige. */
   puede(permiso: Permiso): boolean {
@@ -50,6 +53,7 @@ export class Sesion {
     this.empresa.set(estado.empresa);
     this.rol.set(estado.rol ?? null);
     this.permisos.set(estado.permisos ?? []);
+    this.emailVerificado.set(estado.emailVerificado ?? false);
   }
 
   /**
@@ -84,6 +88,23 @@ export class Sesion {
     );
   }
 
+  /** Pide el correo con el enlace para elegir otra contraseña. Responde igual exista o no la cuenta. */
+  recuperar(email: string) {
+    return this.http.post<{ mensaje: string }>('/api/auth/recuperar', { email });
+  }
+
+  restablecer(token: string, clave: string) {
+    return this.http.post<void>('/api/auth/restablecer', { token, clave });
+  }
+
+  verificarCorreo(token: string) {
+    return this.http.post<void>('/api/auth/verificar', { token }).pipe(tap(() => this.emailVerificado.set(true)));
+  }
+
+  reenviarVerificacion() {
+    return this.http.post<{ mensaje: string }>('/api/auth/reenviar-verificacion', {});
+  }
+
   salir() {
     return this.http.post<void>('/api/auth/salir', {}).pipe(tap(() => this.expirar()));
   }
@@ -96,6 +117,7 @@ export class Sesion {
     this.empresa.set(null);
     this.rol.set(null);
     this.permisos.set([]);
+    this.emailVerificado.set(false);
     if (habia) this.cambioDeCuenta();
   }
 }
