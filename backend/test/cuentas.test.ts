@@ -37,7 +37,7 @@ describe("registro de una empresa", () => {
       assert.equal(r.status, 201);
       assert.deepEqual(r.json, {
         autenticado: true, email: "nomina@empresa.com", empresa: { nombre: REGISTRO.empresa, ruc: REGISTRO.ruc },
-        rol: "administrador", permisos: ["ver", "editar", "validar", "aprobar", "publicar", "pagar", "usuarios"],
+        rol: "administrador", permisos: ["ver", "editar", "validar", "aprobar", "publicar", "pagar", "usuarios"], emailVerificado: false,
       });
       assert.match(r.cabeceras.getSetCookie()[0], /^rol_sesion=.*HttpOnly/i);
       assert.equal((await api.get("/api/empleados")).status, 200);
