@@ -36,12 +36,13 @@ describe('FormularioEmpleado', () => {
     http = TestBed.inject(HttpTestingController);
   });
 
-  const abrir = async (grados = GRADOS, puestos: Puesto[] = []) => {
+  const abrir = async (grados = GRADOS, puestos: Puesto[] = [], parametros: object = {}) => {
     const fixture = TestBed.createComponent(FormularioEmpleado);
     fixture.detectChanges();
     TestBed.tick();
     http.expectOne('/api/parametros').flush({
       ...PARAMETROS,
+      ...parametros,
       regimenes: [
         ...PARAMETROS.regimenes.slice(0, 2),
         { ...PARAMETROS.regimenes[2], regimenServidor: 'LOSEP', regimenObrero: 'CODIGO_TRABAJO' },
@@ -397,5 +398,56 @@ describe('FormularioEmpleado', () => {
     expect(cuerpo.pagoDecimoCuarto).toBe('no');
     expect(cuerpo.pagoFondosReserva).toBe('mensual');
     expect(cuerpo.recibeHorasExtras).toBe(false);
+  });
+  describe('gastos personales', () => {
+    const elegir = (el: HTMLElement, id: string, indice: number) => {
+      const campo = el.querySelector<HTMLSelectElement>(`#${id}`)!;
+      campo.selectedIndex = indice;
+      campo.dispatchEvent(new Event('change'));
+    };
+
+    it('por defecto envía cero gastos, cero cargas y sin enfermedad', async () => {
+      const { el } = await abrir();
+      llenarBase(el);
+      el.querySelector('form')!.dispatchEvent(new Event('submit'));
+      const cuerpo = http.expectOne('/api/empleados').request.body;
+      expect(cuerpo.gastosPersonales).toBe(0);
+      expect(cuerpo.cargasFamiliares).toBe(0);
+      expect(cuerpo.enfermedadCatastrofica).toBe(false);
+    });
+
+    it('envía lo que se declara', async () => {
+      const { el } = await abrir();
+      llenarBase(el);
+      escribir(el, 'gastosPersonales', '6000.5');
+      elegir(el, 'cargasFamiliares', 2);
+      elegir(el, 'enfermedadCatastrofica', 1);
+      el.querySelector('form')!.dispatchEvent(new Event('submit'));
+      const cuerpo = http.expectOne('/api/empleados').request.body;
+      expect(cuerpo.gastosPersonales).toBe(6000.5);
+      expect(cuerpo.cargasFamiliares).toBe(2);
+      expect(cuerpo.enfermedadCatastrofica).toBe(true);
+    });
+
+    it('muestra el tope y la rebaja máxima según las cargas', async () => {
+      const { fixture, el } = await abrir(GRADOS, [], { canastaBasica: 821.8 });
+      expect(el.querySelector('#tope-gastos')!.textContent).toContain('7 canastas');
+      expect(el.querySelector('#tope-gastos')!.textContent).toContain('5,752.60');
+      expect(el.querySelector('#tope-gastos')!.textContent).toContain('1,035.47');
+      elegir(el, 'cargasFamiliares', 1);
+      fixture.detectChanges();
+      expect(el.querySelector('#tope-gastos')!.textContent).toContain('9 canastas');
+      expect(el.querySelector('#tope-gastos')!.textContent).toContain('1,331.32');
+      elegir(el, 'enfermedadCatastrofica', 1);
+      fixture.detectChanges();
+      expect(el.querySelector('#tope-gastos')!.textContent).toContain('100 canastas');
+      expect(el.querySelector('#tope-gastos')!.textContent).toContain('14,792.40');
+    });
+
+    it('si el año no tiene canasta básica, avisa que no habrá rebaja', async () => {
+      const { el } = await abrir();
+      expect(el.querySelector('#tope-gastos')).toBeNull();
+      expect(el.querySelector('#sin-canasta')!.textContent).toContain('no se aplicará la rebaja');
+    });
   });
 });

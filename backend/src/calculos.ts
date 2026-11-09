@@ -37,6 +37,8 @@ export interface TramoIR {
 export interface ReglasRol {
   /** Salario Básico Unificado */
   sbu: Monto;
+  /** Canasta familiar básica de enero (INEC): tope de la rebaja por gastos personales. 0 = sin definir, no hay rebaja. */
+  canastaBasica?: Monto;
   /** aporte del trabajador, como fracción (0.0945 = 9.45%) */
   iessPersonal: Monto;
   /** aporte del empleador */
@@ -118,19 +120,59 @@ export function impuestoRentaAnual(baseAnual: Monto, tabla: readonly TramoIR[] =
   throw new Error("la tabla debe cubrir todos los valores");
 }
 
+/** Porcentaje de los gastos personales que se rebaja del impuesto a la renta. */
+export const TASA_REBAJA_GASTOS = D("0.18");
+
+/**
+ * Cuántas canastas básicas topan los gastos según las cargas familiares (0 a 5 o más). Con una enfermedad
+ * catastrófica, rara o huérfana, del contribuyente o de una carga, el tope es de 100 canastas.
+ */
+export const CANASTAS_POR_CARGAS: readonly number[] = [7, 9, 11, 14, 17, 20];
+export const CANASTAS_ENFERMEDAD_CATASTROFICA = 100;
+
+export interface RebajaGastos {
+  /** Canastas que topan los gastos de esta persona */
+  canastas: number;
+  /** canasta básica × canastas */
+  tope: Decimal;
+  /** Lo declarado, sin pasar del tope */
+  gastosAdmitidos: Decimal;
+  /** 18 % de los gastos admitidos, antes de compararla con el impuesto */
+  rebaja: Decimal;
+}
+
+/** Rebaja del impuesto a la renta por gastos personales: 18 % del menor entre lo gastado y el tope. */
+export function rebajaPorGastosPersonales(
+  gastos: Monto, cargas: number, catastrofica: boolean, canastaBasica: Monto,
+): RebajaGastos {
+  const canastas = catastrofica
+    ? CANASTAS_ENFERMEDAD_CATASTROFICA
+    : CANASTAS_POR_CARGAS[Math.min(Math.max(Math.trunc(cargas), 0), CANASTAS_POR_CARGAS.length - 1)];
+  const tope = q(D(canastaBasica).times(canastas));
+  const gastosAdmitidos = Decimal.min(Decimal.max(D(gastos), 0), tope);
+  return { canastas, tope, gastosAdmitidos, rebaja: q(gastosAdmitidos.times(TASA_REBAJA_GASTOS)) };
+}
+
 export interface RetencionIR {
   baseAnual: Decimal;
+  /** Impuesto de la tabla, antes de la rebaja */
   irAnual: Decimal;
+  /** La rebaja que de verdad se resta: nunca pasa del impuesto */
+  rebajaAnual: Decimal;
   irMensual: Decimal;
 }
 
-/** Proyecta el año (x12), resta el IESS (deducible) y reparte el IR en 12 cuotas. */
+/**
+ * Proyecta el año (x12), resta el IESS (deducible), le resta al impuesto la rebaja por gastos personales
+ * (sin dejarlo bajo cero) y reparte lo que queda en 12 cuotas.
+ */
 export function retencionIrMensual(
-  ingresosGravados: Monto, aporteIess: Monto, tabla: readonly TramoIR[] = TABLA_IR_2026,
+  ingresosGravados: Monto, aporteIess: Monto, tabla: readonly TramoIR[] = TABLA_IR_2026, rebajaGastos: Monto = 0,
 ): RetencionIR {
   const baseAnual = Decimal.max(0, D(ingresosGravados).minus(aporteIess).times(12));
   const irAnual = impuestoRentaAnual(baseAnual, tabla);
-  return { baseAnual: q(baseAnual), irAnual, irMensual: q(irAnual.div(12)) };
+  const rebajaAnual = Decimal.min(Decimal.max(D(rebajaGastos), 0), irAnual);
+  return { baseAnual: q(baseAnual), irAnual, rebajaAnual: q(rebajaAnual), irMensual: q(irAnual.minus(rebajaAnual).div(12)) };
 }
 
 /** Fecha de ingreso como la guarda la base: AAAA-MM-DD. */
@@ -199,6 +241,12 @@ export interface EntradaRol {
   horasNocturnas?: Monto;
   comisiones?: Monto;
   otrosDescuentos?: Monto;
+  /** Gastos personales del año que el empleado declaró en su proyección */
+  gastosPersonales?: Monto;
+  /** Cargas familiares (0 a 5) */
+  cargasFamiliares?: number;
+  /** Enfermedad catastrófica, rara o huérfana del empleado o de una carga */
+  enfermedadCatastrofica?: boolean;
 }
 
 /** Resultado en números de dos decimales, listo para JSON y para la base. */
@@ -227,6 +275,8 @@ export interface ResultadoRol {
   aporteIess: number;
   baseIrAnual: number;
   irAnual: number;
+  /** Lo que se le restó al impuesto anual por gastos personales */
+  rebajaIrAnual: number;
   impuestoRenta: number;
   otrosDescuentos: number;
   totalDescuentos: number;
@@ -333,7 +383,10 @@ export function calcularRolConTraza(
 
   // Descuentos. El IESS y el IR se calculan solo sobre lo aportable.
   const iess = q(aportables.times(reglas.iessPersonal));
-  const ir = retencionIrMensual(aportables, iess, reglas.tablaIr);
+  const rebaja = rebajaPorGastosPersonales(
+    entrada.gastosPersonales ?? 0, entrada.cargasFamiliares ?? 0, entrada.enfermedadCatastrofica ?? false, reglas.canastaBasica ?? 0,
+  );
+  const ir = retencionIrMensual(aportables, iess, reglas.tablaIr, rebaja.rebaja);
   const totalDescuentos = iess.plus(ir.irMensual).plus(otrosDescuentos);
   const neto = totalIngresos.minus(totalDescuentos);
 
@@ -364,6 +417,7 @@ export function calcularRolConTraza(
     aporteIess: iess.toNumber(),
     baseIrAnual: ir.baseAnual.toNumber(),
     irAnual: ir.irAnual.toNumber(),
+    rebajaIrAnual: ir.rebajaAnual.toNumber(),
     impuestoRenta: ir.irMensual.toNumber(),
     otrosDescuentos: otrosDescuentos.toNumber(),
     totalDescuentos: totalDescuentos.toNumber(),
@@ -450,7 +504,24 @@ export function calcularRolConTraza(
       ? "la base no supera cero: 0.00"
       : `${m(D(tramo.cuota))} + (${m(ir.baseAnual)} − ${m(D(tramo.desde))}) × ${pct(tramo.porcentaje)} = ${m(ir.irAnual)}`,
     ir.irAnual.toNumber(), "Tabla del impuesto a la renta del año");
-  paso("impuestoRenta", "Impuesto a la renta del mes", "impuesto anual ÷ 12", `${m(ir.irAnual)} ÷ 12 = ${m(ir.irMensual)}`, ir.irMensual.toNumber());
+  const declaro = D(entrada.gastosPersonales ?? 0);
+  if (declaro.gt(0)) {
+    const canasta = D(reglas.canastaBasica ?? 0);
+    paso("rebajaIrAnual", "Rebaja por gastos personales",
+      "18 % del menor entre los gastos del año y el tope (canasta básica × canastas); no pasa del impuesto anual",
+      canasta.lte(0)
+        ? "no hay canasta básica definida para el año: sin rebaja"
+        : `${m(declaro)} contra el tope ${m(canasta)} × ${rebaja.canastas} = ${m(rebaja.tope)}: ${m(rebaja.gastosAdmitidos)} × 18 % = ${m(rebaja.rebaja)}` +
+          (rebaja.rebaja.gt(ir.rebajaAnual) ? `; se resta ${m(ir.rebajaAnual)} porque no puede pasar del impuesto` : ""),
+      ir.rebajaAnual.toNumber(),
+      "Rebaja del impuesto a la renta por gastos personales (SRI): 18 %, con tope según la canasta familiar básica y las cargas");
+  }
+  paso("impuestoRenta", "Impuesto a la renta del mes",
+    ir.rebajaAnual.gt(0) ? "(impuesto anual − rebaja) ÷ 12" : "impuesto anual ÷ 12",
+    ir.rebajaAnual.gt(0)
+      ? `(${m(ir.irAnual)} − ${m(ir.rebajaAnual)}) ÷ 12 = ${m(ir.irMensual)}`
+      : `${m(ir.irAnual)} ÷ 12 = ${m(ir.irMensual)}`,
+    ir.irMensual.toNumber());
   if (otrosDescuentos.gt(0)) paso("otrosDescuentos", "Otros descuentos", "valor digitado", m(otrosDescuentos), otrosDescuentos.toNumber());
   paso("totalDescuentos", "Total de descuentos", "IESS + impuesto a la renta + otros descuentos",
     `${m(iess)} + ${m(ir.irMensual)} + ${m(otrosDescuentos)} = ${m(totalDescuentos)}`, totalDescuentos.toNumber());
