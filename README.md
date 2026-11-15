@@ -169,8 +169,8 @@ rol-pagos-ecuador/
 
 1.  **Clonar el repositorio:**
     ```bash
-    git clone https://github.com/kiramman-mp3/rol-pagos-ecuador.git
-    cd rol-pagos-ecuador
+    git clone https://github.com/kiramman-mp3/sistema-rol-pagos-erp.git
+    cd sistema-rol-pagos-erp
     ```
 
 2.  **Instalar dependencias** de la raíz, el backend y el frontend:
