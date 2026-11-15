@@ -463,7 +463,7 @@ export const GRUPOS_FUENTES: GrupoFuentes[] = [
         leida: true,
       },
       {
-        titulo: 'Nicolás Marín Schiavone: bonificación por desahucio en el retiro voluntario',
+        titulo: 'NMS Law: bonificación por desahucio en el retiro voluntario',
         url: 'https://nmslaw.com.ec/blog/2025/02/03/corte-nacional-bonificacion-desahucio-retiro-voluntario-ecuador/',
         uso: 'Resolución 03-2025 de la Corte Nacional: el retiro voluntario no da bonificación por desahucio.',
         leida: true,
