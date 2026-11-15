@@ -402,3 +402,33 @@ export interface Prestamo {
 
 /** Lo que se envía al registrar un préstamo. */
 export type DatosPrestamo = Pick<Prestamo, 'empleadoId' | 'tipo' | 'cuota' | 'cuotas' | 'primerAnio' | 'primerMes' | 'observacion'>;
+
+/** Cuántos días de vacaciones lleva devengados, gozados y le quedan a un empleado. */
+export interface SaldoVacaciones {
+  empleadoId: number;
+  nombres: string;
+  cedula: string;
+  fechaIngreso: string;
+  /** Días de vacaciones al año del régimen que se le aplica */
+  diasPorAnio: number;
+  devengados: number;
+  gozados: number;
+  /** Puede ser negativo: tomó más de lo devengado */
+  saldo: number;
+}
+
+/** Un periodo de vacaciones gozadas. */
+export interface PeriodoVacaciones {
+  id: number;
+  empleadoId: number;
+  nombres: string;
+  cedula: string;
+  desde: string;
+  hasta: string;
+  /** Días calendario, con el primero y el último incluidos */
+  dias: number;
+  observacion: string;
+}
+
+/** Lo que se envía al registrar un periodo de vacaciones. */
+export type DatosVacaciones = Pick<PeriodoVacaciones, 'empleadoId' | 'desde' | 'hasta' | 'observacion'>;
