@@ -66,8 +66,8 @@ export const GRUPOS_FUENTES: GrupoFuentes[] = [
       {
         titulo: 'Ministerio del Trabajo: Código del Trabajo (PDF)',
         url: 'https://www.trabajo.gob.ec/wp-content/uploads/downloads/2024/01/CODIGO_DEL_TRABAJO.pdf',
-        uso: 'Confirmación del art. 49 (jornada nocturna, de 19h00 a 06h00, con 25 % de recargo).',
-        leida: false,
+        uso: 'Texto oficial (última reforma: R.O. 309-S, 12-V-2023). Confirma el art. 49 (jornada nocturna, de 19h00 a 06h00, con 25 % de recargo) y, para la liquidación, los arts. 71, 113, 169, 184, 185 y 188.',
+        leida: true,
       },
     ],
   },
@@ -442,7 +442,7 @@ export const GRUPOS_FUENTES: GrupoFuentes[] = [
     id: 'liquidacion',
     titulo: 'Liquidación por salida (por confirmar)',
     descripcion:
-      'Bonificación por desahucio, indemnización por despido, décimos proporcionales y vacaciones no gozadas. No se pudo leer el texto oficial del Código del Trabajo: ninguna fuente es la norma y se contradicen en la renuncia, la región del décimo cuarto y la fracción de año.',
+      'Bonificación por desahucio, indemnización por despido, décimos proporcionales y vacaciones no gozadas. El texto del Código del Trabajo está confirmado en la copia oficial del Ministerio (ver arriba); queda por confirmar cómo se aplica la bonificación a la renuncia (las sentencias y la demanda siguen abiertas) y la fracción de año del art. 185, que el artículo no menciona.',
     fuentes: [
       {
         titulo: 'Ecuador Legal Online: el desahucio',
@@ -483,14 +483,8 @@ export const GRUPOS_FUENTES: GrupoFuentes[] = [
       {
         titulo: 'Vistazo: qué pasa con el décimo si renuncias',
         url: 'https://www.vistazo.com/2026-02-25-pasa-decimo-renuncias-debes-saber-antes-dejar-trabajo-OG10700187',
-        uso: 'Fechas de pago del décimo cuarto por región; contradice a Ecuador Legal Online en Amazonía y Galápagos.',
+        uso: 'Fechas de pago del décimo cuarto por región; coincide con el art. 113 del Código (Costa e Insular, Sierra y Amazónica).',
         leida: true,
-      },
-      {
-        titulo: 'Ecuador Legal Online: Código del Trabajo',
-        url: 'https://www.ecuadorlegalonline.com/biblioteca/codigo-de-trabajo/',
-        uso: 'Texto del Código donde confirmar los arts. 169, 184 y 188; no se abrió.',
-        leida: false,
       },
     ],
   },
