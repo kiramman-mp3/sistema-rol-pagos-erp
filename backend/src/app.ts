@@ -17,6 +17,7 @@ import { rutasPuestos } from "./rutas/puestos.ts";
 import { rutasRegimenes } from "./rutas/regimenes.ts";
 import { rutasRoles } from "./rutas/roles.ts";
 import { rutasUsuarios } from "./rutas/usuarios.ts";
+import { rutasVacaciones } from "./rutas/vacaciones.ts";
 import { ErrorApi } from "./validaciones.ts";
 
 interface Opciones {
@@ -60,6 +61,7 @@ export function crearApp(db: Base, { carpetaFrontend, secreto, confiarEnProxy = 
   app.use("/api/empleados", rutasEmpleados(db));
   app.use("/api/roles", rutasRoles(db));
   app.use("/api/prestamos", rutasPrestamos(db));
+  app.use("/api/vacaciones", rutasVacaciones(db));
   app.use("/api/regimenes", rutasRegimenes(db));
   app.use("/api/escala", rutasEscala(db));
   app.use("/api/puestos", rutasPuestos(db));
