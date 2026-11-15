@@ -307,7 +307,7 @@ const TEXTO_EVENTO: Record<string, string> = {
               <tr>
                 <th rowspan="2">Empleado</th>
                 <th colspan="5" class="g-ingresos t-ingresos corte">Ingresos</th>
-                <th colspan="4" class="g-descuentos t-descuentos corte">Descuentos</th>
+                <th colspan="5" class="g-descuentos t-descuentos corte">Descuentos</th>
                 <th rowspan="2" class="num g-neto c-neto corte"><span class="th-largo">Neto a recibir</span><span class="th-corto" aria-hidden="true">Neto</span></th>
               </tr>
               <tr>
@@ -319,6 +319,7 @@ const TEXTO_EVENTO: Record<string, string> = {
                 <th class="num corte"><span class="th-largo">Aporte IESS</span><span class="th-corto" aria-hidden="true">IESS</span></th>
                 <th class="num"><span class="th-largo">Impuesto a la renta</span><span class="th-corto" aria-hidden="true">IR</span></th>
                 <th class="num">Otros</th>
+                <th class="num" title="Cuotas de préstamos del IESS"><span class="th-largo">Préstamos IESS</span><span class="th-corto" aria-hidden="true">Prést.</span></th>
                 <th class="num">Total</th>
               </tr>
             </thead>
@@ -349,12 +350,13 @@ const TEXTO_EVENTO: Record<string, string> = {
                   </td>
                   <td class="num">{{ d.impuestoRenta | dinero }}</td>
                   <td class="num">{{ d.otrosDescuentos | dinero }}</td>
+                  <td class="num">{{ d.descuentoPrestamos | dinero }}</td>
                   <td class="num"><strong>{{ d.totalDescuentos | dinero }}</strong></td>
                   <td class="num c-neto corte">{{ d.netoPagar | dinero }}</td>
                 </tr>
                 @if (calculoAbierto() === d.cedula) {
                   <tr class="no-imprimir">
-                    <td colspan="11"><app-desglose-calculo [rolId]="r.id" [cedula]="d.cedula" /></td>
+                    <td colspan="12"><app-desglose-calculo [rolId]="r.id" [cedula]="d.cedula" /></td>
                   </tr>
                 }
               }
@@ -370,6 +372,7 @@ const TEXTO_EVENTO: Record<string, string> = {
                 <td class="num corte">{{ totales().iess | dinero }}</td>
                 <td class="num">{{ totales().impuesto | dinero }}</td>
                 <td class="num">{{ totales().otros | dinero }}</td>
+                <td class="num">{{ totales().prestamos | dinero }}</td>
                 <td class="num">{{ r.totalDescuentos | dinero }}</td>
                 <td class="num c-neto corte">{{ r.totalNeto | dinero }}</td>
               </tr>
@@ -579,6 +582,7 @@ export class DetalleRol {
       iess: suma((x) => x.aporteIess),
       impuesto: suma((x) => x.impuestoRenta),
       otros: suma((x) => x.otrosDescuentos),
+      prestamos: suma((x) => x.descuentoPrestamos),
       beneficios: suma((x) => x.beneficiosMensuales),
       // En la tabla de provisiones solo cuenta lo que se acumula.
       decimoTercero: suma((x) => (x.decimoTerceroModalidad === 'acumulado' ? x.decimoTercero : 0)),

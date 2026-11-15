@@ -14,7 +14,7 @@ const BASE = {
   horasSuplementarias: 0, horasExtraordinarias: 0, horasDescanso: 0, horasNocturnas: 0,
   valorHorasSuplementarias: 0, valorHorasExtraordinarias: 0, valorHorasDescanso: 0, valorRecargoNocturno: 0,
   comisiones: 0, ingresosAportables: 1800, beneficiosMensuales: 340.11, totalIngresos: 2140.11,
-  aporteIess: 170.1, baseIrAnual: 19560, irAnual: 0, impuestoRenta: 0, otrosDescuentos: 0, totalDescuentos: 170.1,
+  aporteIess: 170.1, baseIrAnual: 19560, irAnual: 0, impuestoRenta: 0, otrosDescuentos: 0, descuentoPrestamos: 0, totalDescuentos: 170.1,
   netoPagar: 1970.01, decimoTercero: 150, decimoTerceroModalidad: 'mensual', decimoCuarto: 40.17,
   decimoCuartoModalidad: 'mensual', fondosReserva: 149.94, fondosReservaModalidad: 'mensual', vacaciones: 75,
   aportePatronal: 200.7, totalProvisiones: 275.7, costoEmpleador: 2415.81,
@@ -29,6 +29,7 @@ const ROL = {
     {
       ...BASE, id: 2, nombres: 'Beto Acumula', decimoTerceroModalidad: 'acumulado', decimoCuartoModalidad: 'no',
       decimoCuarto: 0, fondosReservaModalidad: 'acumulado', beneficiosMensuales: 0, totalIngresos: 1800,
+      descuentoPrestamos: 40, totalDescuentos: 210.1,
     },
   ],
 };
@@ -97,6 +98,15 @@ describe('DetalleRol', () => {
     expect(ingresos[0].textContent).toContain('$340.11'); // lo que se paga en el rol
     expect(ingresos[0].textContent).toContain('$2,140.11');
     expect(ingresos[1].textContent).toContain('$0.00');
+  });
+
+  it('descuenta los préstamos del IESS en su propia columna', async () => {
+    const el = await abrir();
+    expect(el.querySelector('thead')!.textContent).toContain('Préstamos IESS');
+    const [planilla] = filas(el);
+    expect(planilla[0].textContent).not.toContain('$40.00');
+    expect(planilla[1].textContent).toContain('$40.00');
+    expect(el.querySelector('tfoot')!.textContent).toContain('$40.00'); // el total de la columna
   });
 
   it('en provisiones solo muestra valor para lo que se acumula', async () => {
