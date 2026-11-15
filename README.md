@@ -62,6 +62,7 @@ Para el área de talento humano o contabilidad de una empresa pequeña o mediana
 *   **Horas extras por tipo:** suplementarias, extraordinarias, de sábado, domingo y feriado, y nocturnas, con el recargo y el tope de cada régimen. Los topes avisan, sin bloquear.
 *   **Rebaja por gastos personales:** el impuesto a la renta se rebaja el 18 % de los gastos que el empleado declaró, con un tope según sus cargas familiares y la canasta básica del año. Es opcional: sin gastos declarados no cambia nada.
 *   **Dinero exacto:** todo se calcula con `decimal.js`, se redondea a centavos en cada rubro y se guarda en columnas `NUMERIC`, sin errores de coma flotante.
+*   **Préstamos del IESS:** cada préstamo se registra con su cuota, su número de cuotas y su primer mes; el rol descuenta la cuota que toca, se pueden suspender y el historial no cambia.
 *   **Conciliación con el IESS:** materia gravada, aportes personal y patronal y fondos de reserva por empleado, descargables en CSV.
 *   **Boleta y CSV:** boleta individual imprimible en una hoja y exportación del rol para Excel.
 *   **Ciclo del rol:** cada rol pasa por calculado, validado, aprobado, publicado y pagado. Un rol publicado es inmutable: no se recalcula, no se edita y no se elimina, y la base también lo impide.
@@ -125,6 +126,7 @@ rol-pagos-ecuador/
 │   │   ├── escala.ts          # Escala salarial
 │   │   ├── puestos.ts         # Orgánico funcional
 │   │   ├── iess.ts            # Cuadro de conciliación con el IESS
+│   │   ├── prestamos.ts       # Préstamos del IESS: qué cuota toca cada mes
 │   │   ├── ciclo.ts           # Ciclo del rol: estados, pasos y revisión de errores bloqueantes
 │   │   ├── auditoria.ts       # Registro de auditoría (solo inserciones)
 │   │   ├── permisos.ts        # Roles de usuario y qué permiso exige cada ruta
@@ -134,8 +136,8 @@ rol-pagos-ecuador/
 │   │   ├── cuentas.ts         # Registro de empresas, usuarios y datos de la empresa
 │   │   ├── seed.ts            # Script: crea una cuenta de ejemplo y la llena
 │   │   ├── usuario.ts         # Script: lista las cuentas y agrega usuarios a una cuenta
-│   │   ├── rutas/             # auth, cuenta, empleados, roles, parámetros, regímenes, escala y puestos
-│   │   ├── migraciones/       # Esquema versionado: 001 a 021 (SQL numerado)
+│   │   ├── rutas/             # auth, cuenta, empleados, préstamos, roles, parámetros, regímenes, escala y puestos
+│   │   ├── migraciones/       # Esquema versionado: 001 a 022 (SQL numerado)
 │   │   ├── validaciones.ts    # Cédula, RUC, correo, números y fechas
 │   │   ├── server.ts          # Arranque local
 │   │   └── vercel.ts          # Entrada del backend en Vercel
@@ -145,7 +147,7 @@ rol-pagos-ecuador/
 │   ├── src/app/entrar/        # Inicio de sesión
 │   ├── src/app/registro/      # Registro de una empresa
 │   ├── src/app/informacion/   # Acerca de, investigación y fuentes
-│   ├── src/app/sistema/       # Shell, inicio del mes, empleados, orgánico, roles, parámetros y usuarios
+│   ├── src/app/sistema/       # Shell, inicio del mes, empleados, préstamos, orgánico, roles, parámetros y usuarios
 │   ├── src/app/core/          # Cliente de la API, sesión, avisos, pipe de dinero, modelos y fuentes
 │   └── src/styles.css         # Sistema visual global
 ├── docs/capturas/             # Capturas de pantalla de este README
@@ -271,7 +273,8 @@ El backend no arranca en Vercel sin `DATABASE_URL` y `SESION_SECRETO`, ni con `C
 8. **Rol**: dos ecuaciones (`ingresos − descuentos = neto` e `ingresos + provisiones = costo empleador`), la planilla por empleado, el costo empleador aparte y la **conciliación con el IESS**. Arriba, el **ciclo del rol**: un botón con el paso que sigue (validar, aprobar, publicar, marcar como pagado) y el historial de quién lo hizo.
 9. **Boleta individual** imprimible en una hoja, y **descarga en CSV** del rol y de los aportes al IESS.
 10. **Usuarios (`/sistema/usuarios`)**, solo para administradores: agregar personas con su rol, cambiar roles y contraseñas, eliminar usuarios y activar la separación de funciones. Quien entra como aprobador o lector ve un aviso con lo que puede hacer.
-11. **Cuenta (`/sistema/cuenta`)**, solo para administradores: descargar todos los datos de la empresa en un archivo JSON o eliminarla para siempre.
+11. **Préstamos (`/sistema/prestamos`)**: registrar los préstamos del IESS de un empleado, suspenderlos o eliminarlos; el rol del mes descuenta la cuota que toque.
+12. **Cuenta (`/sistema/cuenta`)**, solo para administradores: descargar todos los datos de la empresa en un archivo JSON o eliminarla para siempre.
 
 ---
 
@@ -318,6 +321,8 @@ El backend no arranca en Vercel sin `DATABASE_URL` y `SESION_SECRETO`, ni con `C
 | `POST /api/escala`, `PUT/DELETE /api/escala/:id` | Alta, edición y baja de un grado |
 | `GET/POST /api/puestos`, `GET/PUT/DELETE /api/puestos/:id` | Puestos del orgánico funcional |
 | `PATCH /api/puestos/:id/responsable` | Asigna o quita al responsable de un puesto |
+| `GET/POST /api/prestamos`, `GET/PUT/DELETE /api/prestamos/:id` | Préstamos del IESS: `empleadoId`, `tipo` (`quirografario`, `hipotecario` o `prendario`), `cuota`, `cuotas`, `primerAnio` y `primerMes`. `GET` acepta `?empleadoId=` y devuelve también el mes de la última cuota y el total |
+| `PATCH /api/prestamos/:id/estado` | Suspende o reanuda el descuento de un préstamo |
 | `GET/POST /api/empleados` | Lista y alta. Cada empleado lleva `gastosPersonales`, `cargasFamiliares` y `enfermedadCatastrofica` para la rebaja del impuesto a la renta |
 | `GET/PUT/DELETE /api/empleados/:id` | Consulta, edición y baja |
 | `PATCH /api/empleados/:id/estado` | Activa o desactiva. Al desactivar registra la salida (`fechaSalida` del cuerpo, o hoy); al activar la borra |
@@ -386,6 +391,13 @@ El impuesto anual sale de la tabla progresiva y la rebaja se le resta sin dejarl
 | Canastas del tope | 7 | 9 | 11 | 14 | 17 | 20 | 100 |
 
 Con la canasta de enero de 2026 ($821,80), el tope sin cargas es $5.752,60 y la rebaja máxima $1.035,47 al año. La canasta se edita por año en **Parámetros**; con 0 no se aplica la rebaja y el rol avisa si había gastos declarados. Cada rol guarda una foto de los gastos, las cargas y la rebaja con que se calculó, y la reliquidación conserva los del rol original. El desglose «Cómo se calculó» muestra el paso de la rebaja.
+
+### Préstamos del IESS
+El IESS fija la cuota y el número de cuotas de cada préstamo quirografario, hipotecario o prendario, y el empleador la retiene en el rol. Se registran en **Préstamos** tal como vienen en el comprobante del IESS (cuota, número de cuotas y mes de la primera): el sistema no calcula interés. Una cuota se descuenta cada mes, desde el primero hasta completar las cuotas, y suma a los descuentos del rol:
+
+`neto = ingresos − (IESS + impuesto a la renta + otros descuentos + préstamos del IESS)`
+
+La cuota no cambia el ingreso aportable: no afecta el aporte al IESS, el impuesto a la renta ni el costo empleador. Un préstamo suspendido no se descuenta pero queda en el historial. Si los descuentos dejan el neto en negativo, el rol se genera igual y avisa. La pantalla de novedades anuncia la cuota que se descontará a cada empleado; no se digita, sale de los préstamos registrados. Cada rol guarda lo que descontó, así que eliminar o cambiar un préstamo no altera los roles ya generados, y una reliquidación conserva la cuota del rol original. Los préstamos de un empleado se van con él y salen en la exportación de la cuenta.
 
 ### Vigencia de las reglas
 
@@ -601,6 +613,7 @@ El esquema vive en `backend/src/migraciones/NNN_nombre.sql`. Las aplicadas queda
 | 018 | Desglose del cálculo: `roles_detalle.traza` (JSON, vacío en los roles anteriores) |
 | 019 | Recuperar la contraseña y verificar el correo: `usuarios.email_verificado_en` y la tabla `tokens_usuario` (guarda el hash del token) |
 | 020 | Eliminar una cuenta: el disparador de la auditoría deja borrar sus filas solo dentro de la transacción que elimina esa cuenta |
+| 022 | Préstamos del IESS: tabla `prestamos_iess` (por empleado y cuenta) y `descuento_prestamos` en el detalle del rol |
 | 021 | Gastos personales: `parametros_anuales.canasta_basica`; `gastos_personales`, `cargas_familiares` y `enfermedad_catastrofica` en el empleado; la foto de esos datos y `rebaja_ir_anual` en el detalle del rol; `copiar_plantilla` copia la canasta |
 
 Los roles ya generados guardan una foto del régimen, de las tasas y de la modalidad con que se calcularon: si luego se editan las reglas, el historial no cambia.
@@ -644,7 +657,8 @@ Verifica todas las cifras con la norma y con el IESS antes de usar el sistema en
 - Eliminar una cuenta no deja ningún rastro, ni siquiera de que existió: la auditoría se va con ella. Quien necesite conservar un comprobante debe descargar el archivo antes. Las copias de seguridad de la base (por ejemplo las de Supabase) siguen teniendo los datos hasta que ellas mismas vencen.
 - La exportación es un archivo JSON con los nombres de las tablas; no hay un formato para volver a importarlo.
 - Los gastos personales los declara el empleado una sola vez en su ficha y valen para todos los meses: el sistema no revisa facturas, no controla topes por categoría y no distingue la proyección de febrero de sus actualizaciones. El impuesto mensual sigue proyectando el año (×12) y dividiendo entre 12, sin las cuotas de febrero a diciembre del SRI.
-- Sin préstamos del IESS, vacaciones gozadas ni liquidaciones (finiquito) por salida: la fecha de salida solo prorratea el último mes.
+- Sin vacaciones gozadas ni liquidaciones (finiquito) por salida: la fecha de salida solo prorratea el último mes.
+- Los préstamos del IESS se registran con la cuota que dice el IESS: el sistema no calcula interés ni tabla de amortización, no revisa que el IESS haya aprobado el préstamo y no descuenta las cuotas pendientes cuando el empleado sale. Tampoco limita la cuota a un porcentaje del sueldo.
 - Una regla que cambia a mitad de mes se aplica a todo ese mes, sin prorratear por días. Los parámetros anuales (SBU e IR) tienen una versión por año, no por fecha.
 - Los topes de horas extras avisan pero no bloquean: la LOSEP dice que si se obliga a trabajar sobre el límite, igual se pagan.
 - Los puestos del nivel jerárquico superior de la LOSEP no cobran horas extras: se marca «No las recibe» en ese empleado. No se incluye la escala oficial de ese nivel.
@@ -673,7 +687,8 @@ Verifica todas las cifras con la norma y con el IESS antes de usar el sistema en
 - [x] Recuperar la contraseña y verificar el correo, por SMTP y con enlaces de un solo uso.
 - [x] Exportar y eliminar una cuenta completa, con confirmación por RUC y contraseña.
 - [x] Gastos personales: rebaja del impuesto a la renta con tope por cargas familiares y canasta básica.
-- [ ] Préstamos del IESS, vacaciones gozadas y liquidaciones por salida.
+- [x] Préstamos del IESS: cuota mensual descontada en el rol, con su pantalla y su historial.
+- [ ] Vacaciones gozadas y liquidaciones por salida.
 - [ ] Confirmar con las normas vigentes los datos marcados «por confirmar».
 
 ---
