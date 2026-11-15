@@ -88,6 +88,9 @@ import { etiquetaRegimen } from '../../core/regimen';
               <tbody>
                 <tr><td>Aporte personal al IESS ({{ d.tasaIessPersonal | percent: '1.2-2' }})</td><td class="num">{{ d.aporteIess | dinero }}</td></tr>
                 <tr><td>Impuesto a la renta</td><td class="num">{{ d.impuestoRenta | dinero }}</td></tr>
+                @if (d.descuentoPrestamos) {
+                  <tr><td>Préstamo del IESS</td><td class="num">{{ d.descuentoPrestamos | dinero }}</td></tr>
+                }
                 @if (d.otrosDescuentos) {
                   <tr><td>Anticipos y otros</td><td class="num">{{ d.otrosDescuentos | dinero }}</td></tr>
                 }

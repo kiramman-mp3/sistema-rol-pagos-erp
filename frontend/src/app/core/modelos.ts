@@ -149,6 +149,8 @@ export interface ResultadoRol {
   irAnual: number;
   impuestoRenta: number;
   otrosDescuentos: number;
+  /** Cuotas de préstamos del IESS descontadas en el rol */
+  descuentoPrestamos: number;
   totalDescuentos: number;
   netoPagar: number;
   decimoTercero: number;
@@ -305,6 +307,8 @@ export interface EmpleadoDelPeriodo {
   regimenAplicado: string;
   /** false = sus horas suplementarias, extraordinarias y de descanso no se pagan */
   recibeHorasExtras: boolean;
+  /** Cuota de préstamos del IESS que el rol descontará este mes (sale de los préstamos registrados) */
+  cuotaPrestamos: number;
   novedades: Novedades;
 }
 
@@ -372,3 +376,29 @@ export interface DatosCuenta {
   ruc: string;
   separarFunciones: boolean;
 }
+
+export type TipoPrestamo = 'quirografario' | 'hipotecario' | 'prendario';
+
+/** Un préstamo del IESS que se descuenta en el rol, una cuota por mes. */
+export interface Prestamo {
+  id: number;
+  empleadoId: number;
+  nombres: string;
+  cedula: string;
+  tipo: TipoPrestamo;
+  cuota: number;
+  cuotas: number;
+  primerAnio: number;
+  primerMes: number;
+  /** El mes de la última cuota */
+  ultimoAnio: number;
+  ultimoMes: number;
+  /** cuota × cuotas */
+  total: number;
+  /** false = suspendido: no se descuenta */
+  activo: boolean;
+  observacion: string;
+}
+
+/** Lo que se envía al registrar un préstamo. */
+export type DatosPrestamo = Pick<Prestamo, 'empleadoId' | 'tipo' | 'cuota' | 'cuotas' | 'primerAnio' | 'primerMes' | 'observacion'>;

@@ -3,10 +3,12 @@ import { Injectable, computed, inject } from '@angular/core';
 
 import type {
   DatosEmpleado,
+  DatosPrestamo,
   Empleado,
   EntradaSimulacion,
   Grado,
   Parametros,
+  Prestamo,
   DatosCuenta,
   Puesto,
   CambioReliquidacion,
@@ -65,6 +67,16 @@ export class Api {
   }
   cargarDemo() {
     return this.http.post<{ agregados: number }>('/api/empleados/demo', {});
+  }
+
+  crearPrestamo(datos: DatosPrestamo) {
+    return this.http.post<Prestamo>('/api/prestamos', datos);
+  }
+  cambiarEstadoPrestamo(id: number) {
+    return this.http.patch<Prestamo>(`/api/prestamos/${id}/estado`, {});
+  }
+  eliminarPrestamo(id: number) {
+    return this.http.delete<void>(`/api/prestamos/${id}`);
   }
 
   generarRol(anio: number, mes: number, novedades: NovedadEnviada[]) {

@@ -23,6 +23,8 @@ interface Fila extends NovedadEnviada {
   regimenAplicado: string;
   /** false = no cobra horas suplementarias, extraordinarias ni de descanso */
   recibeHorasExtras: boolean;
+  /** Cuota de préstamos del IESS que se descontará (solo informativa: sale de los préstamos registrados) */
+  cuotaPrestamos: number;
 }
 
 const COLUMNAS: { campo: Campo; etiqueta: string; corte?: boolean; extra?: boolean }[] = [
@@ -104,6 +106,9 @@ const COLUMNAS: { campo: Campo; etiqueta: string; corte?: boolean; extra?: boole
                       <td>
                         {{ f.nombres }}
                         <span class="secundario">{{ f.cargo }} · {{ regimen(f) }}</span>
+                        @if (f.cuotaPrestamos) {
+                          <span class="secundario">Préstamo del IESS: {{ f.cuotaPrestamos | dinero }} se descuenta de este rol</span>
+                        }
                       </td>
                       <td class="num">{{ f.sueldoBase | dinero }}</td>
                       @for (c of columnas; track c.campo) {
@@ -216,6 +221,7 @@ export class NovedadesMes {
           regimen: e.regimen,
           regimenAplicado: e.regimenAplicado,
           recibeHorasExtras: e.recibeHorasExtras,
+          cuotaPrestamos: e.cuotaPrestamos,
           horasSuplementarias: texto(e.novedades.horasSuplementarias),
           horasExtraordinarias: texto(e.novedades.horasExtraordinarias),
           horasDescanso: texto(e.novedades.horasDescanso),
