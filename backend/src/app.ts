@@ -11,6 +11,7 @@ import { exigirPermiso, exigirSesion, rutasAuth } from "./rutas/auth.ts";
 import { rutasCuenta } from "./rutas/cuenta.ts";
 import { rutasEmpleados } from "./rutas/empleados.ts";
 import { rutasEscala } from "./rutas/escala.ts";
+import { rutasLiquidaciones } from "./rutas/liquidaciones.ts";
 import { rutasParametros } from "./rutas/parametros.ts";
 import { rutasPrestamos } from "./rutas/prestamos.ts";
 import { rutasPuestos } from "./rutas/puestos.ts";
@@ -62,6 +63,7 @@ export function crearApp(db: Base, { carpetaFrontend, secreto, confiarEnProxy = 
   app.use("/api/roles", rutasRoles(db));
   app.use("/api/prestamos", rutasPrestamos(db));
   app.use("/api/vacaciones", rutasVacaciones(db));
+  app.use("/api/liquidaciones", rutasLiquidaciones(db));
   app.use("/api/regimenes", rutasRegimenes(db));
   app.use("/api/escala", rutasEscala(db));
   app.use("/api/puestos", rutasPuestos(db));
