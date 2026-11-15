@@ -63,6 +63,7 @@ Para el área de talento humano o contabilidad de una empresa pequeña o mediana
 *   **Rebaja por gastos personales:** el impuesto a la renta se rebaja el 18 % de los gastos que el empleado declaró, con un tope según sus cargas familiares y la canasta básica del año. Es opcional: sin gastos declarados no cambia nada.
 *   **Dinero exacto:** todo se calcula con `decimal.js`, se redondea a centavos en cada rubro y se guarda en columnas `NUMERIC`, sin errores de coma flotante.
 *   **Préstamos del IESS:** cada préstamo se registra con su cuota, su número de cuotas y su primer mes; el rol descuenta la cuota que toca, se pueden suspender y el historial no cambia.
+*   **Liquidación por salida:** décimos acumulados, vacaciones no gozadas y, según la causa, la bonificación por desahucio y la indemnización por despido, cada rubro con su fórmula. Se revisa antes de registrar y queda guardada con una foto de cómo se calculó.
 *   **Vacaciones gozadas:** cada periodo que toma un empleado se registra con sus fechas; el saldo sale de los días que devenga su régimen menos los que ya tomó, y avisa, sin bloquear, si toma de más.
 *   **Conciliación con el IESS:** materia gravada, aportes personal y patronal y fondos de reserva por empleado, descargables en CSV.
 *   **Boleta y CSV:** boleta individual imprimible en una hoja y exportación del rol para Excel.
@@ -129,6 +130,8 @@ rol-pagos-ecuador/
 │   │   ├── iess.ts            # Cuadro de conciliación con el IESS
 │   │   ├── prestamos.ts       # Préstamos del IESS: qué cuota toca cada mes
 │   │   ├── vacaciones.ts      # Vacaciones: días devengados, gozados y saldo
+│   │   ├── liquidacion.ts     # Liquidación por salida: función pura con las reglas por causa
+│   │   ├── liquidaciones.ts   # Reúne los datos de la base para calcular una liquidación
 │   │   ├── ciclo.ts           # Ciclo del rol: estados, pasos y revisión de errores bloqueantes
 │   │   ├── auditoria.ts       # Registro de auditoría (solo inserciones)
 │   │   ├── permisos.ts        # Roles de usuario y qué permiso exige cada ruta
@@ -138,8 +141,8 @@ rol-pagos-ecuador/
 │   │   ├── cuentas.ts         # Registro de empresas, usuarios y datos de la empresa
 │   │   ├── seed.ts            # Script: crea una cuenta de ejemplo y la llena
 │   │   ├── usuario.ts         # Script: lista las cuentas y agrega usuarios a una cuenta
-│   │   ├── rutas/             # auth, cuenta, empleados, préstamos, vacaciones, roles, parámetros, regímenes, escala y puestos
-│   │   ├── migraciones/       # Esquema versionado: 001 a 023 (SQL numerado)
+│   │   ├── rutas/             # auth, cuenta, empleados, préstamos, vacaciones, liquidaciones, roles, parámetros, regímenes, escala y puestos
+│   │   ├── migraciones/       # Esquema versionado: 001 a 024 (SQL numerado)
 │   │   ├── validaciones.ts    # Cédula, RUC, correo, números y fechas
 │   │   ├── server.ts          # Arranque local
 │   │   └── vercel.ts          # Entrada del backend en Vercel
@@ -149,7 +152,7 @@ rol-pagos-ecuador/
 │   ├── src/app/entrar/        # Inicio de sesión
 │   ├── src/app/registro/      # Registro de una empresa
 │   ├── src/app/informacion/   # Acerca de, investigación y fuentes
-│   ├── src/app/sistema/       # Shell, inicio del mes, empleados, préstamos, vacaciones, orgánico, roles, parámetros y usuarios
+│   ├── src/app/sistema/       # Shell, inicio del mes, empleados, préstamos, vacaciones, liquidaciones, orgánico, roles, parámetros y usuarios
 │   ├── src/app/core/          # Cliente de la API, sesión, avisos, pipe de dinero, modelos y fuentes
 │   └── src/styles.css         # Sistema visual global
 ├── docs/capturas/             # Capturas de pantalla de este README
@@ -277,7 +280,8 @@ El backend no arranca en Vercel sin `DATABASE_URL` y `SESION_SECRETO`, ni con `C
 10. **Usuarios (`/sistema/usuarios`)**, solo para administradores: agregar personas con su rol, cambiar roles y contraseñas, eliminar usuarios y activar la separación de funciones. Quien entra como aprobador o lector ve un aviso con lo que puede hacer.
 11. **Préstamos (`/sistema/prestamos`)**: registrar los préstamos del IESS de un empleado, suspenderlos o eliminarlos; el rol del mes descuenta la cuota que toque.
 12. **Vacaciones (`/sistema/vacaciones`)**: el saldo de días de cada persona (devengados, gozados y los que le quedan), los periodos que ya tomó y un formulario para registrar otro. Avisa si toma más de lo devengado.
-13. **Cuenta (`/sistema/cuenta`)**, solo para administradores: descargar todos los datos de la empresa en un archivo JSON o eliminarla para siempre.
+13. **Liquidaciones (`/sistema/liquidaciones`)**: se elige a quien sale, la fecha, la causa y la región, y el sistema muestra cada rubro con su fórmula y sus números, más los avisos. Solo al confirmar se registra y se da de salida al empleado.
+14. **Cuenta (`/sistema/cuenta`)**, solo para administradores: descargar todos los datos de la empresa en un archivo JSON o eliminarla para siempre.
 
 ---
 
@@ -327,6 +331,8 @@ El backend no arranca en Vercel sin `DATABASE_URL` y `SESION_SECRETO`, ni con `C
 | `GET/POST /api/prestamos`, `GET/PUT/DELETE /api/prestamos/:id` | Préstamos del IESS: `empleadoId`, `tipo` (`quirografario`, `hipotecario` o `prendario`), `cuota`, `cuotas`, `primerAnio` y `primerMes`. `GET` acepta `?empleadoId=` y devuelve también el mes de la última cuota y el total |
 | `PATCH /api/prestamos/:id/estado` | Suspende o reanuda el descuento de un préstamo |
 | `GET /api/vacaciones/saldos` | Por cada empleado activo: `diasPorAnio`, `devengados`, `gozados` y `saldo` a hoy |
+| `POST /api/liquidaciones/calcular` | Calcula una liquidación sin guardar nada (`empleadoId`, `fechaSalida`, `causa`, `region`). Devuelve los `rubros`, el `total`, las cuotas de préstamos pendientes y los `avisos`. Cualquier rol puede consultarla |
+| `GET/POST /api/liquidaciones`, `GET/DELETE /api/liquidaciones/:id` | Lista, registra (mismo cuerpo que `calcular`; marca al empleado como salido en esa fecha), consulta y elimina. Una persona con liquidación ya registrada responde `409` |
 | `GET/POST /api/vacaciones`, `DELETE /api/vacaciones/:id` | Periodos gozados (`empleadoId`, `desde`, `hasta`, `observacion`). Los `dias` los calcula el servidor. `GET` acepta `?empleadoId=`; el `POST` devuelve `avisos`. Un periodo que se cruza con otro responde `409` |
 | `GET/POST /api/empleados` | Lista y alta. Cada empleado lleva `gastosPersonales`, `cargasFamiliares` y `enfermedadCatastrofica` para la rebaja del impuesto a la renta |
 | `GET/PUT/DELETE /api/empleados/:id` | Consulta, edición y baja |
@@ -410,6 +416,33 @@ Los días se devengan en proporción al tiempo de servicio, con los meses de 30 
 `devengados = días de vacaciones al año del régimen × días de servicio ÷ 360`
 
 Los días al año salen del régimen aplicado al empleado (15 en el Código del Trabajo, 30 en la LOSEP). El **saldo** es lo devengado menos los días de los periodos registrados. Un periodo cuenta días calendario, con el primero y el último incluidos (Código del Trabajo, art. 69: también cuentan los no laborables). No puede empezar antes del ingreso, terminar después de la salida, pasar de 366 días ni cruzarse con otro periodo de la misma persona. Si con un periodo nuevo la persona ya tomó más de lo que lleva devengado a esa fecha, se registra igual y la respuesta trae un aviso. Registrar vacaciones no cambia el rol: se pagan dentro del sueldo y la provisión de vacaciones sigue como estaba. Los periodos de un empleado se van con él y salen en la exportación de la cuenta.
+
+### Liquidación por salida
+Es lo que se le paga a quien se va **además de su último rol**. El sueldo del mes de salida no entra: ya lo paga ese rol, porque la fecha de salida prorratea el último mes. Cada rubro sale con su fórmula y los números de la persona.
+
+| Rubro | Regla |
+|---|---|
+| Décimo tercero | Suma de lo que los roles dejaron provisionado desde el 1 de diciembre anterior. Quien lo cobra cada mes no tiene nada pendiente |
+| Décimo cuarto | Solo si lo acumula: `SBU × días del periodo ÷ 360`. El periodo empieza el 1 de agosto (Sierra y Amazonía) o el 1 de marzo (Costa y Galápagos), o en el ingreso si fue después |
+| Vacaciones no gozadas | `días de saldo × sueldo base ÷ 30`. Quien tomó más de lo devengado no paga la diferencia: se avisa |
+| Bonificación por desahucio | `25 % × sueldo base × años de servicio` (Código del Trabajo, art. 185); la fracción de año cuenta en proporción |
+| Indemnización por despido | `3 sueldos` hasta 3 años de servicio; desde ahí, `1 sueldo por año` (la fracción cuenta como año completo) con tope de 25 (art. 188) |
+
+Lo que paga cada causa de salida:
+
+| Causa | Bonificación (25 %) | Indemnización |
+|---|---|---|
+| Renuncia voluntaria | No | No |
+| Terminación por acuerdo de las partes | Sí | No |
+| Desahucio | Sí | No |
+| Despido intempestivo | Sí | Sí |
+| Visto bueno a favor del trabajador | Sí | Sí |
+| Visto bueno a favor del empleador | No | No |
+| Fin del plazo del contrato | No | No |
+
+Los años de servicio se cuentan con meses de 30 días: `días de servicio ÷ 360`. Las indemnizaciones solo están programadas para el **Código del Trabajo** (incluido el obrero de la LOEP); a un servidor de la LOSEP se le liquida con «renuncia» o «fin del plazo del contrato», y el sistema rechaza las demás causas. Los fondos de reserva no entran: el que se acumula se deposita en el IESS y el que se paga cada mes ya está pagado. Las cuotas de préstamos del IESS que quedaban se **informan, no se descuentan**.
+
+Antes de calcular conviene tener generados los roles desde diciembre: de ellos sale el décimo tercero provisionado, y el cálculo avisa de cada mes que falta. Registrar la liquidación marca al empleado como salido en esa fecha (`activo` en no, con su `fecha_salida`) y quita su responsabilidad de puesto, en una sola transacción, y deja constancia en la auditoría. Si el empleado ya tenía una salida registrada, la liquidación debe usar esa misma fecha. La liquidación guarda una foto de quién era y de cada rubro, así que sobrevive aunque luego se elimine al empleado; eliminarla permite rehacerla, pero no lo devuelve a la nómina.
 
 ### Vigencia de las reglas
 
@@ -628,6 +661,7 @@ El esquema vive en `backend/src/migraciones/NNN_nombre.sql`. Las aplicadas queda
 | 021 | Gastos personales: `parametros_anuales.canasta_basica`; `gastos_personales`, `cargas_familiares` y `enfermedad_catastrofica` en el empleado; la foto de esos datos y `rebaja_ir_anual` en el detalle del rol; `copiar_plantilla` copia la canasta |
 | 022 | Préstamos del IESS: tabla `prestamos_iess` (por empleado y cuenta) y `descuento_prestamos` en el detalle del rol |
 | 023 | Vacaciones gozadas: tabla `vacaciones_gozadas` (periodo con sus días, por empleado y cuenta) |
+| 024 | Liquidaciones por salida: tabla `liquidaciones` (una por empleado, con los rubros en JSON y la foto del empleado) |
 
 Los roles ya generados guardan una foto del régimen, de las tasas y de la modalidad con que se calcularon: si luego se editan las reglas, el historial no cambia.
 
@@ -653,6 +687,11 @@ Las tipografías (Bricolage Grotesque y Figtree) van incluidas en `frontend/publ
 | Discapacidad en los gastos personales | Las fuentes no coinciden en si la discapacidad del empleado o de una carga sube el tope a 100 canastas | Solo la enfermedad catastrófica, rara o huérfana lleva el tope a 100 canastas |
 | Cálculo mensual del impuesto con rebaja | El SRI proyecta el año y reparte la retención en cuotas; no se pudo leer la fórmula | Resta la rebaja al impuesto anual proyectado (×12) y divide entre 12 |
 | Alcance de los gastos de arte, cultura y turismo | Las notas de prensa los mencionan sin precisar topes ni condiciones | No distingue categorías: el empleado declara un solo total |
+| Texto oficial de la liquidación | Ninguna fuente leída es el Código del Trabajo: no se pudo leer el texto de los arts. 169, 184, 185 ni 188, solo resúmenes y un artículo que cita el 185 | Aplica el 25 % por año del art. 185 y la indemnización de 3 sueldos o 1 por año con tope de 25 del art. 188 |
+| Desahucio en la renuncia | Un portal dice que la renuncia da la bonificación del art. 185, otro que no. La Corte Nacional (Resolución 03-2025) dijo que el retiro voluntario no la da, y una jueza de esa Corte aclaró que solo vale para el sector público y que en el privado la renuncia aceptada es un acuerdo entre las partes. El Ministerio del Trabajo demandó esa resolución en abril de 2025 y no se encontró cómo terminó | La renuncia no paga bonificación; si el empleador la acepta como acuerdo, se elige «acuerdo de las partes», que sí la paga |
+| Región del décimo cuarto | Las fuentes coinciden en Sierra (agosto a julio) y Costa (marzo a febrero), pero una pone la Amazonía y Galápagos en el otro grupo | La región se elige al calcular; Sierra incluye la Amazonía y Costa, Galápagos |
+| Fracción de año y base de la bonificación y la indemnización | Las fuentes dicen «remuneración» sin precisar, y no dicen si la fracción del art. 185 cuenta completa o proporcional | Usa el sueldo base; la fracción cuenta en proporción para el 185 y como año completo para el 188 |
+| Liquidación del sector público | No se encontró la norma de supresión de puestos ni de compra de renuncias de la LOSEP | No se calculan: solo se liquidan los rubros comunes |
 | Formato de carga masiva del IESS | No se encontró un formato público de archivo | Entrega un cuadro de conciliación, no un archivo de carga |
 
 Verifica todas las cifras con la norma y con el IESS antes de usar el sistema en una nómina real.
@@ -670,7 +709,7 @@ Verifica todas las cifras con la norma y con el IESS antes de usar el sistema en
 - Eliminar una cuenta no deja ningún rastro, ni siquiera de que existió: la auditoría se va con ella. Quien necesite conservar un comprobante debe descargar el archivo antes. Las copias de seguridad de la base (por ejemplo las de Supabase) siguen teniendo los datos hasta que ellas mismas vencen.
 - La exportación es un archivo JSON con los nombres de las tablas; no hay un formato para volver a importarlo.
 - Los gastos personales los declara el empleado una sola vez en su ficha y valen para todos los meses: el sistema no revisa facturas, no controla topes por categoría y no distingue la proyección de febrero de sus actualizaciones. El impuesto mensual sigue proyectando el año (×12) y dividiendo entre 12, sin las cuotas de febrero a diciembre del SRI.
-- Sin liquidaciones (finiquito) por salida: la fecha de salida solo prorratea el último mes.
+- La liquidación no calcula el aporte al IESS ni el impuesto sobre lo que paga, no cubre la jubilación patronal ni los casos del sector público, y no genera el acta de finiquito que se firma ante el Ministerio del Trabajo. El décimo cuarto usa el SBU del año de la salida aunque el periodo cruce dos años. La base de las indemnizaciones es el sueldo base, sin horas extras ni comisiones.
 - Las vacaciones no suman los días adicionales por antigüedad (un día más por año después del quinto, en el Código del Trabajo), no limitan cuántos periodos se pueden acumular ni pagan en dinero los días no gozados. Los días al año son los del régimen de hoy, no los de cada año trabajado.
 - Los préstamos del IESS se registran con la cuota que dice el IESS: el sistema no calcula interés ni tabla de amortización, no revisa que el IESS haya aprobado el préstamo y no descuenta las cuotas pendientes cuando el empleado sale. Tampoco limita la cuota a un porcentaje del sueldo.
 - Una regla que cambia a mitad de mes se aplica a todo ese mes, sin prorratear por días. Los parámetros anuales (SBU e IR) tienen una versión por año, no por fecha.
@@ -703,7 +742,7 @@ Verifica todas las cifras con la norma y con el IESS antes de usar el sistema en
 - [x] Gastos personales: rebaja del impuesto a la renta con tope por cargas familiares y canasta básica.
 - [x] Préstamos del IESS: cuota mensual descontada en el rol, con su pantalla y su historial.
 - [x] Vacaciones gozadas: periodos registrados y saldo de días por empleado.
-- [ ] Liquidaciones por salida.
+- [x] Liquidaciones por salida: rubros por causa, revisión antes de registrar y salida del empleado.
 - [ ] Confirmar con las normas vigentes los datos marcados «por confirmar».
 
 ---
@@ -715,7 +754,7 @@ Lista de contribuidores que han aportado commits al desarrollo de este repositor
 | Nombre | Commits |
 | :--- | :--- |
 | **kiramman-mp3** | 263 |
-| **Johan Rodríguez** | 18 |
+| **Johan Rodríguez** | 28 |
 
 ---
 
@@ -836,6 +875,19 @@ Cómo se declaran los aportes. No se encontró un formato público de archivo pa
 - [Tagline: planillas del IESS para el empleador 2026](https://tagline-soluciones.com/blog/talento-humano/planillas-iess-empleador/) **(leída)**: La planilla se genera en el portal a partir de los avisos de entrada y salida y las novedades; la base es la materia gravada.
 - [Tus Trámites Ecuador: registro masivo de novedades (carga batch)](https://tustramitesecuador.com/registro-masivo-de-novedades-para-empleadores-carga-batch/): Existe una carga batch de novedades en el portal; no se pudo confirmar su formato.
 - [Contapp: planilla del IESS en Ecuador](https://www.contapp.ec/blogs/planilla-iess-ecuador): Apareció al buscar el formato de la planilla; no se abrió.
+
+#### Liquidación por salida (por confirmar)
+
+Bonificación por desahucio, indemnización por despido, décimos proporcionales y vacaciones no gozadas. No se pudo leer el texto oficial del Código del Trabajo: ninguna fuente es la norma y se contradicen en la renuncia, la región del décimo cuarto y la fracción de año.
+
+- [Ecuador Legal Online: el desahucio](https://www.ecuadorlegalonline.com/laboral/el-desahucio) **(leída)**: Cita completo el art. 185: el 25 % de la última remuneración por año de servicio, también por acuerdo de las partes.
+- [Derecho Ecuador: despido intempestivo](https://www.derechoecuador.com/despido-intempestivo) **(leída)**: Resume el art. 188: tres remuneraciones hasta tres años, una por año desde ahí, tope de 25 y la fracción de año como año completo.
+- [Hacecuentas: fin de la relación laboral](https://hacecuentas.com/ec/trabajo/liquidacion-y-despido) **(leída)**: Vacaciones no gozadas a un treintavo de la remuneración por día; el visto bueno del empleador paga solo los proporcionales.
+- [NMS Law: bonificación por desahucio en el retiro voluntario](https://nmslaw.com.ec/blog/2025/02/03/corte-nacional-bonificacion-desahucio-retiro-voluntario-ecuador/) **(leída)**: Resolución 03-2025 de la Corte Nacional: el retiro voluntario no da bonificación por desahucio.
+- [Primicias: la resolución del desahucio por retiro voluntario solo aplica al sector público](https://primicias.ec/economia/resolucion-pago-desahucio-retiro-voluntario-sector-publico-89686) **(leída)**: Una jueza de la Corte Nacional dice que en el sector privado la renuncia aceptada sí da desahucio.
+- [Primicias: demanda de inconstitucionalidad contra la resolución del desahucio](https://primicias.ec/economia/ministra-trabajo-demanda-inconstitucionalidad-corte-desahucio-93097) **(leída)**: La demanda se presentó en abril de 2025; no se encontró cómo terminó.
+- [Vistazo: qué pasa con el décimo si renuncias](https://www.vistazo.com/2026-02-25-pasa-decimo-renuncias-debes-saber-antes-dejar-trabajo-OG10700187) **(leída)**: Fechas de pago del décimo cuarto por región; contradice a Ecuador Legal Online en Amazonía y Galápagos.
+- [Ecuador Legal Online: Código del Trabajo](https://www.ecuadorlegalonline.com/biblioteca/codigo-de-trabajo/): Texto del Código donde confirmar los arts. 169, 184 y 188; no se abrió.
 
 </details>
 
