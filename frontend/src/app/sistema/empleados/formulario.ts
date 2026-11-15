@@ -149,6 +149,15 @@ const familiaDeNivel = (g: Grado) => g.denominacion.trim().charAt(0).toUpperCase
             <input class="entrada" id="fechaIngreso" type="date" formControlName="fechaIngreso" />
             <span class="ayuda">Si ingresa a mitad de mes, el primer rol paga solo los días trabajados.</span>
           </div>
+          <div class="campo c3">
+            <label for="fechaSalida">Fecha de salida (opcional)</label>
+            <input class="entrada" id="fechaSalida" type="date" formControlName="fechaSalida"
+                   [min]="form.controls.fechaIngreso.value" />
+            <span class="ayuda">
+              Déjala vacía si sigue en la empresa. En el mes de salida se pagan solo los días hasta esa fecha y
+              después ya no entra al rol.
+            </span>
+          </div>
           <fieldset class="campo c6 beneficios">
             <legend>Beneficios de este empleado</legend>
             <p class="ayuda">
@@ -177,6 +186,45 @@ const familiaDeNivel = (g: Grado) => g.denominacion.trim().charAt(0).toUpperCase
                 </select>
               </div>
             </div>
+          </fieldset>
+          <fieldset class="campo c6 beneficios">
+            <legend>Gastos personales (impuesto a la renta)</legend>
+            <p class="ayuda">
+              Lo que el empleado declaró en su proyección de gastos personales. El impuesto a la renta se rebaja el
+              18 % de esos gastos, con un tope según sus cargas familiares. Déjalo en 0 si no declaró nada.
+            </p>
+            <div class="rejilla-beneficios">
+              <div class="campo">
+                <label for="gastosPersonales">Gastos del año (USD)</label>
+                <input class="entrada num" id="gastosPersonales" type="number" step="0.01" min="0"
+                       formControlName="gastosPersonales" />
+              </div>
+              <div class="campo">
+                <label for="cargasFamiliares">Cargas familiares</label>
+                <select class="entrada" id="cargasFamiliares" formControlName="cargasFamiliares">
+                  @for (n of [0, 1, 2, 3, 4, 5]; track n) {
+                    <option [ngValue]="n">{{ n === 5 ? '5 o más' : n }}</option>
+                  }
+                </select>
+              </div>
+              <div class="campo">
+                <label for="enfermedadCatastrofica">Enfermedad catastrófica, rara o huérfana</label>
+                <select class="entrada" id="enfermedadCatastrofica" formControlName="enfermedadCatastrofica">
+                  <option [ngValue]="false">No</option>
+                  <option [ngValue]="true">Sí, del empleado o de una carga</option>
+                </select>
+              </div>
+            </div>
+            @if (topeGastos(); as t) {
+              <p class="ayuda" id="tope-gastos">
+                Con {{ t.canastas }} canastas, el tope de gastos es {{ t.tope | dinero }} y la rebaja máxima
+                {{ t.rebajaMaxima | dinero }} al año.
+              </p>
+            } @else {
+              <p class="ayuda aviso-suave" id="sin-canasta">
+                Los parámetros de este año no tienen canasta básica: no se aplicará la rebaja.
+              </p>
+            }
           </fieldset>
           <div class="acciones">
             <button class="boton" [disabled]="guardando()">Guardar empleado</button>
@@ -209,8 +257,12 @@ export class FormularioEmpleado {
     pagoDecimoCuarto: [''],
     pagoFondosReserva: [''],
     recibeHorasExtras: [''],
+    gastosPersonales: [0, [Validators.min(0)]],
+    cargasFamiliares: [0],
+    enfermedadCatastrofica: [false],
     sueldoBase: [null as number | null, [Validators.required, Validators.min(0.01)]],
     fechaIngreso: ['', Validators.required],
+    fechaSalida: [''],
   });
 
   protected readonly beneficios = [
@@ -218,6 +270,26 @@ export class FormularioEmpleado {
     { control: 'pagoDecimoCuarto', etiqueta: 'Décimo cuarto' },
     { control: 'pagoFondosReserva', etiqueta: 'Fondos de reserva' },
   ] as const;
+
+  private readonly cargasSeleccionadas = toSignal(this.form.controls.cargasFamiliares.valueChanges, {
+    initialValue: this.form.controls.cargasFamiliares.value,
+  });
+  private readonly catastroficaSeleccionada = toSignal(this.form.controls.enfermedadCatastrofica.valueChanges, {
+    initialValue: this.form.controls.enfermedadCatastrofica.value,
+  });
+  /**
+   * Tope de gastos y rebaja máxima de esta persona; null si el año no tiene canasta básica. Las canastas por
+   * cargas son las del backend (`CANASTAS_POR_CARGAS`): 7, 9, 11, 14, 17 y 20; con enfermedad catastrófica, 100.
+   */
+  protected readonly topeGastos = computed(() => {
+    const canasta = this.parametros()?.canastaBasica ?? 0;
+    if (canasta <= 0) return null;
+    const porCargas = [7, 9, 11, 14, 17, 20];
+    const cargas = Math.min(Math.max(Number(this.cargasSeleccionadas()) || 0, 0), 5);
+    const canastas = this.catastroficaSeleccionada() ? 100 : porCargas[cargas];
+    const tope = Math.round(canasta * canastas * 100) / 100;
+    return { canastas, tope, rebajaMaxima: Math.round(tope * 18) / 100 };
+  });
 
   private readonly regimenSeleccionado = toSignal(this.form.controls.regimen.valueChanges, {
     initialValue: this.form.controls.regimen.value,
@@ -309,6 +381,7 @@ export class FormularioEmpleado {
       if (e) {
         this.form.patchValue({
           ...e,
+          fechaSalida: e.fechaSalida ?? '',
           categoriaLoep: e.categoriaLoep ?? '',
           escalaId: e.escalaId ? String(e.escalaId) : '',
           puestoId: e.puestoId ? String(e.puestoId) : '',
@@ -388,7 +461,7 @@ export class FormularioEmpleado {
     this.avisos.limpiar();
     const {
       categoriaLoep, escalaId, puestoId, pagoDecimoTercero, pagoDecimoCuarto, pagoFondosReserva, recibeHorasExtras,
-      ...resto
+      fechaSalida, ...resto
     } = this.form.getRawValue();
     if (this.esMixto() && !categoriaLoep) {
       this.avisos.error('Elige si el empleado es servidor u obrero.');
@@ -415,6 +488,7 @@ export class FormularioEmpleado {
     }
     const datos = {
       ...resto,
+      fechaSalida: fechaSalida || null,
       categoriaLoep: this.esMixto() ? categoriaLoep : null,
       escalaId: escalaId ? Number(escalaId) : null,
       puestoId: this.usaPuestos() && puestoId ? Number(puestoId) : null,

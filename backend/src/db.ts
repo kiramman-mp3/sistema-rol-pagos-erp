@@ -69,10 +69,14 @@ const tiposPg = {
   },
 };
 
+// Igual que con pg: bigint (COUNT, SUM) y numeric (dinero) salen como números, no como texto.
+const PARSERS_PGLITE = { 20: Number, 1700: Number };
+
 function baseDePglite(db: PGlite): Base {
   const sobre = (cliente: Pick<PGlite, "query" | "exec">, transaccionar: Base["transaccion"]): Base => ({
     async consultar(sql, params) {
-      const r = await cliente.query<Fila>(aPlaceholders(sql), params);
+      // Los parsers van en cada consulta: la opción del constructor de PGlite no los aplica.
+      const r = await cliente.query<Fila>(aPlaceholders(sql), params, { parsers: PARSERS_PGLITE });
       return { filas: r.rows, afectadas: r.affectedRows ?? 0 };
     },
     async ejecutarScript(sql) {
@@ -91,34 +95,59 @@ function baseDePglite(db: PGlite): Base {
   return raiz;
 }
 
+/** ¿El destino es un servidor Postgres (y no PGlite)? */
+export const esBaseRemota = (destino: string) => /^postgres(ql)?:\/\//.test(destino);
+
+/** `host:puerto/base` de una URL de conexión, sin usuario ni contraseña, para mostrarla sin filtrar secretos. */
+export function descripcionDeDestino(destino: string): string {
+  if (!esBaseRemota(destino)) return destino;
+  try {
+    const url = new URL(destino);
+    return `${url.host}${url.pathname}`;
+  } catch {
+    return "(URL de conexión ilegible)";
+  }
+}
+
+/**
+ * TLS hacia el servidor. Siempre se verifica el certificado, salvo que se pida lo contrario:
+ *  - `DATABASE_SSL_CA`: certificado de la autoridad (el texto PEM o la ruta del archivo). Supabase
+ *    firma con su propia CA (`prod-ca-2021.crt`, en Database Settings), que Node no trae de fábrica.
+ *  - `DATABASE_SSL_INSECURE=1`: no verifica. Solo como salida de emergencia: un intermediario
+ *    podría leer y alterar la conexión.
+ */
+export function opcionesSsl(entorno: Record<string, string | undefined>): pg.ClientConfig["ssl"] {
+  if (entorno.DATABASE_SSL_INSECURE === "1") return { rejectUnauthorized: false };
+  const ca = entorno.DATABASE_SSL_CA?.trim();
+  if (!ca) return { rejectUnauthorized: true };
+  return { rejectUnauthorized: true, ca: ca.includes("BEGIN CERTIFICATE") ? ca : readFileSync(ca, "utf8") };
+}
+
 /**
  * Abre la base y deja el esquema al día. `destino` es una URL `postgres://…` (Supabase),
- * `:memory:` (pruebas) o una carpeta donde PGlite guarda los datos.
+ * `:memory:` (pruebas) o una carpeta donde PGlite guarda los datos. `hasta` detiene las migraciones
+ * en esa versión: solo lo usan las pruebas que comprueban una migración con datos anteriores a ella.
  */
-export async function abrirBase(destino: string): Promise<Base> {
+export async function abrirBase(destino: string, { hasta }: { hasta?: number } = {}): Promise<Base> {
   let db: Base;
-  if (/^postgres(ql)?:\/\//.test(destino)) {
+  if (esBaseRemota(destino)) {
     db = baseDePg(new pg.Pool({
       connectionString: destino,
-      ssl: { rejectUnauthorized: false }, // Supabase exige TLS
+      ssl: opcionesSsl(process.env),
       max: 3,
     }));
   } else {
     const { PGlite: Motor } = await import("@electric-sql/pglite");
-    db = baseDePglite(new Motor(destino === ":memory:" ? undefined : destino, {
-      parsers: PARSERS_PGLITE,
-    }));
+    db = baseDePglite(new Motor(destino === ":memory:" ? undefined : destino));
   }
-  await migrar(db);
+  await migrar(db, hasta);
   return db;
 }
 
-const PARSERS_PGLITE = { 20: Number, 1700: Number };
 
 interface Migracion {
   version: number;
   nombre: string;
-  sql: string;
 }
 
 /** Archivos NNN_nombre.sql, en orden. El número es la versión del esquema. */
@@ -126,29 +155,29 @@ function leerMigraciones(): Migracion[] {
   return readdirSync(CARPETA_MIGRACIONES)
     .filter((archivo) => /^\d{3}_.+\.sql$/.test(archivo))
     .sort()
-    .map((archivo) => ({
-      version: Number(archivo.slice(0, 3)),
-      nombre: archivo,
-      sql: readFileSync(new URL(archivo, CARPETA_MIGRACIONES), "utf8"),
-    }));
+    .map((archivo) => ({ version: Number(archivo.slice(0, 3)), nombre: archivo }));
 }
+
+const leerSql = (m: Migracion) => readFileSync(new URL(m.nombre, CARPETA_MIGRACIONES), "utf8");
 
 /**
  * Aplica las migraciones pendientes. Las aplicadas quedan en `esquema_migraciones`, así que abrir la
  * misma base dos veces no repite nada. Cada una corre en una transacción con un candado: si dos
  * instancias arrancan a la vez, la segunda espera y ve que ya está hecha.
  */
-export async function migrar(db: Base) {
+export async function migrar(db: Base, hasta = Infinity) {
   await db.ejecutarScript(
     "CREATE TABLE IF NOT EXISTS esquema_migraciones (version INTEGER PRIMARY KEY, nombre TEXT NOT NULL)",
   );
-  for (const m of leerMigraciones()) {
-    if (m.version <= (await versionEsquema(db))) continue;
+  // Con el esquema al día (lo normal en cada arranque) basta esta consulta: no se lee ningún archivo SQL.
+  const aplicada = await versionEsquema(db);
+  // `hasta` solo lo piden las pruebas de una migración, para detenerse antes de ella.
+  for (const m of leerMigraciones().filter((m) => m.version > aplicada && m.version <= hasta)) {
     try {
       await db.transaccion(async (tx) => {
         await tx.consultar("SELECT pg_advisory_xact_lock(727274)", []);
         if (m.version <= (await versionEsquema(tx))) return;
-        await tx.ejecutarScript(m.sql);
+        await tx.ejecutarScript(leerSql(m));
         await tx.consultar("INSERT INTO esquema_migraciones (version, nombre) VALUES (?, ?)", [m.version, m.nombre]);
       });
     } catch (error) {

@@ -1,33 +1,34 @@
 /** Datos de ejemplo: empleados del orgánico funcional y, para el seed, sus roles de pago. */
 import { Decimal } from "decimal.js";
 import { EMPLEADOS_DEMO } from "./config.ts";
+import { darPaso } from "./ciclo.ts";
 import { ejecutar } from "./db.ts";
 import type { Base } from "./db.ts";
 import { empleadosDelPeriodo, guardarRol } from "./rutas/roles.ts";
-import type { Novedad } from "./rutas/roles.ts";
+import type { Novedad } from "./nomina.ts";
 
 /** Inserta los empleados de ejemplo que falten (por cédula) con su puesto y su grado, y deja a cada puesto su responsable. Devuelve cuántos agregó. */
-export async function cargarEmpleadosDemo(db: Base): Promise<number> {
+export async function cargarEmpleadosDemo(db: Base, cuentaId: number): Promise<number> {
   let nuevos = 0;
   for (const e of EMPLEADOS_DEMO) {
     const r = await ejecutar(
       db,
-      `INSERT INTO empleados (cedula, nombres, cargo, sueldo_base, fecha_ingreso,
+      `INSERT INTO empleados (cuenta_id, cedula, nombres, cargo, sueldo_base, fecha_ingreso,
        tipo_contrato, regimen, categoria_loep, escala_id, puesto_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?,
-               (SELECT id FROM escala_salarial WHERE regimen = ? AND grado = ?),
-               (SELECT id FROM puestos WHERE nombre = ?))
-       ON CONFLICT (cedula) DO NOTHING`,
-      e.cedula, e.nombres, e.cargo, e.sueldoBase, e.fechaIngreso, e.tipoContrato, e.regimen, e.categoriaLoep,
-      e.escalaRegimen, e.escalaGrado, e.puesto,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?,
+               (SELECT id FROM escala_salarial WHERE cuenta_id = ? AND regimen = ? AND grado = ?),
+               (SELECT id FROM puestos WHERE cuenta_id = ? AND nombre = ?))
+       ON CONFLICT (cuenta_id, cedula) DO NOTHING`,
+      cuentaId, e.cedula, e.nombres, e.cargo, e.sueldoBase, e.fechaIngreso, e.tipoContrato, e.regimen, e.categoriaLoep,
+      cuentaId, e.escalaRegimen, e.escalaGrado, cuentaId, e.puesto,
     );
     nuevos += r.changes;
     if (e.puesto && e.responsable) {
       await ejecutar(
         db,
-        `UPDATE puestos SET responsable_id = (SELECT id FROM empleados WHERE cedula = ?)
-         WHERE nombre = ? AND responsable_id IS NULL`,
-        e.cedula, e.puesto,
+        `UPDATE puestos SET responsable_id = (SELECT id FROM empleados WHERE cuenta_id = ? AND cedula = ?)
+         WHERE cuenta_id = ? AND nombre = ? AND responsable_id IS NULL`,
+        cuentaId, e.cedula, cuentaId, e.puesto,
       );
     }
   }
@@ -53,10 +54,10 @@ function horasDelPuesto(puesto: string, v: number): [number, number] | null {
  * Novedades de ejemplo de un mes: el personal de campo hace algunas horas extras y de vez en cuando
  * tiene un anticipo descontado. Gerencia, administración y el personal público no tienen novedades.
  */
-async function novedadesDemo(db: Base, anio: number, mes: number): Promise<Map<number, Novedad>> {
+async function novedadesDemo(db: Base, cuentaId: number, anio: number, mes: number): Promise<Map<number, Novedad>> {
   const cero = new Decimal(0);
   const novedades = new Map<number, Novedad>();
-  for (const e of await empleadosDelPeriodo(db, anio, mes)) {
+  for (const e of await empleadosDelPeriodo(db, cuentaId, anio, mes)) {
     const id = Number(e.id);
     const v = variacion(id, mes);
     if (e.regimen !== "CODIGO_TRABAJO") continue;
@@ -75,13 +76,26 @@ async function novedadesDemo(db: Base, anio: number, mes: number): Promise<Map<n
   return novedades;
 }
 
-/** Genera los roles de ejemplo de enero a septiembre. Devuelve cuántos generó. */
-export async function generarRolesDemo(db: Base): Promise<number> {
+/** Último mes de ejemplo ya pagado; el siguiente (septiembre) queda publicado y falta marcar su pago. */
+export const ULTIMO_MES_PAGADO_DEMO = 8;
+
+const PASOS_DEL_CICLO = ["validar", "aprobar", "publicar", "pagar"] as const;
+
+/**
+ * Genera los roles de ejemplo de enero a septiembre y los lleva por el ciclo como «sistema»:
+ * enero a agosto quedan pagados y septiembre publicado, para que la demostración muestre cada estado.
+ * Devuelve cuántos generó.
+ */
+export async function generarRolesDemo(db: Base, cuentaId: number): Promise<number> {
   let generados = 0;
   for (const mes of MESES_DEMO) {
-    const empleados = await empleadosDelPeriodo(db, ANIO_DEMO, mes);
+    const empleados = await empleadosDelPeriodo(db, cuentaId, ANIO_DEMO, mes);
     if (!empleados.length) continue;
-    await guardarRol(db, ANIO_DEMO, mes, empleados, await novedadesDemo(db, ANIO_DEMO, mes));
+    const { rolId } = await guardarRol(
+      db, cuentaId, ANIO_DEMO, mes, empleados, await novedadesDemo(db, cuentaId, ANIO_DEMO, mes),
+    );
+    const pasos = mes <= ULTIMO_MES_PAGADO_DEMO ? PASOS_DEL_CICLO : PASOS_DEL_CICLO.slice(0, 3);
+    for (const paso of pasos) await darPaso(db, cuentaId, null, rolId, paso);
     generados += 1;
   }
   return generados;

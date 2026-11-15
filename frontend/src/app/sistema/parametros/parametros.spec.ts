@@ -7,6 +7,7 @@ import { ParametrosAnuales } from './anuales';
 import { EscalaSalarial } from './escala';
 import { PaginaParametros } from './parametros';
 import { RegimenesLaborales } from './regimenes';
+import { Sesion } from '../../core/sesion';
 
 const CT = {
   codigo: 'CODIGO_TRABAJO', nombre: 'Código del Trabajo', descripcion: 'Sector privado.', baseLegal: 'Código del Trabajo',
@@ -14,7 +15,7 @@ const CT = {
   recargoSuplementarias: 0.5, recargoExtraordinarias: 1, recargoDescanso: 1, recargoNocturno: 0.25,
   topeSuplementariasMes: 48, topeExtraordinariasMes: null, diasVacaciones: 15, fondosReserva: 0.0833, mesesParaFondos: 12,
   aplicaDecimoTercero: true, aplicaDecimoCuarto: true, aplicaFondosReserva: true, aplicaHorasExtras: true,
-  verificado: true, notas: 'Leído del código.',
+  verificado: true, notas: 'Leído del código.', vigenteDesde: '2000-01-01',
 };
 const LOSEP = { ...CT, codigo: 'LOSEP', nombre: 'LOSEP', iessPersonal: 0.1145, verificado: false };
 const LOEP = {
@@ -29,7 +30,7 @@ const TABLA = [
 ];
 
 const PARAMETROS = {
-  anio: 2026, anioSolicitado: 2026, exacto: true, anios: [2026], fuente: 'Acuerdo MDT-2025-195', sbu: 482,
+  anio: 2026, anioSolicitado: 2026, exacto: true, anios: [2026], fuente: 'Acuerdo MDT-2025-195', sbu: 482, canastaBasica: 821.8,
   iessPersonal: 0.0945, iessPatronal: 0.1115, fondosReserva: 0.0833, fraccionExentaIr: 12208, tablaIr: TABLA,
   empresa: { nombre: 'Empresa Demo S.A.', ruc: '1790000000001' }, meses: [], contratos: [],
   categoriasLoep: ['servidor', 'obrero'], regimenes: [CT, LOSEP, LOEP],
@@ -47,6 +48,7 @@ describe('parámetros', () => {
   beforeEach(() => {
     TestBed.configureTestingModule({ providers: [provideHttpClient(), provideHttpClientTesting()] });
     http = TestBed.inject(HttpTestingController);
+    TestBed.inject(Sesion).permisos.set(['ver', 'editar', 'validar', 'aprobar', 'publicar', 'pagar', 'usuarios']);
   });
 
   afterEach(() => vi.restoreAllMocks());
@@ -85,6 +87,15 @@ describe('parámetros', () => {
       expect(el.querySelectorAll('tbody tr').length).toBe(3);
       expect(el.querySelector<HTMLInputElement>('input[aria-label="Porcentaje del tramo 2"]')!.value).toBe('5');
       expect(el.textContent).toContain('En adelante');
+    });
+
+    it('muestra la canasta básica y la envía al guardar', async () => {
+      const { fixture, el } = await abrir();
+      expect(el.querySelector<HTMLInputElement>('#canasta')!.value).toBe('821.8');
+      escribir(el, '#canasta', '830.5');
+      fixture.detectChanges();
+      el.querySelector('form')!.dispatchEvent(new Event('submit'));
+      expect(http.expectOne('/api/parametros/2026').request.body.canastaBasica).toBe(830.5);
     });
 
     it('guarda con el porcentaje como fracción, el desde encadenado y el último tramo abierto', async () => {
@@ -219,6 +230,64 @@ describe('parámetros', () => {
       expect(envio.request.body.regimenObrero).toBe('LOSEP');
       expect(envio.request.body.iessPersonal).toBeUndefined();
       envio.flush(LOEP);
+    });
+
+    describe('versiones', () => {
+      const NUEVA = { ...CT, vigenteDesde: '2026-10-01', iessPersonal: 0.1 };
+
+      /** Abre la lista y responde las versiones de cada régimen (el Código del Trabajo con dos). */
+      const abrirConVersiones = async () => {
+        const { fixture, el } = await abrir();
+        http.match((r) => r.url.endsWith('/versiones')).forEach((r) =>
+          r.flush(r.request.url.includes('CODIGO_TRABAJO') ? [NUEVA, CT] : [r.request.url.includes('LOSEP') ? LOSEP : LOEP]));
+        await asentar(fixture);
+        return { fixture, el };
+      };
+      const boton = (el: HTMLElement, texto: string) =>
+        [...el.querySelectorAll('button')].find((b) => b.textContent?.trim() === texto)!;
+
+      it('propone que el cambio empiece hoy y envía la fecha para crear una versión nueva', async () => {
+        const { fixture, el } = await abrirConVersiones();
+        const hoy = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Guayaquil' });
+        expect(el.querySelector<HTMLInputElement>('#CODIGO_TRABAJO-vigente')!.value).toBe(hoy);
+        expect(el.querySelector('form')!.textContent).toContain('Crear versión de Código del Trabajo');
+
+        el.querySelectorAll('form')[0].dispatchEvent(new Event('submit'));
+        const envio = http.expectOne('/api/regimenes/CODIGO_TRABAJO');
+        expect(envio.request.body.vigenteDesde).toBe(hoy);
+        envio.flush(CT);
+        fixture.detectChanges();
+      });
+
+      it('lista las versiones y al editar una carga sus valores para corregirla', async () => {
+        const { fixture, el } = await abrirConVersiones();
+        const filas = [...el.querySelectorAll('table.versiones tbody tr')];
+        expect(filas.length).toBe(2);
+        expect(filas[0].textContent).toContain('2026-10-01');
+        expect(filas[0].textContent).toContain('10 %');
+        expect(filas[1].textContent).toContain('9.45 %');
+
+        boton(el, 'Editar').click();
+        fixture.detectChanges();
+        expect(el.querySelector<HTMLInputElement>('#CODIGO_TRABAJO-vigente')!.value).toBe('2026-10-01');
+        expect(el.querySelector<HTMLInputElement>('#CODIGO_TRABAJO-iessPersonal')!.value).toBe('10');
+        expect(el.querySelector('form')!.textContent).toContain('Corregir Código del Trabajo');
+      });
+
+      it('eliminar una versión pide confirmación antes de llamar a la API', async () => {
+        const { fixture, el } = await abrirConVersiones();
+        boton(el, 'Eliminar').click();
+        fixture.detectChanges();
+        http.expectNone('/api/regimenes/CODIGO_TRABAJO/versiones/2026-10-01');
+        boton(el, 'Sí, eliminar').click();
+        const envio = http.expectOne('/api/regimenes/CODIGO_TRABAJO/versiones/2026-10-01');
+        expect(envio.request.method).toBe('DELETE');
+        envio.flush(null, { status: 204, statusText: 'No Content' });
+        await new Promise((resolver) => setTimeout(resolver)); // el componente pide los parámetros de nuevo
+        TestBed.tick();
+        expect(http.match((r) => r.url.startsWith('/api/parametros')).length).toBeGreaterThan(0);
+        fixture.destroy();
+      });
     });
   });
 

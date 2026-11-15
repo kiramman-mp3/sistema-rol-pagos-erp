@@ -45,7 +45,7 @@ export class Inicio {
   protected readonly activos = computed(() => this.empleados()?.filter((e) => e.activo).length ?? 0);
   protected readonly inactivos = computed(() => this.empleados()?.filter((e) => !e.activo).length ?? 0);
   protected readonly rolDelMes = computed(() =>
-    this.roles()?.find((r) => r.anio === this.anio && r.mes === this.mes),
+    this.roles()?.find((r) => r.tipo === 'ordinario' && r.anio === this.anio && r.mes === this.mes),
   );
   protected readonly ultimoRol = computed(() => this.roles()?.[0]);
 

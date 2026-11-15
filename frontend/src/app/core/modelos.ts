@@ -7,6 +7,8 @@ export interface Empleado {
   cargo: string;
   sueldoBase: number;
   fechaIngreso: string;
+  /** null = sigue en la empresa; en su mes se pagan solo los días hasta ella y luego sale del rol */
+  fechaSalida: string | null;
   tipoContrato: string;
   /** Código del régimen: CODIGO_TRABAJO, LOSEP o LOEP */
   regimen: string;
@@ -22,6 +24,12 @@ export interface Empleado {
   pagoFondosReserva: Modalidad | null;
   /** null = lo que diga el régimen */
   recibeHorasExtras: boolean | null;
+  /** Gastos personales del año que declaró para el impuesto a la renta (USD) */
+  gastosPersonales: number;
+  /** 0 a 5 */
+  cargasFamiliares: number;
+  /** Enfermedad catastrófica, rara o huérfana del empleado o de una carga */
+  enfermedadCatastrofica: boolean;
   activo: boolean;
   /** Solo viene al crear o editar: avisos que no bloquean el guardado. */
   avisos?: string[];
@@ -56,6 +64,8 @@ export type Modalidad = 'no' | 'mensual' | 'acumulado';
 /** Reglas de un régimen laboral. Los porcentajes son fracciones (0.0945 = 9.45%). */
 export interface Regimen {
   codigo: string;
+  /** Primer día (AAAA-MM-DD) en que rige esta versión de las reglas. */
+  vigenteDesde: string;
   nombre: string;
   descripcion: string;
   baseLegal: string;
@@ -93,6 +103,8 @@ export interface Parametros {
   anios: number[];
   fuente: string;
   sbu: number;
+  /** Canasta familiar básica de enero (INEC): topa los gastos personales. 0 = sin definir, no hay rebaja */
+  canastaBasica: number;
   iessPersonal: number;
   iessPatronal: number;
   fondosReserva: number;
@@ -137,6 +149,8 @@ export interface ResultadoRol {
   irAnual: number;
   impuestoRenta: number;
   otrosDescuentos: number;
+  /** Cuotas de préstamos del IESS descontadas en el rol */
+  descuentoPrestamos: number;
   totalDescuentos: number;
   netoPagar: number;
   decimoTercero: number;
@@ -163,10 +177,46 @@ export interface RolDetalle extends ResultadoRol {
   regimenAplicado: string;
   tasaIessPersonal: number;
   tasaIessPatronal: number;
+  /** El rol guardó el desglose de su cálculo (los anteriores a la migración 018 no). */
+  tieneTraza?: boolean;
 }
+
+/** Un paso del cálculo de un empleado: fórmula, números y resultado. */
+export interface PasoCalculo {
+  clave: string;
+  concepto: string;
+  formula: string;
+  detalle: string;
+  resultado: number;
+  fuente?: string;
+}
+
+/** Cómo se calculó a un empleado en un rol. */
+export interface TrazaRol {
+  cedula: string;
+  nombres: string;
+  anio: number;
+  mes: number;
+  /** En un ajuste: la traza explica el mes completo, no la diferencia. */
+  ajuste: boolean;
+  contexto: { regimen: string; vigenteDesde: string; anioParametros: number; sbu: number; ajuste?: boolean };
+  pasos: PasoCalculo[];
+}
+
+/** Ciclo del rol; publicado y pagado ya no se recalculan ni se eliminan. */
+export type EstadoRol = 'calculado' | 'validado' | 'aprobado' | 'publicado' | 'pagado';
 
 export interface RolCabecera {
   id: number;
+  estado: EstadoRol;
+  /** 'ajuste' corrige a un rol ordinario ya publicado: su detalle guarda solo las diferencias. */
+  tipo: 'ordinario' | 'ajuste';
+  rolOrigenId: number | null;
+  motivo: string;
+  validadoEn: string | null;
+  aprobadoEn: string | null;
+  publicadoEn: string | null;
+  pagadoEn: string | null;
   anio: number;
   mes: number;
   generadoEn: string;
@@ -203,6 +253,40 @@ export interface PlanillaIess {
 
 export interface RolCompleto extends RolCabecera {
   detalle: RolDetalle[];
+  /** En un ajuste: el rol que corrige. */
+  origen?: { id: number; anio: number; mes: number; estado: EstadoRol } | null;
+  /** En un rol publicado o pagado: sus ajustes, el total del mes con los ya publicados y cómo quedó cada empleado. */
+  ajustes?: Pick<RolCabecera, 'id' | 'estado' | 'motivo' | 'generadoEn' | 'numEmpleados' | 'totalNeto'>[];
+  consolidado?: { totalIngresos: number; totalDescuentos: number; totalNeto: number; totalProvisiones: number; totalCosto: number } | null;
+  vigente?: RolDetalle[];
+}
+
+/** Lo que se puede corregir de un empleado al reliquidar; solo se envía lo que cambia. */
+export interface CambioReliquidacion {
+  cedula: string;
+  sueldoBase?: string;
+  horasSuplementarias?: string;
+  horasExtraordinarias?: string;
+  horasDescanso?: string;
+  horasNocturnas?: string;
+  comisiones?: string;
+  otrosDescuentos?: string;
+}
+
+/** Resultado de revisar un rol: los errores bloquean el paso a «validado», los avisos no. */
+export interface RevisionRol {
+  valido: boolean;
+  estado: EstadoRol;
+  errores: string[];
+  avisos: string[];
+}
+
+/** Un paso del rol en la auditoría. */
+export interface EventoRol {
+  accion: string;
+  usuario: string;
+  detalle: Record<string, unknown> | null;
+  creadoEn: string;
 }
 
 export interface Novedades {
@@ -223,6 +307,8 @@ export interface EmpleadoDelPeriodo {
   regimenAplicado: string;
   /** false = sus horas suplementarias, extraordinarias y de descanso no se pagan */
   recibeHorasExtras: boolean;
+  /** Cuota de préstamos del IESS que el rol descontará este mes (sale de los préstamos registrados) */
+  cuotaPrestamos: number;
   novedades: Novedades;
 }
 
@@ -230,6 +316,8 @@ export interface Periodo {
   anio: number;
   mes: number;
   existe: boolean;
+  /** null = todavía no hay rol de ese mes */
+  estado: EstadoRol | null;
   empleados: EmpleadoDelPeriodo[];
 }
 
@@ -268,3 +356,49 @@ export interface Persona {
   id: number;
   nombres: string;
 }
+
+/** Un usuario de la cuenta. */
+export interface UsuarioCuenta {
+  id: number;
+  email: string;
+  rol: 'administrador' | 'aprobador' | 'lector';
+  creadoEn: string;
+}
+
+export interface ListaUsuarios {
+  roles: UsuarioCuenta['rol'][];
+  usuarios: UsuarioCuenta[];
+}
+
+/** La empresa de la sesión y su configuración. */
+export interface DatosCuenta {
+  nombre: string;
+  ruc: string;
+  separarFunciones: boolean;
+}
+
+export type TipoPrestamo = 'quirografario' | 'hipotecario' | 'prendario';
+
+/** Un préstamo del IESS que se descuenta en el rol, una cuota por mes. */
+export interface Prestamo {
+  id: number;
+  empleadoId: number;
+  nombres: string;
+  cedula: string;
+  tipo: TipoPrestamo;
+  cuota: number;
+  cuotas: number;
+  primerAnio: number;
+  primerMes: number;
+  /** El mes de la última cuota */
+  ultimoAnio: number;
+  ultimoMes: number;
+  /** cuota × cuotas */
+  total: number;
+  /** false = suspendido: no se descuenta */
+  activo: boolean;
+  observacion: string;
+}
+
+/** Lo que se envía al registrar un préstamo. */
+export type DatosPrestamo = Pick<Prestamo, 'empleadoId' | 'tipo' | 'cuota' | 'cuotas' | 'primerAnio' | 'primerMes' | 'observacion'>;

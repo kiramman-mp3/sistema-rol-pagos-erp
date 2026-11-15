@@ -1,5 +1,7 @@
 import { Routes } from '@angular/router';
 
+import { conPermiso, sesionActiva } from './core/sesion';
+
 export const routes: Routes = [
   {
     path: '',
@@ -12,7 +14,33 @@ export const routes: Routes = [
     loadComponent: () => import('./informacion/informacion').then((m) => m.Informacion),
   },
   {
+    path: 'entrar',
+    title: 'Ingresar | Rol de pagos Ecuador',
+    loadComponent: () => import('./entrar/entrar').then((m) => m.Entrar),
+  },
+  {
+    path: 'recuperar',
+    title: 'Recuperar contraseña | Rol de pagos Ecuador',
+    loadComponent: () => import('./acceso/recuperar').then((m) => m.Recuperar),
+  },
+  {
+    path: 'restablecer',
+    title: 'Nueva contraseña | Rol de pagos Ecuador',
+    loadComponent: () => import('./acceso/restablecer').then((m) => m.Restablecer),
+  },
+  {
+    path: 'verificar',
+    title: 'Verificar correo | Rol de pagos Ecuador',
+    loadComponent: () => import('./acceso/verificar').then((m) => m.Verificar),
+  },
+  {
+    path: 'registro',
+    title: 'Registrar mi empresa | Rol de pagos Ecuador',
+    loadComponent: () => import('./registro/registro').then((m) => m.Registro),
+  },
+  {
     path: 'sistema',
+    canActivate: [sesionActiva],
     loadComponent: () => import('./sistema/shell').then((m) => m.Shell),
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'inicio' },
@@ -39,6 +67,11 @@ export const routes: Routes = [
           import('./sistema/empleados/formulario').then((m) => m.FormularioEmpleado),
       },
       {
+        path: 'prestamos',
+        title: 'Préstamos del IESS | Rol de pagos',
+        loadComponent: () => import('./sistema/prestamos/prestamos').then((m) => m.Prestamos),
+      },
+      {
         path: 'organico',
         title: 'Orgánico funcional | Rol de pagos',
         loadComponent: () => import('./sistema/organico/organico').then((m) => m.Organico),
@@ -47,6 +80,18 @@ export const routes: Routes = [
         path: 'parametros',
         title: 'Parámetros | Rol de pagos',
         loadComponent: () => import('./sistema/parametros/parametros').then((m) => m.PaginaParametros),
+      },
+      {
+        path: 'usuarios',
+        title: 'Usuarios | Rol de pagos',
+        canActivate: [conPermiso('usuarios')],
+        loadComponent: () => import('./sistema/usuarios/usuarios').then((m) => m.Usuarios),
+      },
+      {
+        path: 'cuenta',
+        title: 'Cuenta | Rol de pagos',
+        canActivate: [conPermiso('usuarios')],
+        loadComponent: () => import('./sistema/cuenta/cuenta').then((m) => m.Cuenta),
       },
       {
         path: 'roles',

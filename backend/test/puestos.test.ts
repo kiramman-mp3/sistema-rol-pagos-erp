@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { EMPLEADO, iniciar, NIVEL_E2_CT, PUESTO_AUXILIAR } from "./ayuda.ts";
+import { EMPLEADO, iniciar, NIVEL_E2_CT, puesto, PUESTO_AUXILIAR } from "./ayuda.ts";
 import type { Cliente } from "./ayuda.ts";
 
 async function conApi(prueba: (api: Cliente) => Promise<void>) {
@@ -14,7 +14,7 @@ async function conApi(prueba: (api: Cliente) => Promise<void>) {
 }
 
 const NUEVO = {
-  nombre: "Técnico de soporte", superiorId: 2, funcion: "Atender los reclamos de los clientes.",
+  nombre: "Técnico de soporte", superiorId: puesto(2), funcion: "Atender los reclamos de los clientes.",
   responsabilidad: "Responde por resolver cada reclamo a tiempo.", sector: "Servicios", escalaId: NIVEL_E2_CT,
 };
 
@@ -26,10 +26,10 @@ describe("orgánico funcional", () => {
         puestos.map((p: { nombre: string; superiorId: number | null }) => [p.nombre, p.superiorId]),
         [
           ["Gerente / Propietario", null],
-          ["Administrador / Contador", 1],
-          ["Supervisor de instalaciones", 2],
-          ["Operaciones de instalaciones", 2],
-          ["Auxiliar de guardalmacén", 2],
+          ["Administrador / Contador", puesto(1)],
+          ["Supervisor de instalaciones", puesto(2)],
+          ["Operaciones de instalaciones", puesto(2)],
+          ["Auxiliar de guardalmacén", puesto(2)],
         ],
       );
     }));
@@ -75,10 +75,11 @@ describe("orgánico funcional", () => {
 
   it("no deja que un puesto dependa de sí mismo ni de uno de sus subordinados", () =>
     conApi(async (api) => {
-      const actual = (await api.get("/api/puestos/1")).json;
+      const actual = (await api.get(`/api/puestos/${puesto(1)}`)).json;
       const base = { nombre: actual.nombre, funcion: actual.funcion, responsabilidad: actual.responsabilidad, sector: actual.sector, escalaId: actual.escalaId };
-      assert.equal((await api.put("/api/puestos/1", { ...base, superiorId: 1 })).status, 400);
-      const ciclo = await api.put("/api/puestos/1", { ...base, superiorId: 3 }); // 3 depende de 2, que depende de 1
+      assert.equal((await api.put(`/api/puestos/${puesto(1)}`, { ...base, superiorId: puesto(1) })).status, 400);
+      // el 3.º depende del 2.º, que depende del 1.º
+      const ciclo = await api.put(`/api/puestos/${puesto(1)}`, { ...base, superiorId: puesto(3) });
       assert.equal(ciclo.status, 400);
       assert.match(ciclo.json.errores[0], /no puede depender de sí mismo/);
     }));
@@ -87,17 +88,17 @@ describe("orgánico funcional", () => {
 describe("empleados y orgánico", () => {
   it("el puesto fija el nivel salarial: no hace falta mandar el grado", () =>
     conApi(async (api) => {
-      const r = await api.post("/api/empleados", { ...EMPLEADO, puestoId: 3, escalaId: undefined, sueldoBase: 700 });
+      const r = await api.post("/api/empleados", { ...EMPLEADO, puestoId: puesto(3), escalaId: undefined, sueldoBase: 700 });
       assert.equal(r.status, 201);
-      assert.equal(r.json.puestoId, 3);
-      const supervisor = (await api.get("/api/puestos/3")).json;
+      assert.equal(r.json.puestoId, puesto(3));
+      const supervisor = (await api.get(`/api/puestos/${puesto(3)}`)).json;
       assert.equal(r.json.escalaId, supervisor.escalaId);
-      assert.equal((await api.get("/api/puestos/3")).json.empleados, 1);
+      assert.equal((await api.get(`/api/puestos/${puesto(3)}`)).json.empleados, 1);
     }));
 
   it("deja elegir otro nivel de la misma escala, pero avisa que difiere del puesto", () =>
     conApi(async (api) => {
-      const gerente = (await api.get("/api/puestos/1")).json;
+      const gerente = (await api.get(`/api/puestos/${puesto(1)}`)).json;
       const r = await api.post("/api/empleados", { ...EMPLEADO, puestoId: PUESTO_AUXILIAR, escalaId: gerente.escalaId });
       assert.equal(r.status, 201);
       assert.equal(r.json.escalaId, gerente.escalaId);
@@ -106,7 +107,7 @@ describe("empleados y orgánico", () => {
 
   it("el sueldo no puede ser menor al mínimo del nivel del puesto", () =>
     conApi(async (api) => {
-      const r = await api.post("/api/empleados", { ...EMPLEADO, puestoId: 1, escalaId: undefined, sueldoBase: 482 });
+      const r = await api.post("/api/empleados", { ...EMPLEADO, puestoId: puesto(1), escalaId: undefined, sueldoBase: 482 });
       assert.equal(r.status, 400);
       assert.match(r.json.errores[0], /es menor al mínimo del nivel A: Jefatura \(\$510\)/);
     }));
@@ -134,10 +135,10 @@ describe("empleados y orgánico", () => {
       const lista = (await api.get("/api/empleados")).json;
       assert.equal(lista.length, 12);
       const puestoDe = (nombre: string) => lista.find((e: { nombres: string }) => e.nombres.startsWith(nombre)).puestoId;
-      assert.equal(puestoDe("Johan"), 1);
-      assert.equal(puestoDe("José"), 2);
-      assert.equal(puestoDe("David"), 3);
-      assert.equal(puestoDe("Maybeline"), 4);
+      assert.equal(puestoDe("Johan"), puesto(1));
+      assert.equal(puestoDe("José"), puesto(2));
+      assert.equal(puestoDe("David"), puesto(3));
+      assert.equal(puestoDe("Maybeline"), puesto(4));
       assert.equal(puestoDe("Pedro"), PUESTO_AUXILIAR);
       assert.equal(puestoDe("Lucía"), null); // LOSEP: sin puestos en el orgánico
       // mismo orgánico: 1 gerente, 1 administrador, 2 supervisores, 3 de operaciones, 3 auxiliares (con Pedro)
@@ -191,7 +192,7 @@ describe("responsable de un puesto", () => {
 
   it("rechaza a quien no ocupa el puesto, a quien no existe y un puesto inexistente", () =>
     conApi(async (api) => {
-      const ana = await crear(api, "1801234566", "Ana Prueba", 2);
+      const ana = await crear(api, "1801234566", "Ana Prueba", puesto(2));
       const ajeno = await api.patch(`/api/puestos/${PUESTO_AUXILIAR}/responsable`, { empleadoId: ana.id });
       assert.equal(ajeno.status, 400);
       assert.match(ajeno.json.errores[0], /Ana Prueba no puede ser responsable/);
@@ -206,7 +207,7 @@ describe("responsable de un puesto", () => {
       const responsable = async () => (await api.get(`/api/puestos/${PUESTO_AUXILIAR}`)).json.responsable;
 
       await asignar();
-      await api.put(`/api/empleados/${ana.id}`, { ...EMPLEADO, nombres: "Ana Prueba", puestoId: 2, escalaId: undefined });
+      await api.put(`/api/empleados/${ana.id}`, { ...EMPLEADO, nombres: "Ana Prueba", puestoId: puesto(2), escalaId: undefined });
       assert.equal(await responsable(), null); // cambió de puesto
 
       await api.put(`/api/empleados/${ana.id}`, { ...EMPLEADO, nombres: "Ana Prueba", puestoId: PUESTO_AUXILIAR, escalaId: undefined });
