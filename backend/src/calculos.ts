@@ -241,6 +241,8 @@ export interface EntradaRol {
   horasNocturnas?: Monto;
   comisiones?: Monto;
   otrosDescuentos?: Monto;
+  /** Cuotas de préstamos del IESS que toca descontar este mes (la suma de todos sus préstamos) */
+  prestamosIess?: Monto;
   /** Gastos personales del año que el empleado declaró en su proyección */
   gastosPersonales?: Monto;
   /** Cargas familiares (0 a 5) */
@@ -279,6 +281,8 @@ export interface ResultadoRol {
   rebajaIrAnual: number;
   impuestoRenta: number;
   otrosDescuentos: number;
+  /** Cuotas de préstamos del IESS descontadas en el rol */
+  descuentoPrestamos: number;
   totalDescuentos: number;
   // neto
   netoPagar: number;
@@ -340,6 +344,7 @@ export function calcularRolConTraza(
   const horasNocturnas = D(entrada.horasNocturnas ?? 0);
   const comisiones = q(entrada.comisiones ?? 0);
   const otrosDescuentos = q(entrada.otrosDescuentos ?? 0);
+  const prestamos = q(entrada.prestamosIess ?? 0);
 
   const dias = diasTrabajados(entrada.fechaIngreso, entrada.anio, entrada.mes, entrada.fechaSalida ?? null);
   const meses = mesesDeServicio(entrada.fechaIngreso, entrada.anio, entrada.mes);
@@ -387,7 +392,7 @@ export function calcularRolConTraza(
     entrada.gastosPersonales ?? 0, entrada.cargasFamiliares ?? 0, entrada.enfermedadCatastrofica ?? false, reglas.canastaBasica ?? 0,
   );
   const ir = retencionIrMensual(aportables, iess, reglas.tablaIr, rebaja.rebaja);
-  const totalDescuentos = iess.plus(ir.irMensual).plus(otrosDescuentos);
+  const totalDescuentos = iess.plus(ir.irMensual).plus(otrosDescuentos).plus(prestamos);
   const neto = totalIngresos.minus(totalDescuentos);
 
   // Provisiones del empleador: se muestran, no se descuentan.
@@ -420,6 +425,7 @@ export function calcularRolConTraza(
     rebajaIrAnual: ir.rebajaAnual.toNumber(),
     impuestoRenta: ir.irMensual.toNumber(),
     otrosDescuentos: otrosDescuentos.toNumber(),
+    descuentoPrestamos: prestamos.toNumber(),
     totalDescuentos: totalDescuentos.toNumber(),
     netoPagar: neto.toNumber(),
     decimoTercero: decimoTercero.toNumber(),
@@ -523,8 +529,12 @@ export function calcularRolConTraza(
       : `${m(ir.irAnual)} ÷ 12 = ${m(ir.irMensual)}`,
     ir.irMensual.toNumber());
   if (otrosDescuentos.gt(0)) paso("otrosDescuentos", "Otros descuentos", "valor digitado", m(otrosDescuentos), otrosDescuentos.toNumber());
-  paso("totalDescuentos", "Total de descuentos", "IESS + impuesto a la renta + otros descuentos",
-    `${m(iess)} + ${m(ir.irMensual)} + ${m(otrosDescuentos)} = ${m(totalDescuentos)}`, totalDescuentos.toNumber());
+  if (prestamos.gt(0)) {
+    paso("descuentoPrestamos", "Préstamos del IESS", "suma de las cuotas que toca descontar este mes", m(prestamos), prestamos.toNumber(),
+      "Préstamos del IESS: la cuota la fija el IESS y el empleador la retiene en el rol");
+  }
+  paso("totalDescuentos", "Total de descuentos", "IESS + impuesto a la renta + otros descuentos + préstamos del IESS",
+    `${m(iess)} + ${m(ir.irMensual)} + ${m(otrosDescuentos)} + ${m(prestamos)} = ${m(totalDescuentos)}`, totalDescuentos.toNumber());
   paso("netoPagar", "Neto a pagar", "total de ingresos − total de descuentos",
     `${m(totalIngresos)} − ${m(totalDescuentos)} = ${m(neto)}`, neto.toNumber());
 
