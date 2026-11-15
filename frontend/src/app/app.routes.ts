@@ -77,6 +77,11 @@ export const routes: Routes = [
         loadComponent: () => import('./sistema/vacaciones/vacaciones').then((m) => m.Vacaciones),
       },
       {
+        path: 'liquidaciones',
+        title: 'Liquidaciones | Rol de pagos',
+        loadComponent: () => import('./sistema/liquidaciones/liquidaciones').then((m) => m.Liquidaciones),
+      },
+      {
         path: 'organico',
         title: 'Orgánico funcional | Rol de pagos',
         loadComponent: () => import('./sistema/organico/organico').then((m) => m.Organico),

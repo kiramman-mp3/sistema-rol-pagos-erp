@@ -34,6 +34,8 @@ export function permisoQueExige(metodo: string, ruta: string): Permiso {
   if (metodo === "GET" || metodo === "HEAD" || metodo === "OPTIONS") return "ver";
   // El simulador de la página de inicio no cambia nada.
   if (metodo === "POST" && limpia === "/simulacion") return "ver";
+  // Calcular una liquidación para revisarla no guarda nada.
+  if (metodo === "POST" && limpia === "/liquidaciones/calcular") return "ver";
   const paso = PASO_DEL_CICLO.exec(limpia);
   if (metodo === "POST" && paso) return paso[1] as Permiso;
   return "editar";
