@@ -21,7 +21,7 @@ export const CAMPOS_DIFERENCIA = [
   "horasSuplementarias", "horasExtraordinarias", "horasDescanso", "horasNocturnas", "sueldo",
   "valorHorasSuplementarias", "valorHorasExtraordinarias", "valorHorasDescanso", "valorRecargoNocturno",
   "comisiones", "ingresosAportables", "beneficiosMensuales", "totalIngresos", "aporteIess", "impuestoRenta",
-  "otrosDescuentos", "totalDescuentos", "netoPagar", "decimoTercero", "decimoCuarto", "fondosReserva",
+  "otrosDescuentos", "descuentoPrestamos", "totalDescuentos", "netoPagar", "decimoTercero", "decimoCuarto", "fondosReserva",
   "vacaciones", "aportePatronal", "totalProvisiones", "costoEmpleador",
 ] as const satisfies readonly (keyof ResultadoRol)[];
 
@@ -134,6 +134,8 @@ export async function reliquidar(
         recibe_horas_extras: pagaExtras ? 1 : (actual?.recibe_horas_extras ?? null),
       } as Fila,
       aplicadoCodigo: String(v.regimen_aplicado),
+      // Un ajuste no vuelve a buscar los préstamos: conserva lo que se descontó en el rol del mes.
+      prestamos: new Decimal(Number(v.descuento_prestamos ?? 0)),
     };
   });
   if (errores.length) throw new ErrorApi(400, errores);
