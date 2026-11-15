@@ -423,10 +423,10 @@ Es lo que se le paga a quien se va **además de su último rol**. El sueldo del 
 | Rubro | Regla |
 |---|---|
 | Décimo tercero | Suma de lo que los roles dejaron provisionado desde el 1 de diciembre anterior. Quien lo cobra cada mes no tiene nada pendiente |
-| Décimo cuarto | Solo si lo acumula: `SBU × días del periodo ÷ 360`. El periodo empieza el 1 de agosto (Sierra y Amazonía) o el 1 de marzo (Costa y Galápagos), o en el ingreso si fue después |
-| Vacaciones no gozadas | `días de saldo × sueldo base ÷ 30`. Quien tomó más de lo devengado no paga la diferencia: se avisa |
-| Bonificación por desahucio | `25 % × sueldo base × años de servicio` (Código del Trabajo, art. 185); la fracción de año cuenta en proporción |
-| Indemnización por despido | `3 sueldos` hasta 3 años de servicio; desde ahí, `1 sueldo por año` (la fracción cuenta como año completo) con tope de 25 (art. 188) |
+| Décimo cuarto | Solo si lo acumula: `SBU × días del periodo ÷ 360`. El periodo empieza el 1 de agosto (Sierra y Amazónica) o el 1 de marzo (Costa e Insular), o en el ingreso si fue después. El art. 113 fija esas regiones y dice que quien sale antes de la fecha de pago recibe la parte proporcional |
+| Vacaciones no gozadas | `días de saldo × sueldo base ÷ 30`, que con sueldo fijo equivale a la veinticuatroava parte de lo ganado en un año (art. 71). Quien tomó más de lo devengado no paga la diferencia: se avisa |
+| Bonificación por desahucio | `25 % × sueldo base × años de servicio` (Código del Trabajo, art. 185); el artículo no menciona la fracción de año y el sistema la cuenta en proporción |
+| Indemnización por despido | `3 sueldos` hasta 3 años de servicio; desde ahí, `1 sueldo por año` con tope de 25. El art. 188 dice que la fracción de un año cuenta como año completo |
 
 Lo que paga cada causa de salida:
 
@@ -434,7 +434,7 @@ Lo que paga cada causa de salida:
 |---|---|---|
 | Renuncia voluntaria | No | No |
 | Terminación por acuerdo de las partes | Sí | No |
-| Desahucio | Sí | No |
+| Desahucio (aviso escrito del trabajador, art. 184) | Sí | No |
 | Despido intempestivo | Sí | Sí |
 | Visto bueno a favor del trabajador | Sí | Sí |
 | Visto bueno a favor del empleador | No | No |
@@ -687,10 +687,8 @@ Las tipografías (Bricolage Grotesque y Figtree) van incluidas en `frontend/publ
 | Discapacidad en los gastos personales | Las fuentes no coinciden en si la discapacidad del empleado o de una carga sube el tope a 100 canastas | Solo la enfermedad catastrófica, rara o huérfana lleva el tope a 100 canastas |
 | Cálculo mensual del impuesto con rebaja | El SRI proyecta el año y reparte la retención en cuotas; no se pudo leer la fórmula | Resta la rebaja al impuesto anual proyectado (×12) y divide entre 12 |
 | Alcance de los gastos de arte, cultura y turismo | Las notas de prensa los mencionan sin precisar topes ni condiciones | No distingue categorías: el empleado declara un solo total |
-| Texto oficial de la liquidación | Ninguna fuente leída es el Código del Trabajo: no se pudo leer el texto de los arts. 169, 184, 185 ni 188, solo resúmenes y un artículo que cita el 185 | Aplica el 25 % por año del art. 185 y la indemnización de 3 sueldos o 1 por año con tope de 25 del art. 188 |
-| Desahucio en la renuncia | Un portal dice que la renuncia da la bonificación del art. 185, otro que no. La Corte Nacional (Resolución 03-2025) dijo que el retiro voluntario no la da, y una jueza de esa Corte aclaró que solo vale para el sector público y que en el privado la renuncia aceptada es un acuerdo entre las partes. El Ministerio del Trabajo demandó esa resolución en abril de 2025 y no se encontró cómo terminó | La renuncia no paga bonificación; si el empleador la acepta como acuerdo, se elige «acuerdo de las partes», que sí la paga |
-| Región del décimo cuarto | Las fuentes coinciden en Sierra (agosto a julio) y Costa (marzo a febrero), pero una pone la Amazonía y Galápagos en el otro grupo | La región se elige al calcular; Sierra incluye la Amazonía y Costa, Galápagos |
-| Fracción de año y base de la bonificación y la indemnización | Las fuentes dicen «remuneración» sin precisar, y no dicen si la fracción del art. 185 cuenta completa o proporcional | Usa el sueldo base; la fracción cuenta en proporción para el 185 y como año completo para el 188 |
+| Bonificación en la renuncia | Los arts. 184 y 185 la pagan cuando el trabajador da el aviso de desahucio por escrito con 15 días de anticipación y cuando la relación termina por acuerdo de las partes. Para el retiro voluntario sin ese aviso hay una resolución de la Corte Nacional (03-2025) que la niega, una jueza de esa Corte aclaró que solo vale para el sector público, y el Ministerio del Trabajo demandó la resolución en abril de 2025 sin que se haya encontrado cómo terminó | «Renuncia voluntaria» no paga bonificación; «Desahucio» (el aviso del art. 184) y «Terminación por acuerdo de las partes» sí la pagan |
+| Fracción de año del art. 185 y base de las indemnizaciones | El art. 188 sí dice que la fracción de año cuenta como año completo, pero el 185 no dice nada de las fracciones. Ambos hablan de la remuneración «que hubiere estado percibiendo» (188) o de la «última remuneración mensual» (185), sin precisar si incluye horas extras o comisiones | La bonificación del 185 cuenta la fracción en proporción; ambas usan el sueldo base |
 | Liquidación del sector público | No se encontró la norma de supresión de puestos ni de compra de renuncias de la LOSEP | No se calculan: solo se liquidan los rubros comunes |
 | Formato de carga masiva del IESS | No se encontró un formato público de archivo | Entrega un cuadro de conciliación, no un archivo de carga |
 
@@ -779,7 +777,7 @@ Del IESS y del Ministerio del Trabajo.
 
 - [IESS: servicios del afiliado](https://www.iess.gob.ec/en/web/afiliado/servicios-y-prestaciones) **(leída)**: Aporte personal de 9,45 % y patronal de 11,15 % (régimen general). No publica una tabla para el sector público.
 - [Ministerio del Trabajo: Acuerdo MDT-2024-039](https://trabajo.gob.ec/wp-content/uploads/2024/04/AM-MDT-2024-039.pdf): Escala oficial del nivel jerárquico superior: 10 grados, de $2.115 a $5.072. Se vio en los resultados de búsqueda; el sistema no la carga.
-- [Ministerio del Trabajo: Código del Trabajo (PDF)](https://www.trabajo.gob.ec/wp-content/uploads/downloads/2024/01/CODIGO_DEL_TRABAJO.pdf): Confirmación del art. 49 (jornada nocturna, de 19h00 a 06h00, con 25 % de recargo).
+- [Ministerio del Trabajo: Código del Trabajo (PDF)](https://www.trabajo.gob.ec/wp-content/uploads/downloads/2024/01/CODIGO_DEL_TRABAJO.pdf) **(leída)**: Texto oficial (última reforma: R.O. 309-S, 12-V-2023). Confirma el art. 49 (jornada nocturna, de 19h00 a 06h00, con 25 % de recargo) y, para la liquidación, los arts. 71, 113, 169, 184, 185 y 188.
 
 #### Sueldo básico unificado 2026 ($482)
 
@@ -878,7 +876,7 @@ Cómo se declaran los aportes. No se encontró un formato público de archivo pa
 
 #### Liquidación por salida (por confirmar)
 
-Bonificación por desahucio, indemnización por despido, décimos proporcionales y vacaciones no gozadas. No se pudo leer el texto oficial del Código del Trabajo: ninguna fuente es la norma y se contradicen en la renuncia, la región del décimo cuarto y la fracción de año.
+Bonificación por desahucio, indemnización por despido, décimos proporcionales y vacaciones no gozadas. El texto del Código del Trabajo está confirmado en la copia oficial del Ministerio (ver arriba); queda por confirmar cómo se aplica la bonificación a la renuncia (las sentencias y la demanda siguen abiertas) y la fracción de año del art. 185, que el artículo no menciona.
 
 - [Ecuador Legal Online: el desahucio](https://www.ecuadorlegalonline.com/laboral/el-desahucio) **(leída)**: Cita completo el art. 185: el 25 % de la última remuneración por año de servicio, también por acuerdo de las partes.
 - [Derecho Ecuador: despido intempestivo](https://www.derechoecuador.com/despido-intempestivo) **(leída)**: Resume el art. 188: tres remuneraciones hasta tres años, una por año desde ahí, tope de 25 y la fracción de año como año completo.
@@ -886,8 +884,7 @@ Bonificación por desahucio, indemnización por despido, décimos proporcionales
 - [NMS Law: bonificación por desahucio en el retiro voluntario](https://nmslaw.com.ec/blog/2025/02/03/corte-nacional-bonificacion-desahucio-retiro-voluntario-ecuador/) **(leída)**: Resolución 03-2025 de la Corte Nacional: el retiro voluntario no da bonificación por desahucio.
 - [Primicias: la resolución del desahucio por retiro voluntario solo aplica al sector público](https://primicias.ec/economia/resolucion-pago-desahucio-retiro-voluntario-sector-publico-89686) **(leída)**: Una jueza de la Corte Nacional dice que en el sector privado la renuncia aceptada sí da desahucio.
 - [Primicias: demanda de inconstitucionalidad contra la resolución del desahucio](https://primicias.ec/economia/ministra-trabajo-demanda-inconstitucionalidad-corte-desahucio-93097) **(leída)**: La demanda se presentó en abril de 2025; no se encontró cómo terminó.
-- [Vistazo: qué pasa con el décimo si renuncias](https://www.vistazo.com/2026-02-25-pasa-decimo-renuncias-debes-saber-antes-dejar-trabajo-OG10700187) **(leída)**: Fechas de pago del décimo cuarto por región; contradice a Ecuador Legal Online en Amazonía y Galápagos.
-- [Ecuador Legal Online: Código del Trabajo](https://www.ecuadorlegalonline.com/biblioteca/codigo-de-trabajo/): Texto del Código donde confirmar los arts. 169, 184 y 188; no se abrió.
+- [Vistazo: qué pasa con el décimo si renuncias](https://www.vistazo.com/2026-02-25-pasa-decimo-renuncias-debes-saber-antes-dejar-trabajo-OG10700187) **(leída)**: Fechas de pago del décimo cuarto por región; coincide con el art. 113 del Código (Costa e Insular, Sierra y Amazónica).
 
 </details>
 
