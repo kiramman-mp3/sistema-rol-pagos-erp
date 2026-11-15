@@ -12,6 +12,7 @@ import type { Base, Fila } from "../db.ts";
 import { calcularMes, CAMPOS_NOVEDAD, COLUMNAS_NOVEDAD, insertarDetalle, totalDe } from "../nomina.ts";
 import type { Novedad } from "../nomina.ts";
 import { parametrosDelAnio } from "../parametros.ts";
+import { cuotasDelMes } from "../prestamos.ts";
 import { detalleVigente, reliquidar } from "../reliquidacion.ts";
 import { fechaDeCierre, indexarRegimenes, listarRegimenes, opcionesDe, regimenAplicado } from "../regimenes.ts";
 import { documentoCsv } from "../csv.ts";
@@ -122,7 +123,7 @@ const COLUMNAS_CSV = [
   "cedula", "nombres", "cargo", "regimen_aplicado", "sueldo", "valor_horas_suplementarias",
   "valor_horas_extraordinarias", "valor_horas_descanso", "valor_recargo_nocturno", "comisiones",
   "ingresos_aportables", "beneficios_mensuales", "total_ingresos", "aporte_iess", "impuesto_renta",
-  "otros_descuentos", "total_descuentos", "neto_pagar", "decimo_tercero", "decimo_tercero_modalidad",
+  "otros_descuentos", "descuento_prestamos", "total_descuentos", "neto_pagar", "decimo_tercero", "decimo_tercero_modalidad",
   "decimo_cuarto", "decimo_cuarto_modalidad", "fondos_reserva", "fondos_reserva_modalidad",
   "vacaciones", "aporte_patronal", "costo_empleador",
 ];
@@ -160,6 +161,7 @@ export function rutasRoles(db: Base): Router {
     const { anio, mes } = leerPeriodo(req.params.anio, req.params.mes);
     const regimenes = indexarRegimenes(await listarRegimenes(db, cuentaId, fechaDeCierre(anio, mes)));
     const estadoRol = await estadoDelRol(db, cuentaId, anio, mes);
+    const prestamos = await cuotasDelMes(db, cuentaId, anio, mes);
     const guardadas = new Map(
       (await consultar(
         db,
@@ -177,6 +179,8 @@ export function rutasRoles(db: Base): Router {
         return {
           id: e.id, nombres: e.nombres, cargo: e.cargo, sueldoBase: e.sueldo_base,
           regimen: e.regimen,
+          // Cuota de préstamos del IESS que el rol descontará: sale de los préstamos registrados, no se digita.
+          cuotaPrestamos: prestamos.get(Number(e.id))?.toNumber() ?? 0,
           regimenAplicado: regimenAplicado(regimenes, String(e.regimen), e.categoria_loep as string | null).codigo,
           recibeHorasExtras: opcionesDe(
             regimenAplicado(regimenes, String(e.regimen), e.categoria_loep as string | null), e,

@@ -15,7 +15,7 @@ const PERIODO = {
   anio: 2026, mes: 10, existe: true, estado: 'calculado',
   empleados: [{
     id: 1, nombres: 'Ana Prueba', cargo: 'Analista', sueldoBase: 1000,
-    regimen: 'CODIGO_TRABAJO', regimenAplicado: 'CODIGO_TRABAJO', recibeHorasExtras: true,
+    regimen: 'CODIGO_TRABAJO', regimenAplicado: 'CODIGO_TRABAJO', recibeHorasExtras: true, cuotaPrestamos: 0,
     novedades: SIN_NOVEDADES,
   }],
 };
@@ -91,6 +91,28 @@ describe('NovedadesMes', () => {
     expect(entrada('Horas en sábado, domingo o feriado').disabled).toBe(true);
     expect(entrada('Horas nocturnas').disabled).toBe(false);
     expect(entrada('Comisiones y bonos').disabled).toBe(false);
+  });
+
+  it('anuncia la cuota del préstamo del IESS que se descontará, solo a quien la tiene', async () => {
+    const fixture = TestBed.createComponent(NovedadesMes);
+    fixture.componentRef.setInput('anio', '2026');
+    fixture.componentRef.setInput('mes', '10');
+    fixture.detectChanges();
+    TestBed.tick();
+    http.expectOne('/api/parametros').flush({ regimenes: [], meses: [] });
+    http.expectOne('/api/roles/periodo/2026/10').flush({
+      ...PERIODO,
+      empleados: [
+        { ...PERIODO.empleados[0], cuotaPrestamos: 40 },
+        { ...PERIODO.empleados[0], id: 2, nombres: 'Beto Sin Préstamo' },
+      ],
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const filas = [...(fixture.nativeElement as HTMLElement).querySelectorAll('tbody tr')];
+    expect(filas[0].textContent).toContain('Préstamo del IESS: $40.00');
+    expect(filas[1].textContent).not.toContain('Préstamo del IESS');
   });
 
   it('un mes con el rol publicado no deja digitar novedades', async () => {
