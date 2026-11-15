@@ -5,8 +5,8 @@
  * el rol de ese mes (la fecha de salida prorratea el último mes). Entra lo que ningún rol paga:
  * los décimos acumulados, las vacaciones no gozadas y las indemnizaciones según la causa de la salida.
  *
- * Varias reglas están marcadas «por confirmar» en el README: las fuentes consultadas no son el texto oficial
- * del Código del Trabajo y se contradicen en la renuncia, la región del décimo cuarto y la fracción de año.
+ * Los arts. 185 y 188 del Código del Trabajo y las regiones del décimo cuarto (art. 113) están confirmados en el texto
+ * oficial. Siguen «por confirmar» en el README la renuncia sin aviso de desahucio y la fracción de año del art. 185.
  */
 import { Decimal } from "decimal.js";
 
