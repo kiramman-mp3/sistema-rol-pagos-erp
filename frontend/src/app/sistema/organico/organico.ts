@@ -6,6 +6,7 @@ import { firstValueFrom } from 'rxjs';
 import { Api, valorSeguro } from '../../core/api';
 import type { DatosPuesto } from '../../core/api';
 import { Avisos } from '../../core/avisos';
+import { Sesion } from '../../core/sesion';
 import { DineroPipe } from '../../core/dinero.pipe';
 import type { Grado, Puesto } from '../../core/modelos';
 
@@ -149,10 +150,12 @@ interface Nodo {
               </select>
             </div>
           }
-          <div class="acciones-puesto">
-            <button class="boton-texto" type="button" (click)="editar(p)">Editar puesto</button>
-            <button class="boton-texto boton-peligro" type="button" (click)="eliminar(p)">Eliminar puesto</button>
-          </div>
+          @if (sesion.puede('editar')) {
+            <div class="acciones-puesto">
+              <button class="boton-texto" type="button" (click)="editar(p)">Editar puesto</button>
+              <button class="boton-texto boton-peligro" type="button" (click)="eliminar(p)">Eliminar puesto</button>
+            </div>
+          }
         </div>
       </section>
     }
@@ -206,7 +209,7 @@ interface Nodo {
             </select>
           </div>
           <div class="acciones">
-            <button class="boton" [disabled]="guardando()">
+            <button class="boton" [disabled]="guardando() || !sesion.puede('editar')">
               {{ borrador().id === null ? 'Agregar puesto' : 'Guardar cambios' }}
             </button>
             @if (borrador().id !== null) {
@@ -221,6 +224,7 @@ interface Nodo {
 export class Organico {
   private readonly api = inject(Api);
   private readonly avisos = inject(Avisos);
+  protected readonly sesion = inject(Sesion);
 
   protected readonly puestos = httpResource<Puesto[]>(() => '/api/puestos');
   private readonly todos = valorSeguro(this.puestos);

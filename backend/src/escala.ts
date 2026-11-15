@@ -2,7 +2,7 @@
 import { consultar, ejecutar, esDuplicado, filaACamel, insertar, uno } from "./db.ts";
 import type { Base, Fila } from "./db.ts";
 import { buscarRegimen } from "./regimenes.ts";
-import { aDecimal, ErrorApi } from "./validaciones.ts";
+import { aDecimal, ErrorApi, esId } from "./validaciones.ts";
 
 export interface Grado {
   id: number;
@@ -19,28 +19,29 @@ export interface Grado {
 
 const aGrado = (f: Fila): Grado => ({ ...(filaACamel(f) as unknown as Grado), esMinimo: f.es_minimo === 1 });
 
-export async function listarEscala(db: Base, regimen?: string): Promise<Grado[]> {
+export async function listarEscala(db: Base, cuentaId: number, regimen?: string): Promise<Grado[]> {
   const filas = regimen
-    ? await consultar(db, "SELECT * FROM escala_salarial WHERE regimen = ? ORDER BY grado", regimen)
-    : await consultar(db, "SELECT * FROM escala_salarial ORDER BY regimen, grado");
+    ? await consultar(db, "SELECT * FROM escala_salarial WHERE cuenta_id = ? AND regimen = ? ORDER BY grado", cuentaId, regimen)
+    : await consultar(db, "SELECT * FROM escala_salarial WHERE cuenta_id = ? ORDER BY regimen, grado", cuentaId);
   return filas.map(aGrado);
 }
 
-export async function buscarGrado(db: Base, id: number): Promise<Grado | undefined> {
-  const fila = await uno(db, "SELECT * FROM escala_salarial WHERE id = ?", id);
+export async function buscarGrado(db: Base, cuentaId: number, id: number): Promise<Grado | undefined> {
+  if (!esId(id)) return undefined; // el id viene del cuerpo de una petición: puede ser NaN o enorme
+  const fila = await uno(db, "SELECT * FROM escala_salarial WHERE cuenta_id = ? AND id = ?", cuentaId, id);
   return fila ? aGrado(fila) : undefined;
 }
 
 type DatosGrado = Omit<Grado, "id">;
 
 /** Valida el cuerpo de un grado; reporta todos los problemas juntos. */
-async function validarGrado(db: Base, cuerpo: Record<string, unknown>): Promise<DatosGrado> {
+async function validarGrado(db: Base, cuentaId: number, cuerpo: Record<string, unknown>): Promise<DatosGrado> {
   const errores: string[] = [];
   const regimen = String(cuerpo.regimen ?? "").trim();
   const denominacion = String(cuerpo.denominacion ?? "").trim();
   const grado = Number(cuerpo.grado);
 
-  if ((await buscarRegimen(db, regimen))?.tipo !== "reglas") {
+  if ((await buscarRegimen(db, cuentaId, regimen))?.tipo !== "reglas") {
     errores.push("El régimen debe existir y tener reglas propias (por ejemplo LOSEP o Código del Trabajo).");
   }
   if (!Number.isInteger(grado) || grado < 1 || grado > 99) errores.push("El grado debe ser un entero entre 1 y 99.");
@@ -81,32 +82,32 @@ async function conDuplicados<T>(accion: () => Promise<T>): Promise<T> {
   }
 }
 
-export async function crearGrado(db: Base, cuerpo: Record<string, unknown>): Promise<Grado> {
-  const d = await validarGrado(db, cuerpo);
+export async function crearGrado(db: Base, cuentaId: number, cuerpo: Record<string, unknown>): Promise<Grado> {
+  const d = await validarGrado(db, cuentaId, cuerpo);
   const id = await conDuplicados(() =>
     insertar(
       db,
-      "INSERT INTO escala_salarial (regimen, grado, denominacion, rmu, rmu_max, es_minimo, fuente) VALUES (?, ?, ?, ?, ?, ?, ?)",
-      d.regimen, d.grado, d.denominacion, d.rmu, d.rmuMax, d.esMinimo ? 1 : 0, d.fuente,
+      "INSERT INTO escala_salarial (cuenta_id, regimen, grado, denominacion, rmu, rmu_max, es_minimo, fuente) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      cuentaId, d.regimen, d.grado, d.denominacion, d.rmu, d.rmuMax, d.esMinimo ? 1 : 0, d.fuente,
     ),
   );
-  return (await buscarGrado(db, id))!;
+  return (await buscarGrado(db, cuentaId, id))!;
 }
 
-export async function actualizarGrado(db: Base, id: number, cuerpo: Record<string, unknown>): Promise<Grado> {
-  if (!(await buscarGrado(db, id))) throw new ErrorApi(404, ["El grado no existe."]);
-  const d = await validarGrado(db, cuerpo);
+export async function actualizarGrado(db: Base, cuentaId: number, id: number, cuerpo: Record<string, unknown>): Promise<Grado> {
+  if (!(await buscarGrado(db, cuentaId, id))) throw new ErrorApi(404, ["El grado no existe."]);
+  const d = await validarGrado(db, cuentaId, cuerpo);
   await conDuplicados(() =>
     ejecutar(
       db,
-      "UPDATE escala_salarial SET regimen = ?, grado = ?, denominacion = ?, rmu = ?, rmu_max = ?, es_minimo = ?, fuente = ? WHERE id = ?",
-      d.regimen, d.grado, d.denominacion, d.rmu, d.rmuMax, d.esMinimo ? 1 : 0, d.fuente, id,
+      "UPDATE escala_salarial SET regimen = ?, grado = ?, denominacion = ?, rmu = ?, rmu_max = ?, es_minimo = ?, fuente = ? WHERE cuenta_id = ? AND id = ?",
+      d.regimen, d.grado, d.denominacion, d.rmu, d.rmuMax, d.esMinimo ? 1 : 0, d.fuente, cuentaId, id,
     ),
   );
-  return (await buscarGrado(db, id))!;
+  return (await buscarGrado(db, cuentaId, id))!;
 }
 
-export async function eliminarGrado(db: Base, id: number) {
-  if (!(await buscarGrado(db, id))) throw new ErrorApi(404, ["El grado no existe."]);
-  await ejecutar(db, "DELETE FROM escala_salarial WHERE id = ?", id);
+export async function eliminarGrado(db: Base, cuentaId: number, id: number) {
+  if (!(await buscarGrado(db, cuentaId, id))) throw new ErrorApi(404, ["El grado no existe."]);
+  await ejecutar(db, "DELETE FROM escala_salarial WHERE cuenta_id = ? AND id = ?", cuentaId, id);
 }

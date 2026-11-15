@@ -21,6 +21,24 @@ describe("CSV para Excel", () => {
     assert.equal(celdaCsv("simple"), "simple");
   });
 
+  it("entrecomilla también el retorno de carro", () => {
+    assert.equal(celdaCsv("a\rb"), '"a\rb"');
+  });
+
+  it("neutraliza el texto que Excel ejecutaría como fórmula", () => {
+    assert.equal(celdaCsv("=HYPERLINK(\"http://x\")"), '"\'=HYPERLINK(""http://x"")"');
+    assert.equal(celdaCsv("+1+1"), "'+1+1");
+    assert.equal(celdaCsv("-2+3"), "'-2+3");
+    assert.equal(celdaCsv("@SUM(A1)"), "'@SUM(A1)");
+    assert.equal(celdaCsv("\t=1"), "'\t=1");
+  });
+
+  it("deja intactos los números negativos y el texto normal", () => {
+    assert.equal(celdaCsv(-5.5), "-5.5");
+    assert.equal(celdaCsv("Ana-María"), "Ana-María");
+    assert.equal(celdaCsv("1712345675"), "1712345675");
+  });
+
   it("las celdas vacías o nulas quedan en blanco y el cero se conserva", () => {
     assert.equal(celdaCsv(null), "");
     assert.equal(celdaCsv(undefined), "");

@@ -8,15 +8,16 @@
 [![Deploy](https://img.shields.io/badge/Deploy-Vercel-000000?style=flat-square&logo=vercel&logoColor=white)](https://vercel.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
 
-**Rol de Pagos Ecuador** es un sistema de nómina para Ecuador cuyas reglas de ley se **parametrizan** desde la propia aplicación: régimen laboral, salario básico, escala salarial, décimos, fondos de reserva, horas extras y aportes al IESS. Una API en **Express**, una aplicación en **Angular**, una página de inicio pública y, detrás del botón **Ingresar al sistema**, el sistema completo.
+**Rol de Pagos Ecuador** es un sistema de nómina para Ecuador cuyas reglas de ley se **parametrizan** desde la propia aplicación: régimen laboral, salario básico, escala salarial, décimos, fondos de reserva, horas extras y aportes al IESS. Una API en **Express**, una aplicación en **Angular**, una página de inicio pública y, detrás del botón **Registrar mi empresa**, el sistema completo: cada empresa crea su cuenta y todos sus datos (empleados, roles, orgánico, escala y reglas de ley) son solo suyos.
 
 Se hizo como práctica de la guía APE, que pide un rol de pagos parametrizable: escoger el régimen laboral (Código del Trabajo, LOSEP o LOEP), el salario básico, la escala salarial, si el trabajador recibe décimo tercero, décimo cuarto y horas extras, y ver si el IESS, que se hace a mano en Excel, se puede automatizar.
 
 > [!TIP]
-> **¿Quieres verlo funcionando?** No necesitas instalar ninguna base de datos: con dos comandos queda corriendo en `http://localhost:3000`, con 12 empleados y nueve meses de roles de ejemplo.
+> **¿Quieres verlo funcionando?** No necesitas instalar ninguna base de datos: con dos comandos queda corriendo en `http://localhost:3000`. El seed crea la cuenta `demo@empresa.com` con 12 empleados y nueve meses de roles de ejemplo; entras con ese correo y la contraseña que pongas.
 > ```bash
-> npm run instalar && npm --prefix backend run seed && npm start
+> npm run instalar && npm --prefix backend run seed -- demo@empresa.com --clave "una-clave-larga" && npm start
 > ```
+> Sin el seed también sirve: abre la página y usa **Registrar mi empresa**.
 
 ---
 
@@ -26,16 +27,16 @@ Se hizo como práctica de la guía APE, que pide un rol de pagos parametrizable:
 En muchas empresas el rol de pagos se arma a mano en Excel: hay que acordarse de qué recargo lleva cada tipo de hora extra, de qué décimos se pagan cada mes y cuáles se acumulan, de la tabla del impuesto a la renta del año y de qué aportes corresponden al régimen de cada persona. Un cambio de ley obliga a revisar todas las fórmulas. **Rol de Pagos Ecuador** guarda esas reglas como datos que se editan en pantalla, así que un cambio normativo es un cambio de parámetros y no de código.
 
 ### ¿Qué hace?
-Para cada mes, la persona encargada anota las novedades (horas extras, comisiones, anticipos) y el sistema:
+Cada empresa se registra con su nombre, su RUC, un correo y una contraseña, y trabaja en su propia cuenta. Para cada mes, la persona encargada anota las novedades (horas extras, comisiones, anticipos) y el sistema:
 1. Calcula a cada empleado activo con las reglas de **su** régimen: aporte personal al IESS, impuesto a la renta, décimos, fondos de reserva y vacaciones.
 2. Entrega el neto a pagar y el costo total para la empresa (ingresos + provisiones).
 3. Genera la **boleta individual** imprimible y la descarga en **CSV** del rol y de los aportes.
 4. Arma el **cuadro de conciliación con el IESS**, para contrastarlo línea por línea con el comprobante del portal.
 
-Los roles ya generados guardan una foto de las reglas con que se calcularon: si luego se editan los parámetros, el historial no cambia.
+Los roles ya generados guardan sus valores, y las reglas de cada régimen tienen vigencia por fecha: cambiar una tasa agrega una versión nueva, y volver a generar un mes anterior usa la que regía entonces.
 
 ### ¿Para quién está pensado?
-Para el área de talento humano o contabilidad de una empresa pequeña o mediana, y para quien necesite estudiar cómo se compone un rol de pagos ecuatoriano: el motor de cálculo son funciones puras, con pruebas, y cada regla cita su fuente.
+Para el área de talento humano o contabilidad de una empresa pequeña o mediana (cada una registra la suya), y para quien necesite estudiar cómo se compone un rol de pagos ecuatoriano: el motor de cálculo son funciones puras, con pruebas, y cada regla cita su fuente.
 
 ---
 
@@ -54,13 +55,24 @@ Para el área de talento humano o contabilidad de una empresa pequeña o mediana
 
 *   **Tres regímenes laborales:** Código del Trabajo, LOSEP y LOEP. En la LOEP se indica además si el empleado es servidor u obrero, y el rol usa las reglas del régimen que le corresponde.
 *   **Todo parametrizable en pantalla:** SBU, tabla del impuesto a la renta (por año), aportes, recargos, topes, vacaciones y beneficios de cada régimen se editan en **Parámetros**, sin tocar el código.
+*   **Reglas con vigencia por fecha:** cada cambio a las tasas de un régimen se guarda como una versión nueva «vigente desde» una fecha. Un rol usa la versión que regía al cierre de su mes, así que subir un aporte en octubre no altera septiembre. Las versiones anteriores se pueden consultar, corregir o eliminar.
+*   **Reliquidación sin tocar lo publicado:** un error en un rol publicado se corrige con un ajuste vinculado al original, que guarda solo la diferencia y recorre el mismo ciclo y la misma auditoría. Original más ajustes da el total real del mes.
 *   **Escala salarial y orgánico funcional:** el sueldo sale del grado elegido (exacto en la LOSEP, mínimo en el Código del Trabajo) y cada puesto del orgánico lleva su función, su responsable y su nivel de referencia.
 *   **Décimos y fondos a la medida:** por empleado, cada beneficio se paga cada mes en el rol, se acumula o no se recibe.
 *   **Horas extras por tipo:** suplementarias, extraordinarias, de sábado, domingo y feriado, y nocturnas, con el recargo y el tope de cada régimen. Los topes avisan, sin bloquear.
-*   **Dinero exacto:** todo se calcula con `decimal.js` y se redondea a centavos en cada rubro.
+*   **Rebaja por gastos personales:** el impuesto a la renta se rebaja el 18 % de los gastos que el empleado declaró, con un tope según sus cargas familiares y la canasta básica del año. Es opcional: sin gastos declarados no cambia nada.
+*   **Dinero exacto:** todo se calcula con `decimal.js`, se redondea a centavos en cada rubro y se guarda en columnas `NUMERIC`, sin errores de coma flotante.
+*   **Préstamos del IESS:** cada préstamo se registra con su cuota, su número de cuotas y su primer mes; el rol descuenta la cuota que toca, se pueden suspender y el historial no cambia.
 *   **Conciliación con el IESS:** materia gravada, aportes personal y patronal y fondos de reserva por empleado, descargables en CSV.
 *   **Boleta y CSV:** boleta individual imprimible en una hoja y exportación del rol para Excel.
+*   **Ciclo del rol:** cada rol pasa por calculado, validado, aprobado, publicado y pagado. Un rol publicado es inmutable: no se recalcula, no se edita y no se elimina, y la base también lo impide.
+*   **Auditoría:** cada paso del rol (quién, qué y cuándo) queda en un registro que solo admite inserciones.
+*   **Usuarios con roles:** cada cuenta tiene varios usuarios, con rol de administrador, aprobador o lector. El administrador agrega y quita usuarios, cambia sus roles y les define la contraseña; el servidor niega con `403` lo que el rol no permite. Opcionalmente, quien generó un rol no puede aprobarlo ni publicarlo (separación de funciones).
 *   **Cédula validada:** dígito verificador (módulo 10) y provincia.
+*   **Una cuenta por empresa:** la empresa se registra con su RUC (validado con su dígito verificador) y un correo. Sus empleados, roles, novedades, orgánico, escala y reglas de ley son solo de su cuenta: ninguna otra empresa los ve ni los toca.
+*   **Reglas propias, con plantilla de partida:** cada cuenta nueva recibe una copia de los regímenes, los parámetros anuales, la escala y el orgánico de ejemplo. Los edita sin afectar a las demás, y la página de inicio pública usa la plantilla.
+*   **Acceso con contraseña:** se entra con correo y contraseña; la sesión dura 8 horas y la API privada responde `401` sin ella. La contraseña se guarda como hash `scrypt`, nunca en claro.
+*   **Fecha de salida:** quien se va cobra solo los días hasta su salida y deja de entrar a los roles siguientes; los meses anteriores no cambian.
 *   **Sin dependencias de CDN:** las tipografías van incluidas en el proyecto.
 
 ---
@@ -80,19 +92,22 @@ Para el área de talento humano o contabilidad de una empresa pequeña o mediana
 
 ## 📐 Arquitectura
 
-El motor de cálculo no sabe nada de la base de datos: recibe las reglas ya armadas y devuelve el resultado. Las rutas leen las reglas de la base, llaman al motor y guardan el rol.
+El motor de cálculo no sabe nada de la base de datos: recibe las reglas ya armadas y devuelve el resultado. Las rutas leen las reglas de la base, llaman al motor y guardan el rol. La sesión lleva la cuenta de quien entró y cada consulta se filtra por ella.
 
 ```mermaid
 graph TD
     Web["Angular 22 · frontend/"] -->|HTTP /api| App["app.ts · Express 5"]
-    App --> Rutas["rutas/ · empleados, roles, parámetros, regímenes, escala, puestos"]
+    App --> Sesion["exigirSesion · la cuenta de la sesión"]
+    Sesion --> Rutas["rutas/ · auth, cuenta, empleados, roles, parámetros, regímenes, escala, puestos"]
 
     Rutas --> Motor["calculos.ts · motor de cálculo (funciones puras)"]
-    Rutas --> Reglas["regimenes.ts · parametros.ts · escala.ts · puestos.ts"]
+    Rutas --> Reglas["regimenes.ts · parametros.ts · escala.ts · puestos.ts · cuentas.ts"]
     Rutas --> IESS["iess.ts · conciliación"]
+    Rutas --> Ciclo["ciclo.ts · estados, validación · auditoria.ts · registro"]
 
     Reglas --> DB["db.ts · consultas, transacciones y migraciones"]
     Rutas --> DB
+    Ciclo --> DB
     DB -->|DATABASE_URL| Supabase[("PostgreSQL · Supabase")]
     DB -->|sin DATABASE_URL, y en pruebas| PGlite[("PGlite · en memoria o en backend/data")]
 ```
@@ -111,19 +126,29 @@ rol-pagos-ecuador/
 │   │   ├── escala.ts          # Escala salarial
 │   │   ├── puestos.ts         # Orgánico funcional
 │   │   ├── iess.ts            # Cuadro de conciliación con el IESS
+│   │   ├── prestamos.ts       # Préstamos del IESS: qué cuota toca cada mes
+│   │   ├── ciclo.ts           # Ciclo del rol: estados, pasos y revisión de errores bloqueantes
+│   │   ├── auditoria.ts       # Registro de auditoría (solo inserciones)
+│   │   ├── permisos.ts        # Roles de usuario y qué permiso exige cada ruta
 │   │   ├── demo.ts            # Empleados y roles de ejemplo (los usa el seed)
 │   │   ├── db.ts              # PostgreSQL sin ORM (pg, o PGlite) y ejecutor de migraciones
-│   │   ├── rutas/             # empleados, roles, parámetros, regímenes, escala y puestos
-│   │   ├── migraciones/       # Esquema versionado: 001 a 009 (SQL numerado)
-│   │   ├── validaciones.ts    # Cédula, números y fechas
+│   │   ├── auth.ts            # Contraseña (scrypt), sesión firmada con la cuenta y límite de intentos
+│   │   ├── cuentas.ts         # Registro de empresas, usuarios y datos de la empresa
+│   │   ├── seed.ts            # Script: crea una cuenta de ejemplo y la llena
+│   │   ├── usuario.ts         # Script: lista las cuentas y agrega usuarios a una cuenta
+│   │   ├── rutas/             # auth, cuenta, empleados, préstamos, roles, parámetros, regímenes, escala y puestos
+│   │   ├── migraciones/       # Esquema versionado: 001 a 022 (SQL numerado)
+│   │   ├── validaciones.ts    # Cédula, RUC, correo, números y fechas
 │   │   ├── server.ts          # Arranque local
 │   │   └── vercel.ts          # Entrada del backend en Vercel
 │   └── test/                  # node:test, incluida la API completa
 ├── frontend/                  # Angular 22
 │   ├── src/app/landing/       # Página de inicio con el simulador
+│   ├── src/app/entrar/        # Inicio de sesión
+│   ├── src/app/registro/      # Registro de una empresa
 │   ├── src/app/informacion/   # Acerca de, investigación y fuentes
-│   ├── src/app/sistema/       # Shell, inicio del mes, empleados, orgánico, roles y parámetros
-│   ├── src/app/core/          # Cliente de la API, avisos, pipe de dinero, modelos y fuentes
+│   ├── src/app/sistema/       # Shell, inicio del mes, empleados, préstamos, orgánico, roles, parámetros y usuarios
+│   ├── src/app/core/          # Cliente de la API, sesión, avisos, pipe de dinero, modelos y fuentes
 │   └── src/styles.css         # Sistema visual global
 ├── docs/capturas/             # Capturas de pantalla de este README
 ├── vercel.json                # Servicios de Vercel: frontend y backend
@@ -163,10 +188,27 @@ rol-pagos-ecuador/
 
     El esquema se crea y se actualiza solo al arrancar (ver Migraciones, más abajo).
 
-4.  **Cargar los datos de ejemplo** (opcional): 12 empleados y los roles de enero a septiembre de 2026.
+4.  **Definir el secreto de las sesiones.** Las empresas se registran e inician sesión desde la página; el servidor firma cada sesión con `SESION_SECRETO` (al menos 32 caracteres). Genera uno y defínelo antes de arrancar:
     ```bash
-    npm --prefix backend run seed
+    export SESION_SECRETO="$(node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))")"
     ```
+    Sin él y con la base local (PGlite), el servidor inventa uno temporal y avisa: las sesiones se cierran al reiniciar, y sirve para trabajar en tu máquina. Con `DATABASE_URL` el servidor **no arranca** sin `SESION_SECRETO`. Cambiar el secreto cierra todas las sesiones abiertas. Nunca lo guardes en el repositorio.
+
+    | Variable | Para qué sirve |
+    |---|---|
+    | `DATABASE_URL` | Cadena de conexión de Postgres (Supabase). Sin ella se usa PGlite |
+    | `DATABASE_SSL_CA` | Certificado de la autoridad de la base (el texto PEM o la ruta del archivo). Supabase firma con su propia CA (`prod-ca-2021.crt`, en *Database Settings*): sin él, la conexión se rechaza |
+    | `DATABASE_SSL_INSECURE` | `1` desactiva la verificación del certificado. Solo como salida de emergencia: permite que un intermediario lea la conexión |
+    | `SESION_SECRETO` | Firma las sesiones. Obligatorio con una base remota |
+    | `CORREO_SMTP_URL` | Servidor SMTP para los correos (`smtp://usuario:clave@servidor:587`; `smtps://` para el puerto 465). Sin él, los correos se escriben en la consola del servidor |
+    | `CORREO_REMITENTE` | Quién firma los correos, por ejemplo `Rol de pagos <no-responder@tu-dominio.com>`. Va junto con `CORREO_SMTP_URL` |
+    | `APP_URL` | Dirección pública de la aplicación (`https://rol.tu-dominio.com`), para los enlaces de los correos. Obligatoria si hay `CORREO_SMTP_URL` |
+
+5.  **Cargar los datos de ejemplo** (opcional): crea la cuenta de una empresa de ejemplo, con 12 empleados y los roles de enero a septiembre de 2026. Con tu correo y una contraseña de al menos 10 caracteres:
+    ```bash
+    npm --prefix backend run seed -- demo@empresa.com --clave "una-clave-larga"
+    ```
+    Una empresa real no necesita el seed: se registra desde la página.
 
 ---
 
@@ -194,8 +236,10 @@ npm run dev
 | `npm run build` | Compila el frontend |
 | `npm test` | Pruebas del backend (Node) y del frontend (Vitest) |
 | `npm run lint` | Tipos y ESLint de ambos proyectos |
-| `npm --prefix backend run seed` | Llena una base vacía con 12 empleados y los roles de enero a septiembre de 2026 |
-| `npm --prefix backend run seed -- --reiniciar` | Igual, pero antes borra empleados, roles y novedades de la base y empieza de cero |
+| `npm --prefix backend run seed -- correo --clave "contraseña"` | Crea la cuenta «Empresa Demo S.A.» con ese correo (si no existe) y la llena con 12 empleados y los roles de enero a septiembre de 2026. Con un correo que ya existe y sin datos, solo la llena |
+| `npm --prefix backend run seed -- correo --reiniciar` | Antes borra los empleados, roles y novedades **de esa cuenta** (las demás no se tocan) y empieza de cero. Contra un servidor Postgres exige además `--confirmo-produccion` |
+| `npm --prefix backend run usuario -- --listar` | Muestra cada cuenta con su empresa, sus usuarios y cuántos empleados tiene |
+| `npm --prefix backend run usuario -- correo "contraseña" --cuenta 2 --rol aprobador` | Agrega un usuario a una cuenta que ya existe, con ese rol (`administrador` si no se indica `--rol`) |
 
 ---
 
@@ -204,23 +248,33 @@ npm run dev
 El proyecto se despliega en **Vercel** como un solo proyecto con dos servicios (`vercel.json`): el frontend Angular y el backend Express, que atiende `/api/*`. La base es la de Supabase.
 
 ```bash
-vercel env add DATABASE_URL production --sensitive   # cadena del pooler de Supabase
+vercel env add DATABASE_URL production --sensitive       # cadena del pooler de Supabase
+vercel env add DATABASE_SSL_CA production --sensitive    # certificado de Supabase (prod-ca-2021.crt)
+vercel env add SESION_SECRETO production --sensitive     # al menos 32 caracteres aleatorios
+vercel env add CORREO_SMTP_URL production --sensitive    # servidor SMTP de tu proveedor de correo
+vercel env add CORREO_REMITENTE production               # "Rol de pagos <no-responder@tu-dominio.com>"
+vercel env add APP_URL production                        # https://tu-dominio.com
 vercel deploy --prod
 ```
+
+El backend no arranca en Vercel sin `DATABASE_URL` y `SESION_SECRETO`, ni con `CORREO_SMTP_URL` sin `APP_URL`. Sin las variables de correo la aplicación arranca, pero recuperar la contraseña no llega a nadie (el mensaje queda en el registro de la función): defínelas antes de dar acceso a otras personas. Las empresas no se configuran en la plataforma: se registran desde la página y quedan guardadas en la base. Si la conexión a la base se rechaza por el certificado, define `DATABASE_SSL_CA`.
 
 ---
 
 ## 🧭 Recorrido
 
-1. **Página de inicio (`/`)**: explica el sistema y tiene un simulador que calcula un sueldo en vivo con el motor real. Se elige el régimen y si los décimos se pagan, se acumulan o no se reciben.
+1. **Página de inicio (`/`)**: explica el sistema, lleva a **Registrar mi empresa** (`/registro`) o a **Ingresar** (`/entrar`) y tiene un simulador que calcula un sueldo en vivo con el motor real. Se elige el régimen y si los décimos se pagan, se acumulan o no se reciben.
 2. **Información (`/informacion`)**: de qué trata el proyecto, lo que encontró la investigación y los enlaces de todas las fuentes.
-3. **Inicio del mes (`/sistema/inicio`)**: la primera pantalla al ingresar. Muestra en cuatro pasos (equipo, novedades, rol generado, pagos e IESS) en qué punto está el mes y ofrece el botón de lo que sigue.
-4. **Parámetros (`/sistema/parametros`)**: tres pestañas. *Año*: SBU y tabla del impuesto a la renta, con la opción de agregar un año nuevo copiando otro. *Regímenes laborales*: aportes, recargos, topes, vacaciones y beneficios de cada uno. *Escala salarial*: los grados de cada régimen.
-5. **Empleados**: alta con cédula validada (módulo 10), régimen, grado de la escala, beneficios y horas extras. Un clic carga seis empleados de ejemplo que cubren los tres regímenes.
+3. **Inicio del mes (`/sistema/inicio`)**: la primera pantalla al ingresar; `/sistema` pide correo y contraseña en `/entrar` y, al entrar, vuelve a donde se iba. Quien aún no tiene cuenta la crea en `/registro` (nombre de la empresa, RUC, correo y contraseña de al menos 10 caracteres) y entra directo. El botón **Salir** cierra la sesión; la barra muestra el nombre de la empresa de la cuenta. Muestra en cuatro pasos (equipo, novedades, rol generado, pagos e IESS) en qué punto está el mes y ofrece el botón de lo que sigue.
+4. **Parámetros (`/sistema/parametros`)**: tres pestañas. *Año*: SBU y tabla del impuesto a la renta, con la opción de agregar un año nuevo copiando otro. *Regímenes laborales*: aportes, recargos, topes, vacaciones y beneficios de cada uno, con la fecha desde la que rige el cambio y la lista de versiones anteriores. *Escala salarial*: los grados de cada régimen.
+5. **Empleados**: alta con cédula validada (módulo 10), régimen, grado de la escala, beneficios, horas extras y fecha de salida opcional. Un clic carga seis empleados de ejemplo que cubren los tres regímenes.
 6. **Roles de pago**: se elige el mes en un calendario de doce meses que muestra cuál ya tiene rol y se digitan las novedades (horas suplementarias, extraordinarias, de sábado, domingo o feriado, y nocturnas; comisiones; anticipos). Quien no recibe horas extras tiene esas columnas deshabilitadas.
-7. **Generar**: el backend calcula a cada empleado activo con las reglas de su régimen y guarda una foto en `roles_detalle`. Avisa, sin bloquear, si alguien pasa el tope mensual de horas.
-8. **Rol**: dos ecuaciones (`ingresos − descuentos = neto` e `ingresos + provisiones = costo empleador`), la planilla por empleado, el costo empleador aparte y la **conciliación con el IESS**.
+7. **Generar**: el backend calcula a cada empleado activo con las reglas de su régimen y guarda una foto en `roles_detalle`. Avisa, sin bloquear, si alguien pasa el tope mensual de horas. El rol nace «calculado».
+8. **Rol**: dos ecuaciones (`ingresos − descuentos = neto` e `ingresos + provisiones = costo empleador`), la planilla por empleado, el costo empleador aparte y la **conciliación con el IESS**. Arriba, el **ciclo del rol**: un botón con el paso que sigue (validar, aprobar, publicar, marcar como pagado) y el historial de quién lo hizo.
 9. **Boleta individual** imprimible en una hoja, y **descarga en CSV** del rol y de los aportes al IESS.
+10. **Usuarios (`/sistema/usuarios`)**, solo para administradores: agregar personas con su rol, cambiar roles y contraseñas, eliminar usuarios y activar la separación de funciones. Quien entra como aprobador o lector ve un aviso con lo que puede hacer.
+11. **Préstamos (`/sistema/prestamos`)**: registrar los préstamos del IESS de un empleado, suspenderlos o eliminarlos; el rol del mes descuenta la cuota que toque.
+12. **Cuenta (`/sistema/cuenta`)**, solo para administradores: descargar todos los datos de la empresa en un archivo JSON o eliminarla para siempre.
 
 ---
 
@@ -243,26 +297,52 @@ vercel deploy --prod
 
 | Método y ruta | Uso |
 |---|---|
-| `GET /api/parametros?anio=` | Reglas de ley del año, tabla del IR, regímenes y datos de la empresa |
-| `PUT /api/parametros/:anio` | Crea o actualiza el SBU y la tabla del IR de un año |
+| `POST /api/auth/registro` | Crea la cuenta de una empresa y abre la sesión (`empresa`, `ruc`, `email`, `clave`). Correo repetido: `409` |
+| `GET /api/auth/yo`, `POST /api/auth/entrar`, `POST /api/auth/salir` | Estado de la sesión (con el `rol`, los `permisos` y `emailVerificado` de quien entró), inicio (`email`, `clave`) y cierre de sesión |
+| `POST /api/auth/recuperar` | Manda por correo un enlace para elegir otra contraseña (`email`). Responde `202` con el mismo mensaje exista o no la cuenta. Límite: cinco solicitudes cada 15 minutos por IP (`429`) |
+| `POST /api/auth/restablecer` | Cambia la contraseña con el token del enlace (`token`, `clave`). Token desconocido, vencido o ya usado: `400`. Responde `204` |
+| `POST /api/auth/verificar` | Confirma el correo con el token del enlace (`token`). Responde `204` |
+| `POST /api/auth/reenviar-verificacion` | Con sesión: manda otro enlace de verificación. Si ya está verificado: `409`. Responde `202` |
+| `GET /api/cuenta`, `PUT /api/cuenta` | Nombre, RUC y `separarFunciones` de la empresa de la sesión (`empresa`, `ruc`, `separarFunciones` opcional) |
+| `GET /api/cuenta/exportar` | Descarga un JSON con todo lo de la empresa (empleados, novedades, reglas, escala, orgánico, roles con su desglose, usuarios sin contraseñas y auditoría). Solo administrador |
+| `DELETE /api/cuenta` | Elimina la empresa y todo lo suyo, para siempre. Cuerpo: `ruc` y `clave` del usuario; si alguno no coincide: `400`; tras cinco fallos: `429`. Responde `204` y cierra la sesión. Solo administrador |
+| `GET /api/usuarios` | Usuarios de la cuenta y los roles posibles. Solo administrador |
+| `POST /api/usuarios` | Agrega un usuario (`email`, `clave`, `rol`). Correo en uso: `409` |
+| `PATCH /api/usuarios/:id` | Cambia el `rol`, la `clave` o ambos. Si deja a la cuenta sin administradores: `409` |
+| `DELETE /api/usuarios/:id` | Elimina un usuario, que pierde el acceso al instante. No se puede eliminar uno mismo ni al último administrador (`409`) |
+| `GET /api/parametros?anio=` | Reglas de ley del año, tabla del IR, regímenes y datos de la empresa. Con sesión, los de la cuenta; sin ella, los de la plantilla |
+| `PUT /api/parametros/:anio` | Crea o actualiza el SBU, la canasta familiar básica (`canastaBasica`, opcional) y la tabla del IR de un año |
 | `POST /api/simulacion` | Calcula un rol de ejemplo sin guardar nada (`regimen`, `categoriaLoep`, `decimos`) |
-| `GET /api/regimenes`, `GET /api/regimenes/:codigo` | Regímenes con todas sus reglas |
-| `PUT /api/regimenes/:codigo` | Edita las reglas de un régimen |
+| `GET /api/regimenes`, `GET /api/regimenes/:codigo` | Regímenes con todas sus reglas, en la versión que rige hoy o en la de `?fecha=AAAA-MM-DD` |
+| `GET /api/regimenes/:codigo/versiones` | Todas las versiones de un régimen, la más reciente primero |
+| `PUT /api/regimenes/:codigo` | Edita las reglas de un régimen. Con `vigenteDesde` (AAAA-MM-DD) crea la versión de esa fecha, o corrige la que ya empieza ese día; sin ella corrige la versión de hoy |
+| `DELETE /api/regimenes/:codigo/versiones/:desde` | Elimina una versión. La única que queda de un régimen no se puede eliminar (`409`) |
 | `GET /api/escala?regimen=` | Grados de la escala salarial |
 | `POST /api/escala`, `PUT/DELETE /api/escala/:id` | Alta, edición y baja de un grado |
 | `GET/POST /api/puestos`, `GET/PUT/DELETE /api/puestos/:id` | Puestos del orgánico funcional |
 | `PATCH /api/puestos/:id/responsable` | Asigna o quita al responsable de un puesto |
-| `GET/POST /api/empleados` | Lista y alta |
+| `GET/POST /api/prestamos`, `GET/PUT/DELETE /api/prestamos/:id` | Préstamos del IESS: `empleadoId`, `tipo` (`quirografario`, `hipotecario` o `prendario`), `cuota`, `cuotas`, `primerAnio` y `primerMes`. `GET` acepta `?empleadoId=` y devuelve también el mes de la última cuota y el total |
+| `PATCH /api/prestamos/:id/estado` | Suspende o reanuda el descuento de un préstamo |
+| `GET/POST /api/empleados` | Lista y alta. Cada empleado lleva `gastosPersonales`, `cargasFamiliares` y `enfermedadCatastrofica` para la rebaja del impuesto a la renta |
 | `GET/PUT/DELETE /api/empleados/:id` | Consulta, edición y baja |
-| `PATCH /api/empleados/:id/estado` | Activa o desactiva |
-| `POST /api/empleados/demo` | Carga los 12 empleados de ejemplo (sin roles de pago) |
+| `PATCH /api/empleados/:id/estado` | Activa o desactiva. Al desactivar registra la salida (`fechaSalida` del cuerpo, o hoy); al activar la borra |
+| `POST /api/empleados/demo` | Carga los 12 empleados de ejemplo en la cuenta (sin roles de pago) |
 | `GET /api/roles` | Historial de roles |
 | `GET /api/roles/periodo/:anio/:mes` | Empleados del mes, su régimen y las novedades ya digitadas |
-| `POST /api/roles/generar` | Calcula y guarda el rol (reemplaza el del mes) y devuelve los avisos |
-| `GET /api/roles/:id` | Rol con su detalle por empleado |
+| `POST /api/roles/generar` | Calcula y guarda el rol en estado «calculado» (reemplaza el del mes) y devuelve los avisos. Si el del mes está publicado o pagado: `409` |
+| `GET /api/roles/:id` | Rol con su detalle por empleado. Un ajuste trae además su `origen`; un rol publicado o pagado trae sus `ajustes`, el `consolidado` del mes (rol más ajustes publicados) y cómo quedó cada empleado (`vigente`) |
+| `GET /api/roles/:id/traza/:cedula` | Cómo se calculó cada valor de un empleado en ese rol: contexto (régimen, versión de reglas, parámetros) y pasos con fórmula, números y resultado. `404` si la persona no está en el rol o el rol es anterior al desglose. Lo pueden ver los tres roles de usuario |
+| `POST /api/roles/:id/reliquidar` | Crea un ajuste de un rol publicado o pagado. Cuerpo: `motivo` (5 a 500 caracteres) y `cambios`, una lista por `cedula` con `sueldoBase`, horas, `comisiones` u `otrosDescuentos`. Responde `201`. Si el rol no está publicado, ya hay un ajuste abierto o el rol es un ajuste: `409`. Si nada cambia: `400`. Solo administrador |
 | `GET /api/roles/:id/csv` | Exportación para Excel |
 | `GET /api/roles/:id/iess`, `GET /api/roles/:id/iess.csv` | Aportes por empleado para conciliar con el IESS |
-| `DELETE /api/roles/:id` | Elimina el rol |
+| `POST /api/roles/:id/validar` | Revisa el rol. Responde `{ valido, estado, errores, avisos }`: sin errores pasa a «validado»; con errores no avanza (y uno validado vuelve a «calculado») |
+| `POST /api/roles/:id/aprobar` | «validado» a «aprobado» |
+| `POST /api/roles/:id/publicar` | «aprobado» a «publicado». Vuelve a revisar el rol y, si hay errores bloqueantes, responde `409` con ellos |
+| `POST /api/roles/:id/pagar` | «publicado» a «pagado» |
+| `GET /api/roles/:id/historial` | Pasos del rol en la auditoría: acción, usuario, detalle y fecha |
+| `DELETE /api/roles/:id` | Elimina el rol, salvo que esté publicado o pagado (`409`) |
+
+Toda la API exige sesión, salvo `GET /api/parametros`, `POST /api/simulacion` y `/api/auth/*`, que usa la página de inicio; sin sesión responde `401`. Con sesión pero sin el permiso del rol, `403` (ver Roles de Usuario). Con sesión, **todo** se filtra por la cuenta: lo de otra empresa responde `404`, igual que si no existiera. Los registros desde una misma IP están limitados a cinco cada 15 minutos (`429`). Tras cinco contraseñas incorrectas desde una misma IP, el inicio de sesión responde `429` durante 15 minutos. Los identificadores de la ruta (`/empleados/:id`) deben ser enteros positivos: si no, `400`.
 
 Los errores de validación responden `400` con `{ "errores": [...] }`; una cédula o un grado repetidos responden `409`.
 
@@ -274,8 +354,8 @@ Todo lo que fija la ley está en la base de datos y se edita desde **Parámetros
 
 | | Código del Trabajo | LOSEP |
 |---|---|---|
-| Aporte personal al IESS | 9,45 % | 11,45 % (**por confirmar**) |
-| Aporte patronal al IESS | 11,15 % | 9,15 % (**por confirmar**) |
+| Aporte personal al IESS | 9,45 % | 11,45 % (confirmado en el cuadro del IESS) |
+| Aporte patronal al IESS | 11,15 % | 9,15 % (confirmado en el cuadro del IESS) |
 | Horas suplementarias | +50 %, referencia de 48 al mes (art. 55) | +25 %, hasta 60 al mes (art. 114) |
 | Horas extraordinarias (24h00 a 06h00) | +100 % (art. 55) | +60 %, hasta 60 al mes (art. 114) |
 | Sábado, domingo y feriado | +100 % | +100 % |
@@ -291,12 +371,50 @@ La **LOEP** no tiene tasas propias: sus servidores de carrera se rigen por la LO
 | Horas con recargo | hora × (1 + recargo del régimen); en las nocturnas solo se suma el recargo, porque la hora ya está en el sueldo |
 | Ingreso aportable | sueldo + horas extras + comisiones: la base del IESS, del impuesto, del décimo tercero y de las vacaciones |
 | Aporte personal IESS | tasa del régimen × ingreso aportable |
-| Impuesto a la renta | `(aportable − IESS) × 12` → tabla SRI del año (exento hasta $12.208 en 2026) → ÷ 12 |
+| Impuesto a la renta | `(aportable − IESS) × 12` → tabla SRI del año (exento hasta $12.208 en 2026) → menos la rebaja por gastos personales, si la hay → ÷ 12 |
 | Décimo tercero | ingreso aportable ÷ 12 |
 | Décimo cuarto | SBU ÷ 12 |
 | Vacaciones (provisión) | ingreso aportable × días de vacaciones ÷ 360 (15 días = 1/24, art. 71) |
 | Fondos de reserva | 8,33 % del aportable desde el mes 13 |
-| Mes de ingreso | sueldo y décimo cuarto proporcionales a los días (base 30) |
+| Mes de ingreso y de salida | sueldo y décimo cuarto proporcionales a los días (base 30): desde el día de ingreso o hasta el día de salida, nunca menos de un día |
+| Quién entra al rol de un mes | quien ingresó antes de que termine y no salió antes de que empiece; un inactivo sin fecha de salida queda fuera de todos |
+
+### Rebaja por gastos personales
+El empleado declara sus gastos del año (vivienda, educación, salud, alimentación, vestimenta y turismo). El sistema los guarda en su ficha, junto con el número de cargas familiares y si él o una carga tiene una enfermedad catastrófica, rara o huérfana. La rebaja es un crédito contra el impuesto anual, no una resta de la base:
+
+`rebaja anual = 18 % × mínimo(gastos declarados, canasta básica × canastas)`
+
+El impuesto anual sale de la tabla progresiva y la rebaja se le resta sin dejarlo por debajo de cero; el rol cobra la doceava parte del resultado. Las canastas que fijan el tope dependen de las cargas:
+
+| Cargas familiares | 0 | 1 | 2 | 3 | 4 | 5 o más | Enfermedad catastrófica, rara o huérfana |
+|---|---|---|---|---|---|---|---|
+| Canastas del tope | 7 | 9 | 11 | 14 | 17 | 20 | 100 |
+
+Con la canasta de enero de 2026 ($821,80), el tope sin cargas es $5.752,60 y la rebaja máxima $1.035,47 al año. La canasta se edita por año en **Parámetros**; con 0 no se aplica la rebaja y el rol avisa si había gastos declarados. Cada rol guarda una foto de los gastos, las cargas y la rebaja con que se calculó, y la reliquidación conserva los del rol original. El desglose «Cómo se calculó» muestra el paso de la rebaja.
+
+### Préstamos del IESS
+El IESS fija la cuota y el número de cuotas de cada préstamo quirografario, hipotecario o prendario, y el empleador la retiene en el rol. Se registran en **Préstamos** tal como vienen en el comprobante del IESS (cuota, número de cuotas y mes de la primera): el sistema no calcula interés. Una cuota se descuenta cada mes, desde el primero hasta completar las cuotas, y suma a los descuentos del rol:
+
+`neto = ingresos − (IESS + impuesto a la renta + otros descuentos + préstamos del IESS)`
+
+La cuota no cambia el ingreso aportable: no afecta el aporte al IESS, el impuesto a la renta ni el costo empleador. Un préstamo suspendido no se descuenta pero queda en el historial. Si los descuentos dejan el neto en negativo, el rol se genera igual y avisa. La pantalla de novedades anuncia la cuota que se descontará a cada empleado; no se digita, sale de los préstamos registrados. Cada rol guarda lo que descontó, así que eliminar o cambiar un préstamo no altera los roles ya generados, y una reliquidación conserva la cuota del rol original. Los préstamos de un empleado se van con él y salen en la exportación de la cuenta.
+
+### Vigencia de las reglas
+
+Las reglas de cada régimen no se sobrescriben: cada una es una versión con su fecha `vigente_desde` (clave `cuenta_id`, `codigo`, `vigente_desde`). Las que existían antes de la migración 016 quedan como la versión más antigua, vigente desde `2000-01-01`.
+
+| Situación | Qué pasa |
+|---|---|
+| Se genera el rol de un mes | Se usa la versión que regía el **último día de ese mes**. Una regla que empieza a mitad de mes cuenta para todo ese mes: no se prorratea por días. |
+| Se edita un régimen con una fecha nueva | Se crea una versión copiando la que regía ese día y aplicando los cambios; las anteriores no se tocan. |
+| Se edita con la fecha de una versión que ya existe | Esa versión se corrige. |
+| Se edita sin fecha | Se corrige en el sitio la versión de hoy (la pantalla siempre envía una fecha, por defecto hoy). |
+| La fecha es anterior a todas las versiones | Se usa la más antigua. |
+| Se crea una empresa | Recibe todas las versiones de la plantilla. |
+
+Cada alta, corrección y eliminación de una versión queda en `audit_logs` (`regimen.version_creada`, `regimen.corregido`, `regimen.version_eliminada`) con el régimen y la fecha. Un rol publicado o pagado no cambia nunca, ni aunque se edite una regla de su mes. Un rol «calculado» sí toma las reglas nuevas si se vuelve a generar.
+
+Los parámetros anuales (SBU y tabla del IR) ya eran una versión por año, así que no cambian.
 
 ### Décimos y fondos: no, mensual o acumulado
 
@@ -328,11 +446,144 @@ En el formulario del empleado, si el régimen aplicado tiene puestos, el puesto 
 
 El seed carga 12 empleados con la estructura del orgánico: Johan Gabriel Rodríguez (gerente), José Gabriel Manzano (administrador), David Barragán y Andrea Paola Villavicencio (supervisores de instalaciones), Maybeline Navarro, Santiago Andrés Cevallos y Karen Michelle Salazar (operaciones de instalaciones) y Pedro Pablo Guamán, Luis Fernando Tipán y Mayra Alejandra Chicaiza (auxiliares de guardalmacén), más Lucía Estefanía Mora (LOSEP) y Daniela Alejandra Ruiz (LOEP servidora) para mostrar los otros regímenes. Cada uno cobra al menos el mínimo del nivel de su puesto.
 
-`npm run seed` también genera los roles de pago de **enero a septiembre de 2026**, dejando octubre para generarlo a mano. Los empleados aparecen en los roles desde su fecha de ingreso (Mayra desde marzo; Pedro, que ingresó el 16 de octubre, en ninguno). El personal de campo tiene horas extras y algún anticipo descontado, siempre los mismos valores para que la demostración sea repetible. Las cédulas son válidas pero inventadas.
+El seed también genera los roles de pago de **enero a septiembre de 2026**, dejando octubre para generarlo a mano. Los lleva por el ciclo como «sistema»: enero a agosto quedan **pagados** y septiembre **publicado**, para ver cada estado en la demostración. Los empleados aparecen en los roles desde su fecha de ingreso (Mayra desde marzo; Pedro, que ingresó el 16 de octubre, en ninguno). El personal de campo tiene horas extras y algún anticipo descontado, siempre los mismos valores para que la demostración sea repetible. Las cédulas son válidas pero inventadas.
 
 ### Conciliación con el IESS
 
 El IESS no recibe un archivo de aportes: arma la planilla en su portal a partir de los avisos de entrada y salida y las novedades que declara el empleador, y el comprobante se puede descargar en Excel. Lo que sí se automatiza es el cálculo, y por eso cada rol trae un cuadro con la materia gravada y los aportes personal y patronal de cada empleado, más los fondos de reserva que se depositan en el IESS (los que el trabajador acumula) y los que ya se pagaron en el rol. Se descarga en CSV y sirve para contrastar, línea por línea, con el comprobante del portal. La materia gravada no incluye los décimos ni los fondos pagados en el rol.
+
+---
+
+## 🏢 Cuentas por Empresa
+
+Cada empresa es una **cuenta** (`cuentas`: nombre y RUC) con sus **usuarios** (`usuarios`: correo único y hash `scrypt`). Cada cuenta nace con un usuario administrador, el que la registra; después puede agregar más (ver Roles de Usuario).
+
+| Qué | Cómo se aísla |
+|---|---|
+| Empleados, roles, orgánico, escala, regímenes y parámetros anuales | Llevan `cuenta_id`; toda consulta lo filtra con la cuenta de la sesión |
+| Novedades y detalle de los roles | Cuelgan de un empleado o de un rol, que ya son de la cuenta |
+| Cédula, nombre del puesto, grado de la escala y mes del rol | Únicos **por cuenta**: dos empresas pueden tener la misma cédula o el mismo puesto |
+| Referencias entre tablas (puesto o grado de un empleado, superior de un puesto) | Se validan contra la misma cuenta: no se puede apuntar a lo de otra empresa |
+| Sesión | La cookie firmada lleva el usuario y su cuenta; no se puede cambiar sin invalidar la firma. El rol no va en la cookie: se lee de la base en cada petición |
+
+**Plantilla de ley.** La cuenta con `plantilla = TRUE` (id 1) no es de ninguna empresa: guarda las reglas de partida (regímenes, parámetros anuales, escala y orgánico de ejemplo). Al registrarse una empresa, la función SQL `copiar_plantilla(cuenta)` le copia todo en la misma transacción, reenlazando por clave natural (régimen y grado; nombre del puesto). A partir de ahí, cada empresa edita lo suyo. La página de inicio pública (sin sesión) lee la plantilla.
+
+**Datos de antes de las cuentas.** Si la base ya tenía empleados o roles, la migración 013 los pasa a una cuenta llamada «Empresa anterior», con su copia del orgánico y la escala, y **sin usuarios**. Para entrar a ella se agrega uno con `npm --prefix backend run usuario -- correo "contraseña" --cuenta 2` (el id lo da `--listar`). Con la base vacía no se crea ninguna: la primera nace al registrarse una empresa.
+
+---
+
+## 👥 Roles de Usuario
+
+| Permiso | Administrador | Aprobador | Lector |
+|---|:---:|:---:|:---:|
+| Consultar todo (empleados, roles, boletas, CSV, historial) | sí | sí | sí |
+| Cambiar datos: empleados, parámetros, regímenes, escala, orgánico, empresa | sí | no | no |
+| Generar, recalcular y eliminar roles | sí | no | no |
+| Validar, aprobar y publicar roles | sí | sí | no |
+| Marcar un rol como pagado | sí | no | no |
+| Gestionar usuarios y la separación de funciones | sí | no | no |
+
+**Un solo lugar decide.** `backend/src/permisos.ts` dice qué permiso exige cada petición y un middleware lo aplica a toda la API. Lo que no se reconoce como lectura ni como paso del ciclo exige el permiso de cambiar datos, así que una ruta nueva nace cerrada para aprobador y lector. La interfaz esconde lo que el rol no puede hacer, pero quien manda es el servidor.
+
+**Los cambios valen al instante.** La cookie solo dice quién es el usuario; su rol se lee de la base en cada petición. Cambiar el rol de alguien, o eliminarlo, tiene efecto en su próxima petición, sin esperar a que venza la sesión.
+
+**Siempre queda un administrador.** No se puede degradar ni eliminar al último, y nadie se elimina a sí mismo. La comprobación bloquea la cuenta mientras cuenta, para que dos cambios a la vez no la dejen sin ninguno.
+
+**Sin correo, el administrador define las contraseñas.** Al agregar un usuario se escribe su contraseña inicial y se le entrega; si la pierde, el administrador le pone una nueva. Las contraseñas nunca van a la auditoría. Desde la consola, `usuario -- correo "contraseña" --cuenta 2 --rol aprobador` crea un usuario con rol.
+
+**Separación de funciones (opcional).** Si la cuenta la activa en **Usuarios**, quien generó un rol no puede aprobarlo ni publicarlo (`403`): lo debe hacer otra persona. Validar y pagar no se restringen. Exige al menos dos usuarios que puedan aprobar. Viene apagada.
+
+---
+
+## 🔄 Ciclo del Rol
+
+```text
+calculado --validar--> validado --aprobar--> aprobado --publicar--> publicado --pagar--> pagado
+```
+
+| Paso | Qué exige | Qué pasa |
+|---|---|---|
+| Generar | Nada | El rol nace «calculado». Recalcularlo lo reemplaza y lo deja otra vez «calculado», sin aprobación |
+| Validar | «calculado» o «validado» | Revisa el rol con los datos de hoy. Pasa a «validado» solo si no hay errores bloqueantes |
+| Aprobar | «validado» | Registra la aprobación |
+| Publicar | «aprobado» y sin errores bloqueantes | Vuelve a revisar el rol, porque los datos pudieron cambiar desde que se validó. Desde aquí el rol es inmutable |
+| Pagar | «publicado» | Registra que los pagos se ejecutaron |
+
+**Errores bloqueantes:** el rol no tiene empleados; los parámetros de ley del año no existen y se usaron los de otro; alguien que debería estar en el período no está en el rol; un neto es negativo; la cabecera no cuadra con la suma del detalle. **Avisos** (no bloquean): un neto de $0 o ingresos mayores al doble del sueldo base.
+
+**Inmutabilidad.** La API responde `409` si se intenta recalcular o eliminar un rol publicado o pagado, y la migración 014 lo refuerza en la base con disparadores: un rol publicado solo admite pasar a «pagado», y su detalle no se modifica. Cada paso es un `UPDATE` condicionado al estado anterior, así que si dos personas publican a la vez, solo una lo logra y la otra recibe `409`.
+
+**Probado en Postgres real.** La migración 014 y los disparadores se comprobaron también contra PostgreSQL 17 (no solo PGlite): el ciclo del seed corre completo y la base rechaza modificar un rol publicado o el registro de auditoría.
+
+**Auditoría.** `audit_logs` guarda la cuenta, el usuario (con su correo), la acción, el rol y un detalle en JSON. Un disparador impide modificar o borrar sus filas. Los roles del seed quedan registrados como hechos por «sistema».
+
+**Roles que ya existían.** La migración 014 los deja en «calculado»: siguen siendo editables hasta que se validen, aprueben y publiquen.
+
+---
+
+## 🔁 Reliquidación
+
+Un rol publicado o pagado no se toca nunca. Si después se descubre un error (comisiones olvidadas, horas mal digitadas, una regla corregida), se crea un **ajuste**: un rol aparte, vinculado al original, cuyo detalle guarda solo la **diferencia**. Sumar el rol original y sus ajustes publicados da lo que realmente corresponde al mes.
+
+| Concepto | Cómo funciona |
+|---|---|
+| Quién puede | Solo el administrador (`POST /api/roles/:id/reliquidar`). El ajuste recorre después el mismo ciclo: se valida, aprueba, publica y marca como pagado, con la misma auditoría y la separación de funciones si está activada |
+| Qué se recalcula | El mes completo con las reglas de ley que regían al cierre de ese mes (ver Vigencia de las reglas) y los datos que cada empleado tenía en el rol: sueldo, fecha de ingreso, régimen y cómo recibe los beneficios. Solo cambia lo que se pide en `cambios` |
+| Qué guarda | Por cada empleado cuyo resultado cambia, la diferencia en dinero y horas (ingresos, aporte IESS, impuesto, descuentos, neto, provisiones, costo). Lo demás (días trabajados, tasas, modalidades) lleva su valor nuevo. Los empleados que no cambian no aparecen |
+| Valores negativos | Un ajuste puede dar un neto negativo: es un descuento. La validación del ajuste lo acepta |
+| Varios ajustes | Cada uno parte de lo ya publicado (rol original más ajustes publicados). Solo puede haber un ajuste sin publicar por rol; eliminarlo libera el lugar. Un ajuste no se reliquida: se reliquida el rol del mes |
+| Sin cambios | Si nada varía, responde `400`. Si se corrigió una regla de ese mes, basta enviar `cambios` vacío: el ajuste recoge la diferencia |
+| En la pantalla | El rol publicado muestra «Ajustes de este rol», con su lista, el total del mes y el botón **Reliquidar este rol**. El ajuste lleva un aviso con el motivo y un enlace al original. En **Roles de pago** el ajuste sale en el historial; el calendario sigue llevando al rol del mes |
+
+**Garantías en la base (migración 017).** `roles_cabecera` gana `tipo` (`ordinario` o `ajuste`), `rol_origen_id` y `motivo`. Hay un solo rol ordinario por mes y empresa, y un solo ajuste sin publicar por rol. Un disparador impide crear un ajuste de un rol que no sea ordinario, publicado o pagado, del mismo mes y la misma empresa. La auditoría registra `rol.ajuste_creado` en el original y el motivo en el ajuste.
+
+**Probado en Postgres real.** La migración 017 se aplicó sobre una base PostgreSQL 17 con un rol anterior (queda como ordinario) y se comprobaron el ajuste, el segundo ajuste rechazado y el disparador.
+
+---
+
+## 🔍 Cómo se calculó
+
+Cada valor del rol puede explicarse: de dónde salió, con qué fórmula y con qué números. Al calcular, el motor (`calcularRolConTraza`) devuelve el resultado y, junto a él, una lista de pasos; el rol guarda esa lista por empleado.
+
+| Concepto | Cómo funciona |
+|---|---|
+| Qué guarda | `roles_detalle.traza`: un contexto (régimen, versión de reglas «vigentes desde», año de los parámetros y SBU) y los pasos. Cada paso lleva concepto, fórmula, detalle con los números, resultado y, si aplica, la fuente (por ejemplo «Código del Trabajo art. 71») |
+| Coherencia | El resultado de cada paso es el mismo valor que se guardó en el rol; una prueba lo comprueba para varios regímenes y modalidades. Las horas, comisiones y otros descuentos solo aparecen si valen más que cero |
+| Rol publicado | La traza se guarda al calcular, así que no cambia si después se edita una regla |
+| Ajuste | Explica el cálculo completo del mes con los cambios, no la diferencia que guarda el ajuste |
+| En la pantalla | En el detalle del rol, cada empleado tiene **Cómo se calculó**: una tabla con concepto, cómo se calcula, sus números y el resultado. No se imprime |
+
+**Roles anteriores.** Los roles calculados antes de la migración 018 no tienen desglose: el botón no aparece y el endpoint responde `404`. Se vuelve a calcular el mes (si aún no está publicado) para obtenerlo.
+
+---
+
+## ✉️ Recuperar la contraseña y verificar el correo
+
+| Concepto | Cómo funciona |
+|---|---|
+| Correos | Salen por SMTP (`nodemailer`), que ofrecen todos los proveedores: no hay uno obligatorio. Sin `CORREO_SMTP_URL`, el mensaje se escribe en la consola del servidor, útil para trabajar en local |
+| Enlaces | Un token aleatorio de 256 bits en la dirección. La base guarda solo su hash (SHA-256), así que quien lea la tabla `tokens_usuario` no puede usarlos. Cada token sirve una vez; pedir otro anula el anterior |
+| Vigencia | Recuperar la contraseña: 1 hora. Verificar el correo: 48 horas |
+| Recuperar | Pantalla `/recuperar` pide el correo; `/restablecer?token=…` elige la contraseña nueva. Quien recibe el correo es dueño del buzón, así que su correo también queda verificado. La auditoría registra `usuario.clave_restablecida` |
+| Sin revelar cuentas | `POST /api/auth/recuperar` responde igual exista o no el correo, y solo manda mensaje si existe |
+| Verificar | Al registrarse sale el correo de verificación. `/verificar?token=…` lo confirma al abrirlo. Mientras no esté verificado, el sistema muestra un aviso con el botón para reenviar el enlace; verificar no bloquea ninguna función |
+| Si el correo falla | Registrarse y pedir la recuperación responden igual y dejan el error en el registro del servidor |
+
+**Probado.** Las pruebas cubren el uso único del token (incluso con dos peticiones a la vez), el vencimiento, que un token de verificación no sirva para cambiar la contraseña, el límite de solicitudes y que la base no guarde el token. Las pruebas del envío real por SMTP no existen: se comprobó con un transporte de prueba.
+
+---
+
+## 📦 Exportar y eliminar la cuenta
+
+| Concepto | Cómo funciona |
+|---|---|
+| Quién puede | Solo el administrador, desde **Cuenta** (`/sistema/cuenta`). El servidor lo exige: un aprobador o un lector reciben `403` |
+| Exportar | Un archivo `rol-pagos-<RUC>-<fecha>.json` con la empresa, usuarios (correo, rol y fecha de verificación; **sin contraseñas ni tokens**), empleados, novedades, reglas de ley, escala, orgánico, roles con su detalle y su desglose, y la auditoría |
+| Eliminar | Borra la cuenta y todo lo suyo, también los roles publicados y pagados y la auditoría. No se puede deshacer. Pide escribir el RUC de la empresa y la contraseña de quien la elimina; con cinco intentos fallidos, `429` |
+| Después | La sesión deja de valer, y el correo y el RUC quedan libres para registrarse de nuevo. Las demás empresas y la plantilla de ley no se tocan; la plantilla no se puede eliminar |
+| Auditoría | Es de solo inserción (migración 014). La migración 020 deja borrarla solo dentro de la transacción que elimina esa cuenta, marcada con `rolpagos.eliminando_cuenta`; borrar o modificar sus filas de cualquier otra forma sigue rechazado |
+
+**Probado en Postgres real.** Con PostgreSQL 17 se cargaron dos empresas de ejemplo con nueve roles publicados cada una; se exportó una, se eliminó, y la otra y la plantilla quedaron intactas. El borrado directo de la auditoría siguió rechazado antes y después. Esa misma prueba aplicó también la migración 019.
 
 ---
 
@@ -351,6 +602,19 @@ El esquema vive en `backend/src/migraciones/NNN_nombre.sql`. Las aplicadas queda
 | 007 | Escala salarial del sector privado (niveles con sueldo mínimo) |
 | 008 | Orgánico funcional: puestos y su nivel de referencia |
 | 009 | Responsable de cada puesto |
+| 010 | Fecha de salida del empleado |
+| 011 | Dinero, tasas y horas en columnas `NUMERIC` (decimal exacto) en lugar de coma flotante |
+| 012 | Notas del régimen LOSEP: aporte IESS confirmado, recargo nocturno por confirmar |
+| 013 | Cuentas y usuarios; `cuenta_id` en empleados, roles, regímenes, parámetros, escala y puestos; los únicos (cédula, nombre del puesto, grado, mes del rol) pasan a ser por cuenta; la función `copiar_plantilla` |
+| 014 | Estado del rol (`calculado` a `pagado`) con sus fechas; tabla `audit_logs` de solo inserción; disparadores que protegen los roles publicados |
+| 015 | Rol de cada usuario (`administrador`, `aprobador`, `lector`; los existentes quedan administradores), `separar_funciones` en la cuenta y `generado_por` en cada rol |
+| 016 | Vigencia de las reglas: `regimenes.vigente_desde` (clave `cuenta_id`, `codigo`, `vigente_desde`; las filas existentes quedan desde `2000-01-01`) y `copiar_plantilla` copia todas las versiones |
+| 017 | Reliquidación: `tipo`, `rol_origen_id` y `motivo` en el rol; un solo rol ordinario por mes y un solo ajuste sin publicar por rol; disparador que valida el origen del ajuste |
+| 018 | Desglose del cálculo: `roles_detalle.traza` (JSON, vacío en los roles anteriores) |
+| 019 | Recuperar la contraseña y verificar el correo: `usuarios.email_verificado_en` y la tabla `tokens_usuario` (guarda el hash del token) |
+| 020 | Eliminar una cuenta: el disparador de la auditoría deja borrar sus filas solo dentro de la transacción que elimina esa cuenta |
+| 022 | Préstamos del IESS: tabla `prestamos_iess` (por empleado y cuenta) y `descuento_prestamos` en el detalle del rol |
+| 021 | Gastos personales: `parametros_anuales.canasta_basica`; `gastos_personales`, `cargas_familiares` y `enfermedad_catastrofica` en el empleado; la foto de esos datos y `rebaja_ir_anual` en el detalle del rol; `copiar_plantilla` copia la canasta |
 
 Los roles ya generados guardan una foto del régimen, de las tasas y de la modalidad con que se calcularon: si luego se editan las reglas, el historial no cambia.
 
@@ -368,20 +632,34 @@ Las tipografías (Bricolage Grotesque y Figtree) van incluidas en `frontend/publ
 
 | Dato | Por qué | Qué hace el sistema |
 |---|---|---|
-| Aporte al IESS de los servidores públicos | Las fuentes se contradicen (11,45 % y 9,15 % frente a 9,45 % y 11,15 %) y no se pudo leer la Resolución CD 501 ni la Disposición Transitoria 16 que varias citan | Usa 11,45 % y 9,15 % para la LOSEP; se edita en Parámetros |
+| Aporte al IESS de los servidores públicos | El cuadro «Tasas de aportación» del IESS lo confirma (11,45 % personal y 9,15 % patronal), pero es un documento antiguo y la Resolución CD 501 es un escaneo que no se pudo leer; un sitio comercial publica otras cifras | Usa 11,45 % y 9,15 % para la LOSEP; revisa la resolución vigente; se edita en Parámetros |
 | Escala salarial del sector público | No se encontró la escala oficial vigente de 20 grados | Carga una escala de ejemplo editable |
-| Recargo nocturno de la LOSEP | El art. 114 no lo menciona | Asume el 25 % del Código del Trabajo; editable |
+| Recargo nocturno de la LOSEP | El art. 114 no lo menciona y no se encontró otra norma que lo fije para servidores públicos | Asume el 25 % del Código del Trabajo (art. 49); editable |
 | Reformas de la LOSEP posteriores a 2016 | La copia leída es de 2016 | Revisa el texto vigente antes de usarlo en una nómina real |
+| Base legal de la rebaja por gastos personales | No se encontró el artículo ni la resolución del SRI que la fundamentan; las cifras (18 %, canastas por cargas) salen de notas de prensa y blogs | Aplica las reglas de la sección «Rebaja por gastos personales»; la canasta se edita en Parámetros |
+| Discapacidad en los gastos personales | Las fuentes no coinciden en si la discapacidad del empleado o de una carga sube el tope a 100 canastas | Solo la enfermedad catastrófica, rara o huérfana lleva el tope a 100 canastas |
+| Cálculo mensual del impuesto con rebaja | El SRI proyecta el año y reparte la retención en cuotas; no se pudo leer la fórmula | Resta la rebaja al impuesto anual proyectado (×12) y divide entre 12 |
+| Alcance de los gastos de arte, cultura y turismo | Las notas de prensa los mencionan sin precisar topes ni condiciones | No distingue categorías: el empleado declara un solo total |
 | Formato de carga masiva del IESS | No se encontró un formato público de archivo | Entrega un cuadro de conciliación, no un archivo de carga |
 
 Verifica todas las cifras con la norma y con el IESS antes de usar el sistema en una nómina real.
 
 ### Simplificaciones declaradas
 
-- Sin autenticación: el botón de la landing entra directo al sistema.
-- Sin gastos personales deducibles ni rebajas del impuesto a la renta.
-- Sin préstamos del IESS, vacaciones gozadas ni liquidaciones por salida.
-- Una sola empresa; su nombre y RUC están en `backend/src/config.ts`.
+- Los usuarios se agregan sin invitación por correo: el administrador define la contraseña inicial. La separación de funciones viene apagada, así que por defecto la misma persona puede generar, aprobar y publicar un rol; cada paso queda registrado con su correo.
+- La reliquidación corrige a los empleados que estaban en el rol: no agrega a quien se omitió por completo, y usa su fecha de salida y si recibe horas extras tal como están hoy. El ajuste no altera la planilla del IESS ya presentada: sus aportes salen como diferencias en su propio archivo.
+- El límite de intentos de contraseña y de registros vive en memoria: en Vercel cada instancia lleva su propia cuenta, así que frena el abuso pero no lo impide.
+- Cambiar la contraseña por el enlace del correo no cierra las sesiones que ya estaban abiertas: son cookies firmadas sin registro en el servidor y valen hasta que vencen (8 horas). Verificar el correo no bloquea nada: solo informa.
+- `POST /api/auth/recuperar` no tarda lo mismo si el correo existe (manda un mensaje) que si no: el tiempo de respuesta podría delatar qué correos tienen cuenta.
+- El administrador sigue definiendo la contraseña inicial de los usuarios que agrega. Con la sesión abierta, una persona no cambia su propia contraseña: lo hace el administrador desde **Usuarios**, o ella misma con «¿Olvidaste tu contraseña?».
+- El RUC se valida por su forma y su dígito verificador, no contra el SRI: cualquiera puede registrar un RUC que no es suyo.
+- Las sesiones no se guardan en el servidor: una sesión firmada vale hasta que vence (8 horas) o se cambia `SESION_SECRETO`; no hay forma de cerrarla desde otro lado.
+- Eliminar una cuenta no deja ningún rastro, ni siquiera de que existió: la auditoría se va con ella. Quien necesite conservar un comprobante debe descargar el archivo antes. Las copias de seguridad de la base (por ejemplo las de Supabase) siguen teniendo los datos hasta que ellas mismas vencen.
+- La exportación es un archivo JSON con los nombres de las tablas; no hay un formato para volver a importarlo.
+- Los gastos personales los declara el empleado una sola vez en su ficha y valen para todos los meses: el sistema no revisa facturas, no controla topes por categoría y no distingue la proyección de febrero de sus actualizaciones. El impuesto mensual sigue proyectando el año (×12) y dividiendo entre 12, sin las cuotas de febrero a diciembre del SRI.
+- Sin vacaciones gozadas ni liquidaciones (finiquito) por salida: la fecha de salida solo prorratea el último mes.
+- Los préstamos del IESS se registran con la cuota que dice el IESS: el sistema no calcula interés ni tabla de amortización, no revisa que el IESS haya aprobado el préstamo y no descuenta las cuotas pendientes cuando el empleado sale. Tampoco limita la cuota a un porcentaje del sueldo.
+- Una regla que cambia a mitad de mes se aplica a todo ese mes, sin prorratear por días. Los parámetros anuales (SBU e IR) tienen una versión por año, no por fecha.
 - Los topes de horas extras avisan pero no bloquean: la LOSEP dice que si se obliga a trabajar sobre el límite, igual se pagan.
 - Los puestos del nivel jerárquico superior de la LOSEP no cobran horas extras: se marca «No las recibe» en ese empleado. No se incluye la escala oficial de ese nivel.
 
@@ -392,16 +670,25 @@ Verifica todas las cifras con la norma y con el IESS antes de usar el sistema en
 - [x] Motor de cálculo con funciones puras y aritmética decimal exacta.
 - [x] Tres regímenes laborales con reglas editables en pantalla (Código del Trabajo, LOSEP y LOEP).
 - [x] SBU y tabla del impuesto a la renta por año.
+- [x] Reglas de cada régimen con vigencia por fecha: un cambio crea una versión y los meses anteriores conservan la suya.
 - [x] Escala salarial por régimen y orgánico funcional con responsable por puesto.
 - [x] Décimos y fondos de reserva: no, mensual o acumulado, por empleado.
 - [x] Horas extras por tipo, con recargo y tope por régimen.
 - [x] Conciliación con el IESS, boleta imprimible y CSV.
 - [x] Migraciones versionadas y base PostgreSQL en Supabase.
 - [x] Despliegue en Vercel.
-- [ ] Autenticación y roles de usuario.
-- [ ] Gastos personales deducibles y rebajas del impuesto a la renta.
-- [ ] Préstamos del IESS, vacaciones gozadas y liquidaciones por salida.
-- [ ] Varias empresas en una misma instalación.
+- [x] Cuentas por empresa: registro, inicio de sesión con correo y datos aislados por cuenta.
+- [x] Fecha de salida del empleado y roles de meses pasados que respetan quién estaba en nómina.
+- [x] Dinero exacto también en la base de datos (`NUMERIC`).
+- [x] Ciclo del rol (calculado, validado, aprobado, publicado, pagado), roles publicados inmutables y auditoría de cada paso.
+- [x] Varios usuarios por empresa con roles (administrador, aprobador, lector), permisos exigidos por el servidor y separación de funciones opcional.
+- [x] Reliquidación de un rol publicado con un ajuste vinculado al original, que guarda solo la diferencia y recorre el mismo ciclo.
+- [x] Desglose del cálculo: de dónde salió cada valor del rol, con su fórmula, sus números y su fuente.
+- [x] Recuperar la contraseña y verificar el correo, por SMTP y con enlaces de un solo uso.
+- [x] Exportar y eliminar una cuenta completa, con confirmación por RUC y contraseña.
+- [x] Gastos personales: rebaja del impuesto a la renta con tope por cargas familiares y canasta básica.
+- [x] Préstamos del IESS: cuota mensual descontada en el rol, con su pantalla y su historial.
+- [ ] Vacaciones gozadas y liquidaciones por salida.
 - [ ] Confirmar con las normas vigentes los datos marcados «por confirmar».
 
 ---
@@ -412,13 +699,14 @@ Lista de contribuidores que han aportado commits al desarrollo de este repositor
 
 | Nombre | Commits |
 | :--- | :--- |
-| **kiramman-mp3** | 151 |
+| **kiramman-mp3** | 263 |
+| **Johan Rodríguez** | 8 |
 
 ---
 
 ## 📚 Fuentes
 
-Esta lista es la misma que muestra la página de información del sistema (`/informacion`) y sale de `frontend/src/app/core/fuentes.ts`. Son 47 enlaces. Las 7 marcadas como **leída** se abrieron y se leyeron; de las demás solo se tomó el dato que indica cada una, a partir de los resultados de una búsqueda. Los textos legales pesan más que los blogs: cuando discrepan, mandan las normas.
+Esta lista es la misma que muestra la página de información del sistema (`/informacion`) y sale de `frontend/src/app/core/fuentes.ts`. Son 56 enlaces. Las 11 marcadas como **leída** se abrieron y se leyeron; de las demás solo se tomó el dato que indica cada una, a partir de los resultados de una búsqueda. Los textos legales pesan más que los blogs: cuando discrepan, mandan las normas.
 
 <details>
 <summary><b>Ver las fuentes por tema</b></summary>
@@ -462,6 +750,20 @@ Fracción básica desgravada de $12.208 y diez tramos, del 0 % al 37 %. Resoluci
 - [UQA: actualizaciones del SRI para el ejercicio fiscal 2026](https://uqa.com.ec/tablas-del-impuesto-a-la-renta-conoce-las-actualizaciones-del-sri-para-el-ejercicio-fiscal-2026/): Apareció al buscar la tabla; no se abrió.
 - [JEZL Auditores: tabla del IR 2026 y 2025](https://www.jezl-auditores.com/index.php/tributario/101-tabla-de-impuesto-a-la-renta-ir-2026-2025-personas-naturales-ecuador): Apareció al buscar la tabla; no se abrió.
 - [Tagline: impuesto a la renta en Ecuador 2025-2026](https://tagline-soluciones.com/blog/talento-humano/impuesto-a-la-renta-ecuador/): Equivalencia mensual: no paga quien gana menos de $1.017,33 al mes.
+
+#### Rebaja por gastos personales (por confirmar)
+
+Rebaja del 18 % de los gastos personales, con tope por canastas básicas según las cargas familiares (canasta de enero de 2026: $821,80). No se encontró el artículo ni la resolución que la fundamentan.
+
+- [Primicias: guía para pagar el impuesto a la renta 2026, gastos personales y cargas familiares](https://www.primicias.ec/economia/guia-pago-impuesto-renta-2026-gastos-personales-cargas-familiares-contribuyentes-sri-113193/) **(leída)**: Tasa del 18 % y topes en canastas según las cargas familiares.
+- [Primicias: tabla de descuento por gastos personales y canastas básicas](https://www.primicias.ec/economia/tabla-decuento-gastos-personales-impuesto-renta-canastas-basicas-sri-115251/) **(leída)**: Canasta de $821,80 y el tope de cada número de cargas.
+- [Siigo: gastos personales en Ecuador](https://www.siigo.com/ec/blog/obligaciones-fiscales/gastos-personales-ecuador/) **(leída)**: Categorías de gastos y enfermedades catastróficas (100 canastas).
+- [Bloomberg Línea: cómo aplicar la rebaja por gastos personales en 2026](https://www.bloomberglinea.com/latinoamerica/ecuador/paso-a-paso-como-aplicar-la-rebaja-del-impuesto-a-la-renta-por-gastos-personales-en-2026/) **(leída)**: Paso a paso de la rebaja. Sus cifras son las del ejercicio 2025; no se usaron para 2026.
+- [Primicias: formulario de proyección de gastos personales del SRI](https://www.primicias.ec/economia/sri-formulario-proyeccion-gastos-personales-impuesto-renta-descarga-115519/): Apareció al buscar el formulario de proyección; no se abrió.
+- [Primicias: el SRI abre el formulario de gastos personales en junio](https://www.primicias.ec/economia/sri-gastos-personales-formulario-junio-pago-impuesto-renta-ecuador-124214/): Apareció al buscar la actualización de la proyección; no se abrió.
+- [El Diario: gastos personales y deducciones del SRI en 2026](https://www.eldiario.ec/centro/gastos-personales-sri-deducciones-2026-06022026/): Apareció al buscar las deducciones; no se abrió.
+- [El Diario: cómo aprovechar los gastos personales para reducir el pago del impuesto](https://www.eldiario.ec/centro/impuesto-a-la-renta-como-aprovechar-los-gastos-personales-para-reducir-el-pago-08022026/): Apareció al buscar las deducciones; no se abrió.
+- [Vistazo: el SRI habilita el formulario de proyección de gastos personales](https://www.vistazo.com/actualidad/nacional/2026-02-06-sri-formulario-proyeccion-gastos-personales-reducir-impuesto-renta-IA10670833): Apareció al buscar el formulario de proyección; no se abrió.
 
 #### Aporte al IESS del sector público (por confirmar)
 

@@ -9,6 +9,8 @@ export interface ParametrosAnio {
   sbu: number;
   tablaIr: TramoIR[];
   fuente: string;
+  /** Canasta familiar básica de enero (INEC); 0 = sin definir */
+  canastaBasica: number;
 }
 
 const aParametros = (fila: Fila): ParametrosAnio => ({
@@ -16,10 +18,12 @@ const aParametros = (fila: Fila): ParametrosAnio => ({
   sbu: Number(fila.sbu),
   tablaIr: JSON.parse(String(fila.tabla_ir)) as TramoIR[],
   fuente: String(fila.fuente ?? ""),
+  canastaBasica: Number(fila.canasta_basica ?? 0),
 });
 
-export async function aniosConParametros(db: Base): Promise<number[]> {
-  return (await consultar(db, "SELECT anio FROM parametros_anuales ORDER BY anio DESC")).map((f) => Number(f.anio));
+export async function aniosConParametros(db: Base, cuentaId: number): Promise<number[]> {
+  return (await consultar(db, "SELECT anio FROM parametros_anuales WHERE cuenta_id = ? ORDER BY anio DESC", cuentaId))
+    .map((f) => Number(f.anio));
 }
 
 /**
@@ -27,15 +31,20 @@ export async function aniosConParametros(db: Base): Promise<number[]> {
  * avisa (`exacto: false`); si no hay ninguno anterior, se usa el más antiguo.
  */
 export async function parametrosDelAnio(
-  db: Base, anio: number,
+  db: Base, cuentaId: number, anio: number,
 ): Promise<{ parametros: ParametrosAnio; exacto: boolean }> {
   const fila =
-    (await uno(db, "SELECT * FROM parametros_anuales WHERE anio = ?", anio)) ??
-    (await uno(db, "SELECT * FROM parametros_anuales WHERE anio < ? ORDER BY anio DESC LIMIT 1", anio)) ??
-    (await uno(db, "SELECT * FROM parametros_anuales ORDER BY anio LIMIT 1"));
+    (await uno(db, "SELECT * FROM parametros_anuales WHERE cuenta_id = ? AND anio = ?", cuentaId, anio)) ??
+    (await uno(db, "SELECT * FROM parametros_anuales WHERE cuenta_id = ? AND anio < ? ORDER BY anio DESC LIMIT 1", cuentaId, anio)) ??
+    (await uno(db, "SELECT * FROM parametros_anuales WHERE cuenta_id = ? ORDER BY anio LIMIT 1", cuentaId));
   if (!fila) throw new ErrorApi(500, ["No hay parámetros anuales cargados."]);
   const parametros = aParametros(fila);
   return { parametros, exacto: parametros.anio === anio };
+}
+
+/** Aviso (no bloquea) cuando se usaron los parámetros de otro año porque el pedido no tiene; null si son los del año. */
+export function avisoDeAnioSinParametros(anioPedido: number, usados: ParametrosAnio): string | null {
+  return usados.anio === anioPedido ? null : `No hay parámetros de ${anioPedido}; se usaron los de ${usados.anio}.`;
 }
 
 /** Valida la forma de la tabla: tramos contiguos, crecientes y el último abierto. */
@@ -75,12 +84,14 @@ export function validarTablaIr(tabla: unknown): TramoIR[] {
 }
 
 export async function guardarParametros(
-  db: Base, anio: number, sbu: number, tablaIr: TramoIR[], fuente: string,
+  db: Base, cuentaId: number, anio: number, sbu: number, tablaIr: TramoIR[], fuente: string, canastaBasica?: number,
 ) {
+  // Sin canasta en el pedido, se conserva la que el año ya tenía (0 si es un año nuevo).
   await ejecutar(
     db,
-    `INSERT INTO parametros_anuales (anio, sbu, tabla_ir, fuente) VALUES (?, ?, ?, ?)
-     ON CONFLICT(anio) DO UPDATE SET sbu = excluded.sbu, tabla_ir = excluded.tabla_ir, fuente = excluded.fuente`,
-    anio, sbu, JSON.stringify(tablaIr), fuente,
+    `INSERT INTO parametros_anuales (cuenta_id, anio, sbu, tabla_ir, fuente, canasta_basica) VALUES (?, ?, ?, ?, ?, COALESCE(CAST(? AS NUMERIC), 0))
+     ON CONFLICT(cuenta_id, anio) DO UPDATE SET sbu = excluded.sbu, tabla_ir = excluded.tabla_ir, fuente = excluded.fuente,
+       canasta_basica = COALESCE(CAST(? AS NUMERIC), parametros_anuales.canasta_basica)`,
+    cuentaId, anio, sbu, JSON.stringify(tablaIr), fuente, canastaBasica ?? null, canastaBasica ?? null,
   );
 }

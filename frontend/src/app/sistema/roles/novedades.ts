@@ -7,7 +7,9 @@ import { firstValueFrom } from 'rxjs';
 import { Api, ParametrosLey, valorSeguro } from '../../core/api';
 import type { NovedadEnviada } from '../../core/api';
 import { Avisos } from '../../core/avisos';
+import { Sesion } from '../../core/sesion';
 import { DineroPipe } from '../../core/dinero.pipe';
+import { esInmutable } from '../../core/estado-rol';
 import type { Periodo } from '../../core/modelos';
 import { etiquetaRegimen } from '../../core/regimen';
 
@@ -21,6 +23,8 @@ interface Fila extends NovedadEnviada {
   regimenAplicado: string;
   /** false = no cobra horas suplementarias, extraordinarias ni de descanso */
   recibeHorasExtras: boolean;
+  /** Cuota de préstamos del IESS que se descontará (solo informativa: sale de los préstamos registrados) */
+  cuotaPrestamos: number;
 }
 
 const COLUMNAS: { campo: Campo; etiqueta: string; corte?: boolean; extra?: boolean }[] = [
@@ -57,13 +61,18 @@ const COLUMNAS: { campo: Campo; etiqueta: string; corte?: boolean; extra?: boole
     </div>
 
     @if (datos(); as p) {
-      @if (p.existe) {
+      @if (p.existe && !bloqueado()) {
         <div class="aviso aviso-warning" role="status">
           Este mes ya tiene un rol generado. Al continuar, se <strong>reemplazará</strong> con los valores de esta pantalla.
         </div>
       }
 
-      @if (!filas().length) {
+      @if (bloqueado()) {
+        <div class="aviso aviso-danger" role="status">
+          El rol de {{ nombreMes() }} {{ anio() }} ya está {{ p.estado }}: no se puede recalcular.
+          <a routerLink="/sistema/roles">Volver a roles de pago</a>
+        </div>
+      } @else if (!filas().length) {
         <div class="hoja">
           <div class="hoja-cuerpo">
             <p>No hay empleados activos para este período.</p>
@@ -97,6 +106,9 @@ const COLUMNAS: { campo: Campo; etiqueta: string; corte?: boolean; extra?: boole
                       <td>
                         {{ f.nombres }}
                         <span class="secundario">{{ f.cargo }} · {{ regimen(f) }}</span>
+                        @if (f.cuotaPrestamos) {
+                          <span class="secundario">Préstamo del IESS: {{ f.cuotaPrestamos | dinero }} se descuenta de este rol</span>
+                        }
                       </td>
                       <td class="num">{{ f.sueldoBase | dinero }}</td>
                       @for (c of columnas; track c.campo) {
@@ -126,7 +138,7 @@ const COLUMNAS: { campo: Campo; etiqueta: string; corte?: boolean; extra?: boole
             </p>
             <div class="acciones">
               <a class="boton boton-claro" routerLink="/sistema/roles">Cancelar</a>
-              <button class="boton boton-sol" [disabled]="generando()">
+              <button class="boton boton-sol" [disabled]="generando() || !sesion.puede('editar')">
                 {{ generando() ? 'Generando…' : datos()?.existe ? 'Recalcular el rol' : 'Generar el rol' }}
               </button>
             </div>
@@ -173,6 +185,7 @@ export class NovedadesMes {
 
   private readonly api = inject(Api);
   private readonly avisos = inject(Avisos);
+  protected readonly sesion = inject(Sesion);
   private readonly router = inject(Router);
   private readonly parametros = inject(ParametrosLey).valor;
 
@@ -182,6 +195,7 @@ export class NovedadesMes {
   protected readonly conNovedades = computed(
     () => this.filas().filter((f) => COLUMNAS.some((c) => Number(f[c.campo]) > 0)).length,
   );
+  protected readonly bloqueado = computed(() => esInmutable(this.datos()?.estado));
   protected readonly nombreMes = computed(() => this.parametros()?.meses[Number(this.mes()) - 1] ?? '');
   protected readonly reglasPropias = computed(
     () => this.parametros()?.regimenes.filter((r) => r.tipo === 'reglas') ?? [],
@@ -207,6 +221,7 @@ export class NovedadesMes {
           regimen: e.regimen,
           regimenAplicado: e.regimenAplicado,
           recibeHorasExtras: e.recibeHorasExtras,
+          cuotaPrestamos: e.cuotaPrestamos,
           horasSuplementarias: texto(e.novedades.horasSuplementarias),
           horasExtraordinarias: texto(e.novedades.horasExtraordinarias),
           horasDescanso: texto(e.novedades.horasDescanso),

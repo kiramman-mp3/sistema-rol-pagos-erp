@@ -40,7 +40,7 @@ describe('ListaRoles', () => {
   it('un mes con rol abre el rol y uno sin rol abre las novedades', async () => {
     const anio = hoy.getFullYear();
     const rol: RolCabecera = {
-      id: 9, anio, mes: 1, generadoEn: '', numEmpleados: 2, totalIngresos: 0, totalDescuentos: 0,
+      id: 9, anio, mes: 1, generadoEn: '', estado: 'calculado', tipo: 'ordinario', rolOrigenId: null, motivo: '', validadoEn: null, aprobadoEn: null, publicadoEn: null, pagadoEn: null, numEmpleados: 2, totalIngresos: 0, totalDescuentos: 0,
       totalNeto: 1500, totalProvisiones: 0, totalCosto: 0,
     };
     const el = await cargar([rol]);
@@ -57,5 +57,24 @@ describe('ListaRoles', () => {
     TestBed.tick();
     expect(el.querySelector('.cambio-anio strong')?.textContent).toContain(String(hoy.getFullYear() + 1));
     expect(el.querySelector('.mes-toca')).toBeNull();
+  });
+
+  it('un ajuste sale en el historial con su motivo, pero no ocupa el lugar del mes en el calendario', async () => {
+    const anio = hoy.getFullYear();
+    const base: RolCabecera = {
+      id: 9, anio, mes: 1, generadoEn: '', estado: 'publicado', tipo: 'ordinario', rolOrigenId: null, motivo: '',
+      validadoEn: null, aprobadoEn: null, publicadoEn: null, pagadoEn: null, numEmpleados: 2, totalIngresos: 0, totalDescuentos: 0,
+      totalNeto: 1500, totalProvisiones: 0, totalCosto: 0,
+    };
+    const ajuste: RolCabecera = { ...base, id: 12, tipo: 'ajuste', rolOrigenId: 9, motivo: 'Faltaron comisiones', totalNeto: 200 };
+    // El ajuste llega primero: aun así el mes lleva al rol ordinario.
+    const el = await cargar([ajuste, base]);
+    const enero = el.querySelectorAll<HTMLAnchorElement>('.mes')[0];
+    expect(enero.getAttribute('href')).toBe('/sistema/roles/9');
+    expect(enero.textContent).toContain('$1,500.00');
+    const filas = [...el.querySelectorAll('tbody tr')];
+    expect(filas.length).toBe(2);
+    expect(filas[0].textContent).toContain('Ajuste');
+    expect(filas[0].textContent).toContain('Faltaron comisiones');
   });
 });

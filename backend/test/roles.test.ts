@@ -19,13 +19,20 @@ const generar = (api: Cliente, novedades: object[] = [], anio = 2026, mes = 10) 
   api.post("/api/roles/generar", { anio, mes, novedades });
 
 describe("API de roles", () => {
-  it("procesa a todos los activos y omite a los inactivos", () =>
+  it("procesa a todos los activos y omite a quienes salieron antes del mes", () =>
     conDemo(async (api) => {
-      await api.patch("/api/empleados/2/estado");
+      await api.patch("/api/empleados/2/estado", { fechaSalida: "2026-09-30" });
       const r = await generar(api);
       assert.equal(r.status, 201);
       assert.equal(r.json.empleados, 5);
       assert.equal((await api.get(`/api/roles/${r.json.id}`)).json.numEmpleados, 5);
+    }));
+
+  it("sigue incluyendo a quien salió después de ese mes", () =>
+    conDemo(async (api) => {
+      await api.patch("/api/empleados/2/estado", { fechaSalida: "2026-11-15" });
+      const r = await generar(api);
+      assert.equal(r.json.empleados, 6);
     }));
 
   it("los totales de la cabecera cuadran con el detalle", () =>

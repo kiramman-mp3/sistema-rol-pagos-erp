@@ -3,12 +3,19 @@ import { Injectable, computed, inject } from '@angular/core';
 
 import type {
   DatosEmpleado,
+  DatosPrestamo,
   Empleado,
   EntradaSimulacion,
   Grado,
   Parametros,
+  Prestamo,
+  DatosCuenta,
   Puesto,
+  CambioReliquidacion,
   Regimen,
+  RevisionRol,
+  RolCabecera,
+  UsuarioCuenta,
   ResultadoSimulacion,
   TramoIr,
 } from './modelos';
@@ -62,6 +69,16 @@ export class Api {
     return this.http.post<{ agregados: number }>('/api/empleados/demo', {});
   }
 
+  crearPrestamo(datos: DatosPrestamo) {
+    return this.http.post<Prestamo>('/api/prestamos', datos);
+  }
+  cambiarEstadoPrestamo(id: number) {
+    return this.http.patch<Prestamo>(`/api/prestamos/${id}/estado`, {});
+  }
+  eliminarPrestamo(id: number) {
+    return this.http.delete<void>(`/api/prestamos/${id}`);
+  }
+
   generarRol(anio: number, mes: number, novedades: NovedadEnviada[]) {
     return this.http.post<{ id: number; empleados: number; avisos: string[] }>('/api/roles/generar', {
       anio,
@@ -72,12 +89,46 @@ export class Api {
   eliminarRol(id: number) {
     return this.http.delete<void>(`/api/roles/${id}`);
   }
+  crearUsuario(datos: { email: string; clave: string; rol: UsuarioCuenta['rol'] }) {
+    return this.http.post<UsuarioCuenta>('/api/usuarios', datos);
+  }
+  cambiarUsuario(id: number, datos: { rol?: UsuarioCuenta['rol']; clave?: string }) {
+    return this.http.patch<UsuarioCuenta>(`/api/usuarios/${id}`, datos);
+  }
+  eliminarUsuario(id: number) {
+    return this.http.delete<void>(`/api/usuarios/${id}`);
+  }
+  guardarCuenta(datos: { empresa: string; ruc: string; separarFunciones: boolean }) {
+    return this.http.put<DatosCuenta>('/api/cuenta', datos);
+  }
 
-  guardarParametros(anio: number, datos: { sbu: number; tablaIr: TramoIr[]; fuente: string }) {
+  validarRol(id: number) {
+    return this.http.post<RevisionRol>(`/api/roles/${id}/validar`, {});
+  }
+  aprobarRol(id: number) {
+    return this.http.post<RolCabecera>(`/api/roles/${id}/aprobar`, {});
+  }
+  publicarRol(id: number) {
+    return this.http.post<RolCabecera>(`/api/roles/${id}/publicar`, {});
+  }
+  pagarRol(id: number) {
+    return this.http.post<RolCabecera>(`/api/roles/${id}/pagar`, {});
+  }
+  reliquidarRol(id: number, datos: { motivo: string; cambios: CambioReliquidacion[] }) {
+    return this.http.post<{ id: number; empleados: number; avisos: string[] }>(`/api/roles/${id}/reliquidar`, datos);
+  }
+
+  guardarParametros(anio: number, datos: { sbu: number; canastaBasica?: number; tablaIr: TramoIr[]; fuente: string }) {
     return this.http.put<unknown>(`/api/parametros/${anio}`, datos);
   }
   guardarRegimen(codigo: string, datos: Record<string, unknown>) {
     return this.http.put<Regimen>(`/api/regimenes/${codigo}`, datos);
+  }
+  versionesRegimen(codigo: string) {
+    return this.http.get<Regimen[]>(`/api/regimenes/${codigo}/versiones`);
+  }
+  eliminarVersionRegimen(codigo: string, desde: string) {
+    return this.http.delete<void>(`/api/regimenes/${codigo}/versiones/${desde}`);
   }
   crearGrado(datos: DatosGrado) {
     return this.http.post<Grado>('/api/escala', datos);
