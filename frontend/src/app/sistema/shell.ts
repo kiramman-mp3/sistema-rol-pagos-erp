@@ -20,6 +20,7 @@ import { Sesion } from '../core/sesion';
           <a routerLink="/sistema/inicio" routerLinkActive ariaCurrentWhenActive="page">Inicio</a>
           <a routerLink="/sistema/empleados" routerLinkActive ariaCurrentWhenActive="page">Empleados</a>
           <a routerLink="/sistema/roles" routerLinkActive ariaCurrentWhenActive="page">Roles de pago</a>
+          <a routerLink="/sistema/prestamos" routerLinkActive ariaCurrentWhenActive="page">Préstamos</a>
           <a routerLink="/sistema/organico" routerLinkActive ariaCurrentWhenActive="page">Orgánico</a>
           <a routerLink="/sistema/parametros" routerLinkActive ariaCurrentWhenActive="page">Parámetros</a>
           @if (sesion.puede('usuarios')) {

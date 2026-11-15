@@ -67,6 +67,11 @@ export const routes: Routes = [
           import('./sistema/empleados/formulario').then((m) => m.FormularioEmpleado),
       },
       {
+        path: 'prestamos',
+        title: 'Préstamos del IESS | Rol de pagos',
+        loadComponent: () => import('./sistema/prestamos/prestamos').then((m) => m.Prestamos),
+      },
+      {
         path: 'organico',
         title: 'Orgánico funcional | Rol de pagos',
         loadComponent: () => import('./sistema/organico/organico').then((m) => m.Organico),
