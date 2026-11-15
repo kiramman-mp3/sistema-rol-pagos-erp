@@ -5,6 +5,7 @@ import { avisoHorasIgnoradas, avisosDeTopes, calcularRolConTraza } from "./calcu
 import type { PasoCalculo, ResultadoRol } from "./calculos.ts";
 import { aSnake, ejecutar } from "./db.ts";
 import type { Base, Fila } from "./db.ts";
+import { cuotasDelMes } from "./prestamos.ts";
 import { avisoDeAnioSinParametros, parametrosDelAnio } from "./parametros.ts";
 import {
   fechaDeCierre, indexarRegimenes, listarRegimenes, opcionesDe, regimenAplicado, reglasDe,
@@ -22,6 +23,8 @@ export const COLUMNAS_NOVEDAD = CAMPOS_NOVEDAD.map(aSnake);
 export interface EntradaMes {
   e: Fila;
   aplicadoCodigo?: string;
+  /** Cuota de préstamos del IESS de este mes. Si falta, se busca en los préstamos registrados del empleado. */
+  prestamos?: Decimal;
 }
 
 /** Con qué reglas se calculó a un empleado, para poder explicarlo después. */
@@ -60,7 +63,8 @@ export async function calcularMes(
   const cero = new Decimal(0);
   const { parametros } = await parametrosDelAnio(db, cuentaId, anio);
   const regimenes = indexarRegimenes(await listarRegimenes(db, cuentaId, fechaDeCierre(anio, mes)));
-  const reglasYOpciones = entradas.map(({ e, aplicadoCodigo }) => {
+  const cuotas = await cuotasDelMes(db, cuentaId, anio, mes);
+  const reglasYOpciones = entradas.map(({ e, aplicadoCodigo, prestamos }) => {
     const n = novedades.get(Number(e.id));
     const aplicado = aplicadoCodigo
       ? regimenAplicado(regimenes, aplicadoCodigo, null)
@@ -78,6 +82,7 @@ export async function calcularMes(
       horasNocturnas: n?.horasNocturnas ?? cero,
       comisiones: n?.comisiones ?? cero,
       otrosDescuentos: n?.otrosDescuentos ?? cero,
+      prestamosIess: prestamos ?? cuotas.get(Number(e.id)) ?? cero,
       gastosPersonales: Number(e.gastos_personales ?? 0),
       cargasFamiliares: Number(e.cargas_familiares ?? 0),
       enfermedadCatastrofica: Number(e.enfermedad_catastrofica ?? 0) === 1,
@@ -93,6 +98,12 @@ export async function calcularMes(
     const nombre = String(e.nombres);
     return opciones.recibeHorasExtras ? avisosDeTopes(nombre, n, reglas) : avisoHorasIgnoradas(nombre, n);
   });
+  // Un préstamo no debe dejar el neto en negativo: el descuento se hace igual, pero se avisa.
+  for (const { e, resultado } of reglasYOpciones) {
+    if (resultado.descuentoPrestamos > 0 && resultado.netoPagar < 0) {
+      avisos.push(`${String(e.nombres)}: los descuentos (con $${resultado.descuentoPrestamos} de préstamos del IESS) superan sus ingresos; el neto queda en negativo.`);
+    }
+  }
   const sinParametros = avisoDeAnioSinParametros(anio, parametros);
   if (sinParametros) avisos.unshift(sinParametros);
   // Quien declaró gastos personales no recibe la rebaja si el año no tiene canasta básica definida.
