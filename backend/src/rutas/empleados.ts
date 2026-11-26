@@ -205,7 +205,7 @@ async function validar(
   };
 }
 
-/** La fecha de hoy en Ecuador (AAAA-MM-DD), no la del servidor, que en Vercel corre en UTC. */
+/** La fecha de hoy en Ecuador (AAAA-MM-DD), no la del servidor, que en el contenedor corre en UTC. */
 const hoyEnEcuador = () => new Date().toLocaleDateString("sv-SE", { timeZone: "America/Guayaquil" });
 
 const aApi = (fila: Fila) => ({

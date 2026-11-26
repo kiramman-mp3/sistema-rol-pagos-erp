@@ -1,5 +1,5 @@
 /**
- * PostgreSQL: `pg` contra un servidor (Supabase) o PGlite, un Postgres que corre dentro del proceso,
+ * PostgreSQL: `pg` contra un servidor PostgreSQL o PGlite, un Postgres que corre dentro del proceso,
  * para las pruebas (en memoria) y para trabajar en local sin instalar nada (en una carpeta).
  */
 import { readdirSync, readFileSync } from "node:fs";
@@ -111,8 +111,8 @@ export function descripcionDeDestino(destino: string): string {
 
 /**
  * TLS hacia el servidor. Siempre se verifica el certificado, salvo que se pida lo contrario:
- *  - `DATABASE_SSL_CA`: certificado de la autoridad (el texto PEM o la ruta del archivo). Supabase
- *    firma con su propia CA (`prod-ca-2021.crt`, en Database Settings), que Node no trae de fábrica.
+ *  - `DATABASE_SSL_CA`: certificado de la autoridad (el texto PEM o la ruta del archivo). Supabase,
+ *    por ejemplo, firma con su propia CA (`prod-ca-2021.crt`), que Node no trae de fábrica.
  *  - `DATABASE_SSL_INSECURE=1`: no verifica. Solo como salida de emergencia: un intermediario
  *    podría leer y alterar la conexión.
  */
@@ -124,7 +124,7 @@ export function opcionesSsl(entorno: Record<string, string | undefined>): pg.Cli
 }
 
 /**
- * Abre la base y deja el esquema al día. `destino` es una URL `postgres://…` (Supabase),
+ * Abre la base y deja el esquema al día. `destino` es una URL `postgres://…` (un servidor PostgreSQL),
  * `:memory:` (pruebas) o una carpeta donde PGlite guarda los datos. `hasta` detiene las migraciones
  * en esa versión: solo lo usan las pruebas que comprueban una migración con datos anteriores a ella.
  */

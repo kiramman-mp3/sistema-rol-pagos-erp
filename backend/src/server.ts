@@ -8,7 +8,7 @@ import { abrirBase, esBaseRemota } from "./db.ts";
 const aqui = (ruta: string) => fileURLToPath(new URL(ruta, import.meta.url));
 
 const puerto = Number(process.env.PORT ?? 3000);
-// DATABASE_URL: postgres://… (Supabase). Sin ella, una base PGlite en backend/data para trabajar en local.
+// DATABASE_URL: postgres://… (un servidor PostgreSQL). Sin ella, una base PGlite en backend/data para trabajar en local.
 const destino = process.env.DATABASE_URL ?? process.env.DATABASE ?? aqui("../data/pglite");
 
 // SESION_SECRETO firma las sesiones. Con una base remota es obligatorio; en local, sin él, se inventa
