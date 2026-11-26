@@ -3,7 +3,7 @@
  * que ofrecen todos (Resend, SendGrid, Brevo, Gmail, Amazon SES…).
  *
  *   CORREO_SMTP_URL     smtp://usuario:clave@servidor:587  (o smtps:// para el puerto 465)
- *   CORREO_REMITENTE    "Rol de pagos <no-responder@tu-dominio.com>"
+ *   CORREO_REMITENTE    "Cuadra <no-responder@tu-dominio.com>"
  *
  * Sin esas variables el correo no sale: el mensaje se escribe en la consola del servidor, que sirve
  * para trabajar en local pero no para producción.

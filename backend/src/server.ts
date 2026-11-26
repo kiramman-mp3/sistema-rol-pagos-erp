@@ -41,5 +41,5 @@ const app = crearApp(db, {
 });
 
 app.listen(puerto, () => {
-  console.log(`Rol de pagos: http://localhost:${puerto}`);
+  console.log(`Cuadra: http://localhost:${puerto}`);
 });
