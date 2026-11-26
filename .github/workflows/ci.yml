@@ -1,0 +1,51 @@
+# Integración continua: las mismas verificaciones que se corren antes de integrar una rama.
+# Tipos y ESLint de ambos proyectos, pruebas del backend (PGlite en memoria) y del frontend (Vitest), y el build.
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verificar:
+    name: Lint, pruebas y build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      - name: Instalar dependencias
+        run: |
+          npm ci
+          npm --prefix backend ci
+          npm --prefix frontend ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Pruebas del backend
+        run: npm --prefix backend test
+
+      - name: Pruebas del frontend
+        run: npm --prefix frontend test -- --no-watch
+
+      - name: Build
+        run: npm run build
