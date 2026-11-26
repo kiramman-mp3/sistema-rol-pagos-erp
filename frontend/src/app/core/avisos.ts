@@ -9,6 +9,8 @@ export interface Aviso {
   id: number;
   tipo: TipoAviso;
   texto: string;
+  /** Si es verdadero, Galo celebra junto al mensaje (solo para logros: «cuadró», rol publicado). */
+  galo: boolean;
   /** Pantalla en la que nació; sirve para retirarlo dos navegaciones después. */
   generacion: number;
 }
@@ -34,8 +36,8 @@ export class Avisos {
       });
   }
 
-  exito(texto: string) {
-    this.agregar('success', texto);
+  exito(texto: string, conGalo = false) {
+    this.agregar('success', texto, conGalo);
   }
   aviso(texto: string) {
     this.agregar('warning', texto);
@@ -58,7 +60,7 @@ export class Avisos {
     this._lista.set([]);
   }
 
-  private agregar(tipo: TipoAviso, texto: string) {
-    this._lista.update((l) => [...l, { id: this.siguienteId++, tipo, texto, generacion: this.generacion }]);
+  private agregar(tipo: TipoAviso, texto: string, galo = false) {
+    this._lista.update((l) => [...l, { id: this.siguienteId++, tipo, texto, galo, generacion: this.generacion }]);
   }
 }

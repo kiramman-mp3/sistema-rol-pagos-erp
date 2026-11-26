@@ -4,12 +4,13 @@ import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/rou
 import { Avisos } from '../core/avisos';
 import { ParametrosLey } from '../core/api';
 import { Concha } from '../marca/concha';
+import { Galo } from '../marca/galo';
 import { Sesion } from '../core/sesion';
 
 /** Barra superior, navegación y avisos de todas las pantallas del sistema. */
 @Component({
   selector: 'app-shell',
-  imports: [Concha, RouterLink, RouterLinkActive, RouterOutlet],
+  imports: [Concha, Galo, RouterLink, RouterLinkActive, RouterOutlet],
   template: `
     <header class="barra">
       <div class="barra-interior">
@@ -67,7 +68,12 @@ import { Sesion } from '../core/sesion';
         </div>
       }
       @for (aviso of avisos.lista(); track aviso.id) {
-        <div class="aviso aviso-{{ aviso.tipo }} no-imprimir" role="status">{{ aviso.texto }}</div>
+        <div class="aviso aviso-{{ aviso.tipo }} no-imprimir" [class.aviso-con-galo]="aviso.galo" role="status">
+          @if (aviso.galo) {
+            <app-galo estado="cuadro" ancho="5rem" />
+          }
+          <span>{{ aviso.texto }}</span>
+        </div>
       }
       <router-outlet />
     </main>
