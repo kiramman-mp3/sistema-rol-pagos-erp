@@ -9,6 +9,7 @@ import { Avisos } from '../../core/avisos';
 import { Sesion } from '../../core/sesion';
 import { DineroPipe } from '../../core/dinero.pipe';
 import type { Grado, Puesto } from '../../core/modelos';
+import { AvisoGalo } from '../../marca/aviso-galo';
 
 /** Lo que se escribe en el formulario de un puesto. */
 interface Borrador {
@@ -41,7 +42,7 @@ interface Nodo {
  */
 @Component({
   selector: 'app-organico',
-  imports: [DineroPipe, NgTemplateOutlet],
+  imports: [AvisoGalo, DineroPipe, NgTemplateOutlet],
   template: `
     <div class="encabezado">
       <h1>Orgánico funcional</h1>
@@ -89,10 +90,10 @@ interface Nodo {
             </ul>
           </div>
         } @else {
-          <p class="tabla-vacia">
-            @if (puestos.isLoading()) { Cargando el organigrama… }
-            @else { Todavía no hay puestos. Agrega el primero con el formulario de abajo. }
-          </p>
+          <div class="tabla-vacia">
+            @if (puestos.isLoading()) { <app-aviso-galo estado="calculando">Cargando el organigrama…</app-aviso-galo> }
+            @else { <app-aviso-galo>Todavía no hay puestos. Agrega el primero con el formulario de abajo.</app-aviso-galo> }
+          </div>
         }
       </div>
     </section>

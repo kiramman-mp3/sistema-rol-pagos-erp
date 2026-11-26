@@ -4,6 +4,7 @@ import { AbstractControl, FormBuilder, ReactiveFormsModule, ValidationErrors, Va
 import { Router, RouterLink } from '@angular/router';
 
 import { Sesion } from '../core/sesion';
+import { MarcaAcceso } from '../marca/marca-acceso';
 
 const CLAVE_MINIMA = 10;
 
@@ -15,9 +16,10 @@ function clavesIguales(grupo: AbstractControl): ValidationErrors | null {
 /** Registro de una empresa: crea su cuenta, con su propio espacio de datos, y abre la sesión. */
 @Component({
   selector: 'app-registro',
-  imports: [ReactiveFormsModule, RouterLink],
+  imports: [MarcaAcceso, ReactiveFormsModule, RouterLink],
   template: `
     <main class="pagina entrar">
+      <app-marca-acceso />
       <div class="hoja">
         <div class="hoja-titulo">
           <h1>Registrar mi empresa</h1>
@@ -52,7 +54,7 @@ function clavesIguales(grupo: AbstractControl): ValidationErrors | null {
               <label for="confirmar">Repite la contraseña</label>
               <input class="entrada" id="confirmar" type="password" formControlName="confirmar" autocomplete="new-password" />
             </div>
-            <p class="apoyo">
+            <p class="apoyo ayuda">
               Te enviaremos un correo para confirmar tu dirección; con ese mismo correo podrás recuperar la contraseña.
             </p>
             <div class="acciones">

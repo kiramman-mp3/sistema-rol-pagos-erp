@@ -6,10 +6,11 @@ import { ParametrosLey, valorSeguro } from '../../core/api';
 import { DineroPipe } from '../../core/dinero.pipe';
 import { claseEstado, etiquetaEstado } from '../../core/estado-rol';
 import type { RolCabecera } from '../../core/modelos';
+import { AvisoGalo } from '../../marca/aviso-galo';
 
 @Component({
   selector: 'app-lista-roles',
-  imports: [RouterLink, DineroPipe],
+  imports: [AvisoGalo, RouterLink, DineroPipe],
   styles: `
     .selector-anio { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; }
     .cambio-anio { display: inline-flex; align-items: center; gap: .4rem; font: 800 1.3rem var(--display); }
@@ -126,11 +127,15 @@ import type { RolCabecera } from '../../core/modelos';
               <tr>
                 <td colspan="8" class="tabla-vacia">
                   @if (roles.isLoading()) {
-                    Cargando roles…
+                    <app-aviso-galo estado="calculando">Cargando roles…</app-aviso-galo>
                   } @else if (roles.error()) {
-                    No se pudo cargar el historial. Revisa que el servidor esté encendido.
+                    <app-aviso-galo estado="no-cuadra">
+                      No se pudo cargar el historial. Revisa que el servidor esté encendido.
+                    </app-aviso-galo>
                   } @else {
-                    Aún no hay roles. Elige un mes arriba y registra las novedades para generar el primero.
+                    <app-aviso-galo>
+                      Aún no hay roles. Elige un mes arriba y registra las novedades para generar el primero.
+                    </app-aviso-galo>
                   }
                 </td>
               </tr>
