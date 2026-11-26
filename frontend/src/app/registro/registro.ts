@@ -54,7 +54,7 @@ function clavesIguales(grupo: AbstractControl): ValidationErrors | null {
               <label for="confirmar">Repite la contraseña</label>
               <input class="entrada" id="confirmar" type="password" formControlName="confirmar" autocomplete="new-password" />
             </div>
-            <p class="apoyo">
+            <p class="apoyo ayuda">
               Te enviaremos un correo para confirmar tu dirección; con ese mismo correo podrás recuperar la contraseña.
             </p>
             <div class="acciones">
