@@ -102,14 +102,15 @@ a:hover { color: var(--noche); }
 .bandera i:nth-child(2) { background: #3d63ff; }
 .bandera i:nth-child(3) { background: #ef4b3c; }
 
-.navegacion { display: flex; gap: .3rem; flex-wrap: wrap; }
+/* En el sistema la barra tiene dos filas: marca y cuenta arriba, la navegación entera abajo. */
+.navegacion { order: 3; flex: 1 0 100%; display: flex; gap: .25rem; flex-wrap: wrap; margin-top: -.25rem; }
 .navegacion a {
   display: flex; align-items: center; color: #dfe3ff;
-  text-decoration: none; font-weight: 600; padding: .5rem .95rem; border-radius: 999px;
+  text-decoration: none; font-weight: 600; padding: .45rem .85rem; border-radius: 999px;
 }
 .navegacion a:hover { color: #fff; background: rgba(255, 255, 255, .12); }
 .navegacion a[aria-current="page"] { color: var(--tinta); background: var(--sol); font-weight: 700; }
-.empresa { margin-left: auto; font-size: .875rem; color: #c5ccf5; display: inline-flex; align-items: center; gap: .6rem; }
+.empresa { order: 2; margin-left: auto; font-size: .875rem; color: #c5ccf5; display: inline-flex; align-items: center; gap: .6rem; }
 .empresa strong { color: #fff; font-weight: 700; }
 .empresa a { color: #fff; }
 .empresa a:hover { color: var(--sol); }
@@ -379,7 +380,8 @@ details.regimen[open] > summary { border-bottom: 1px solid var(--linea-suave); b
 @media (max-width: 720px) {
   .pagina { padding-top: 1.25rem; }
   .campo.c2, .campo.c3, .campo.c4 { grid-column: span 6; }
-  .empresa { display: none; }
+  /* Sin espacio para el nombre de la empresa, pero «Salir» tiene que seguir a mano. */
+  .empresa strong { display: none; }
   .barra-interior { gap: .75rem; }
   .navegacion { flex-wrap: nowrap; overflow-x: auto; width: 100%; padding-bottom: .15rem; scrollbar-width: none; }
   .navegacion a { white-space: nowrap; }
