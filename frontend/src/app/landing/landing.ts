@@ -6,11 +6,12 @@ import { RouterLink } from '@angular/router';
 import { ParametrosLey, valorSeguro } from '../core/api';
 import { DineroPipe } from '../core/dinero.pipe';
 import type { ResultadoSimulacion } from '../core/modelos';
+import { Concha } from '../marca/concha';
 
 /** Página de inicio pública: explica el sistema y lleva a /sistema. */
 @Component({
   selector: 'app-landing',
-  imports: [RouterLink, DineroPipe, PercentPipe],
+  imports: [Concha, RouterLink, DineroPipe, PercentPipe],
   templateUrl: './landing.html',
   styleUrl: './landing.css',
 })

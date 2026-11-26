@@ -77,7 +77,6 @@ a:hover { color: var(--noche); }
 .barra {
   background: var(--noche);
   color: #fff;
-  border-bottom: 4px solid var(--sol);
 }
 .barra-interior {
   max-width: 1180px; margin: 0 auto; padding: .6rem 1rem;
@@ -91,16 +90,25 @@ a:hover { color: var(--noche); }
 .marca:hover { color: #fff; }
 .marca small { font: 600 .78rem var(--cuerpo); color: #c5ccf5; letter-spacing: 0; margin-left: .1rem; }
 
-/* Tres franjas, como la bandera: amarillo, azul y rojo */
-.bandera {
-  display: inline-grid; grid-template-rows: 2fr 1fr 1fr; width: 1.7rem; height: 1.7rem;
-  border-radius: 8px; overflow: hidden; flex: none; transform: rotate(-6deg);
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, .85);
+/* Filete de tres franjas bajo la barra: sol doble, azul y coral, los colores de la marca. */
+.barra { position: relative; border-bottom: 0; padding-bottom: 6px; }
+.barra::after {
+  content: ""; position: absolute; inset: auto 0 0 0; height: 6px;
+  background: linear-gradient(to bottom, var(--sol) 0 50%, #3d63ff 50% 75%, #ef4b3c 75% 100%);
+  print-color-adjust: exact; -webkit-print-color-adjust: exact;
 }
-.bandera i { display: block; }
-.bandera i:nth-child(1) { background: var(--sol); }
-.bandera i:nth-child(2) { background: #3d63ff; }
-.bandera i:nth-child(3) { background: #ef4b3c; }
+
+/* Sello con el año de la ley cargada: así el año no vive en el nombre. */
+.sello-ley {
+  font: 700 .72rem/1 var(--cuerpo); letter-spacing: .06em; text-transform: uppercase;
+  color: var(--tinta); background: var(--sol); padding: .3rem .6rem; border-radius: 999px; white-space: nowrap;
+}
+
+/* La concha se asoma al pasar el cursor por el logo. */
+@media (prefers-reduced-motion: no-preference) {
+  .marca:hover app-concha, .marca:focus-visible app-concha { animation: bambolea .6s ease-in-out; }
+}
+@keyframes bambolea { 25% { transform: rotate(-9deg); } 50% { transform: rotate(7deg); } 75% { transform: rotate(-3deg); } }
 
 /* En el sistema la barra tiene dos filas: marca y cuenta arriba, la navegación entera abajo. */
 .navegacion { order: 3; flex: 1 0 100%; display: flex; gap: .25rem; flex-wrap: wrap; margin-top: -.25rem; }
