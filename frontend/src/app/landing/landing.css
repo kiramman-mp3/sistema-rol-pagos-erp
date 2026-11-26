@@ -53,7 +53,7 @@ main { max-width: 1180px; margin: 0 auto; padding: 0 1rem; }
 .titulo-con-galo { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding-bottom: .6rem; }
 .galo-simulador { flex: none; margin-top: -.4rem; }
 
-.separador { margin-top: 1.5rem; }
+.separador { margin-block: 1.5rem .9rem; }
 
 /* ---- Secciones ---- */
 .seccion { padding: 3.5rem 0; }
