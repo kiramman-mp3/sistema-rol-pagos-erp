@@ -177,12 +177,13 @@ describe('parámetros', () => {
       return { fixture, el: fixture.nativeElement as HTMLElement };
     };
 
-    it('lista los regímenes y marca los que están por confirmar', async () => {
+    it('lista los regímenes con su descripción, sin marcas de revisión', async () => {
       const { el } = await abrir();
       const resumenes = [...el.querySelectorAll('summary')].map((s) => s.textContent ?? '');
       expect(resumenes.length).toBe(3);
-      expect(resumenes[0]).toContain('Confirmado');
-      expect(resumenes[1]).toContain('Por confirmar');
+      expect(resumenes[0]).toContain('Sector privado.');
+      expect(resumenes.join(' ')).not.toMatch(/confirmad/i);
+      expect(el.querySelector('input[type="checkbox"][formcontrolname="verificado"]')).toBeNull();
     });
 
     it('muestra las fracciones como porcentajes y las envía como fracciones', async () => {
@@ -302,9 +303,10 @@ describe('parámetros', () => {
       return { fixture, el: fixture.nativeElement as HTMLElement };
     };
 
-    it('muestra solo los grados del régimen elegido y advierte que está por confirmar', async () => {
+    it('muestra solo los grados del régimen elegido y avisa que la escala es de ejemplo', async () => {
       const { fixture, el } = await abrir();
-      expect(el.textContent).toContain('por confirmar');
+      expect(el.querySelector('.hoja-titulo')!.textContent).toContain('son de ejemplo');
+      expect(el.querySelector('.hoja-titulo')!.textContent).not.toContain('por confirmar');
       expect(el.querySelectorAll('tbody tr').length).toBe(2);
       expect(el.querySelector('tbody')!.textContent).toContain('$527.00');
       expect(el.querySelector('tbody')!.textContent).not.toContain('Operario');

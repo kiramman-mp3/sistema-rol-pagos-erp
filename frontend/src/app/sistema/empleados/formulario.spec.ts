@@ -69,16 +69,15 @@ describe('FormularioEmpleado', () => {
     escribir(el, 'fechaIngreso', '2024-01-10');
   };
 
-  it('ofrece los regímenes del servidor y avisa si alguno está por confirmar', async () => {
+  it('ofrece los regímenes del servidor y describe el elegido, sin avisos de revisión', async () => {
     const { fixture, el } = await abrir();
     const opciones = [...el.querySelectorAll('#regimen option')].map((o) => o.textContent?.trim());
     expect(opciones).toEqual(['Código del Trabajo', 'LOSEP', 'LOEP']);
-    expect(el.textContent).not.toContain('por confirmar');
 
     escribir(el, 'regimen', 'LOSEP', 'change');
     fixture.detectChanges();
     expect(el.textContent).toContain('Servidores públicos.');
-    expect(el.textContent).toContain('por confirmar');
+    expect(el.textContent).not.toContain('por confirmar');
   });
 
   it('la categoría solo aparece para la LOEP', async () => {

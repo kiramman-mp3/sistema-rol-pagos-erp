@@ -32,7 +32,6 @@ import { Sesion } from '../core/sesion';
         </nav>
         <span class="empresa">
           <strong>{{ parametros()?.empresa?.nombre }}</strong>
-          <a routerLink="/informacion">Información</a>
           <button type="button" class="boton-texto salir" (click)="salir()">Salir</button>
         </span>
       </div>

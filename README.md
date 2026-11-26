@@ -87,7 +87,7 @@ Para el área de talento humano o contabilidad de una empresa pequeña o mediana
     *   `pg` contra un **PostgreSQL 17** propio en producción
     *   `PGlite` (un Postgres dentro del proceso) en las pruebas y para trabajar en local sin instalar nada
 *   **Cálculo:** `decimal.js`
-*   **Pruebas:** `node:test` (backend, incluida la API completa) y Vitest (frontend)
+*   **Pruebas:** `node:test` (backend, incluida la API completa) y Vitest (frontend), corridas por GitHub Actions en cada push y pull request
 *   **Despliegue:** Docker Compose en un servidor propio, detrás de Caddy y un túnel de Cloudflare, con despliegue continuo desde `main`
 
 ---
@@ -120,6 +120,7 @@ graph TD
 
 ```bash
 rol-pagos-ecuador/
+├── .github/workflows/ci.yml   # CI: lint, pruebas y build en cada push a main o develop y en cada pull request
 ├── backend/                   # API REST (Express 5, TypeScript, PostgreSQL)
 │   ├── src/
 │   │   ├── calculos.ts        # Motor de cálculo: funciones puras. Empezar a leer aquí
@@ -142,7 +143,7 @@ rol-pagos-ecuador/
 │   │   ├── seed.ts            # Script: crea una cuenta de ejemplo y la llena
 │   │   ├── usuario.ts         # Script: lista las cuentas y agrega usuarios a una cuenta
 │   │   ├── rutas/             # auth, cuenta, empleados, préstamos, vacaciones, liquidaciones, roles, parámetros, regímenes, escala y puestos
-│   │   ├── migraciones/       # Esquema versionado: 001 a 024 (SQL numerado)
+│   │   ├── migraciones/       # Esquema versionado: 001 a 025 (SQL numerado)
 │   │   ├── validaciones.ts    # Cédula, RUC, correo, números y fechas
 │   │   └── server.ts          # Arranque del servidor: local y producción
 │   └── test/                  # node:test, incluida la API completa
@@ -150,9 +151,8 @@ rol-pagos-ecuador/
 │   ├── src/app/landing/       # Página de inicio con el simulador
 │   ├── src/app/entrar/        # Inicio de sesión
 │   ├── src/app/registro/      # Registro de una empresa
-│   ├── src/app/informacion/   # Acerca de, investigación y fuentes
 │   ├── src/app/sistema/       # Shell, inicio del mes, empleados, préstamos, vacaciones, liquidaciones, orgánico, roles, parámetros y usuarios
-│   ├── src/app/core/          # Cliente de la API, sesión, avisos, pipe de dinero, modelos y fuentes
+│   ├── src/app/core/          # Cliente de la API, sesión, avisos, pipe de dinero y modelos
 │   └── src/styles.css         # Sistema visual global
 ├── docs/capturas/             # Capturas de pantalla de este README
 └── package.json               # Scripts de la raíz
@@ -263,6 +263,12 @@ El HTTPS lo pone Cloudflare: Caddy atiende HTTP y el servidor no abre puertos a 
 
 No hay que desplegar a mano. Cada 5 minutos, un script del servidor revisa si `main` tiene commits nuevos en GitHub. Si los hay, actualiza el código, reconstruye los contenedores con `docker compose up -d --build` y espera a que la página responda. Si no responde en 3 minutos, vuelve al commit anterior. Por eso a `main` solo llegan versiones probadas: publicar es integrar `develop` en `main` y subirlo.
 
+### Integración continua
+
+`.github/workflows/ci.yml` corre en GitHub Actions, con Node 24, en cada push a `main` o `develop` y en cada pull request hacia ellas. Hace lo mismo que `npm run lint`, `npm test` y `npm run build`. El despliegue continuo del servidor no espera a la CI: sondea `main` por su cuenta, así que conviene que la CI de `develop` esté en verde antes de integrarla en `main`.
+
+Cada versión publicada lleva su etiqueta (`v0.5.0`, por ejemplo) y su release en GitHub.
+
 Las migraciones pendientes se aplican solas cuando arranca el contenedor `api`. Mientras se cambia el contenedor, la página puede responder 502 durante unos segundos.
 
 ### Variables del servidor
@@ -276,30 +282,43 @@ Se definen en el `compose.yaml` y el `.env` del servidor, nunca en el repositori
 | `SESION_SECRETO` | Al menos 32 caracteres aleatorios |
 | `APP_URL` | `https://nomina.madebyjohan.xyz` |
 | `PORT` | `3000` |
-| `CORREO_SMTP_URL` y `CORREO_REMITENTE` | El servidor SMTP. Sin ellas, recuperar la contraseña no llega a nadie: el mensaje queda en el registro del contenedor |
+| `CORREO_SMTP_URL` | `smtp://resend:<API key>@smtp.resend.com:2587` (ver «Correo en producción», más abajo) |
+| `CORREO_REMITENTE` | `Rol de pagos <no-responder@madebyjohan.xyz>` |
 
 Detrás de Caddy y del túnel, Express tiene que confiar en el proxy (`confiarEnProxy`) para leer el https y la IP real del cliente; si no, la cookie de sesión no sale con `Secure` y el límite de intentos ve una sola IP. La imagen de producción lo activa al construirse.
 
 El backend no arranca con `DATABASE_URL` y sin `SESION_SECRETO`, ni con `CORREO_SMTP_URL` y sin `APP_URL`. Las empresas no se configuran en el servidor: se registran desde la página y quedan guardadas en la base.
+
+### Correo en producción
+
+El proveedor de internet del servidor bloquea la salida por los puertos de correo habituales (25, 465 y 587), así que no sirve un SMTP cualquiera, ni siquiera el del registrador del dominio. Los correos salen por [Resend](https://resend.com/), que acepta SMTP también en el puerto **2587**, y ese sí sale. No hizo falta cambiar el código: es el mismo `nodemailer` de siempre con otra `CORREO_SMTP_URL`.
+
+| Pieza | Cómo está |
+|---|---|
+| Dominio remitente | `madebyjohan.xyz`, verificado en Resend |
+| Registros DNS | En Cloudflare, que maneja el DNS del dominio: TXT `resend._domainkey` (DKIM), CNAME `send` y `rsend` (SPF, en «DNS only», sin proxy) y TXT `_dmarc` con `v=DMARC1; p=none;` |
+| API key | Solo con permiso de envío. Va dentro de `CORREO_SMTP_URL`, en el `.env` del servidor, nunca en el repositorio |
+| Puerto | `2587` con `smtp://`: la conexión empieza en texto y pasa a TLS con STARTTLS |
+
+`CORREO_SMTP_URL` y `CORREO_REMITENTE` van siempre juntas: con una sola, el backend no arranca. Para cambiar la clave basta editar el `.env` y recrear el contenedor con `docker compose up -d api`. Cada envío, con su estado de entrega, se ve en la sección *Emails* de Resend.
 
 ---
 
 ## 🧭 Recorrido
 
 1. **Página de inicio (`/`)**: explica el sistema, lleva a **Registrar mi empresa** (`/registro`) o a **Ingresar** (`/entrar`) y tiene un simulador que calcula un sueldo en vivo con el motor real. Se elige el régimen y si los décimos se pagan, se acumulan o no se reciben.
-2. **Información (`/informacion`)**: de qué trata el proyecto, lo que encontró la investigación y los enlaces de todas las fuentes.
-3. **Inicio del mes (`/sistema/inicio`)**: la primera pantalla al ingresar; `/sistema` pide correo y contraseña en `/entrar` y, al entrar, vuelve a donde se iba. Quien aún no tiene cuenta la crea en `/registro` (nombre de la empresa, RUC, correo y contraseña de al menos 10 caracteres) y entra directo. El botón **Salir** cierra la sesión; la barra muestra el nombre de la empresa de la cuenta. Muestra en cuatro pasos (equipo, novedades, rol generado, pagos e IESS) en qué punto está el mes y ofrece el botón de lo que sigue.
-4. **Parámetros (`/sistema/parametros`)**: tres pestañas. *Año*: SBU y tabla del impuesto a la renta, con la opción de agregar un año nuevo copiando otro. *Regímenes laborales*: aportes, recargos, topes, vacaciones y beneficios de cada uno, con la fecha desde la que rige el cambio y la lista de versiones anteriores. *Escala salarial*: los grados de cada régimen.
-5. **Empleados**: alta con cédula validada (módulo 10), régimen, grado de la escala, beneficios, horas extras y fecha de salida opcional. Un clic carga seis empleados de ejemplo que cubren los tres regímenes.
-6. **Roles de pago**: se elige el mes en un calendario de doce meses que muestra cuál ya tiene rol y se digitan las novedades (horas suplementarias, extraordinarias, de sábado, domingo o feriado, y nocturnas; comisiones; anticipos). Quien no recibe horas extras tiene esas columnas deshabilitadas.
-7. **Generar**: el backend calcula a cada empleado activo con las reglas de su régimen y guarda una foto en `roles_detalle`. Avisa, sin bloquear, si alguien pasa el tope mensual de horas. El rol nace «calculado».
-8. **Rol**: dos ecuaciones (`ingresos − descuentos = neto` e `ingresos + provisiones = costo empleador`), la planilla por empleado, el costo empleador aparte y la **conciliación con el IESS**. Arriba, el **ciclo del rol**: un botón con el paso que sigue (validar, aprobar, publicar, marcar como pagado) y el historial de quién lo hizo.
-9. **Boleta individual** imprimible en una hoja, y **descarga en CSV** del rol y de los aportes al IESS.
-10. **Usuarios (`/sistema/usuarios`)**, solo para administradores: agregar personas con su rol, cambiar roles y contraseñas, eliminar usuarios y activar la separación de funciones. Quien entra como aprobador o lector ve un aviso con lo que puede hacer.
-11. **Préstamos (`/sistema/prestamos`)**: registrar los préstamos del IESS de un empleado, suspenderlos o eliminarlos; el rol del mes descuenta la cuota que toque.
-12. **Vacaciones (`/sistema/vacaciones`)**: el saldo de días de cada persona (devengados, gozados y los que le quedan), los periodos que ya tomó y un formulario para registrar otro. Avisa si toma más de lo devengado.
-13. **Liquidaciones (`/sistema/liquidaciones`)**: se elige a quien sale, la fecha, la causa y la región, y el sistema muestra cada rubro con su fórmula y sus números, más los avisos. Solo al confirmar se registra y se da de salida al empleado.
-14. **Cuenta (`/sistema/cuenta`)**, solo para administradores: descargar todos los datos de la empresa en un archivo JSON o eliminarla para siempre.
+2. **Inicio del mes (`/sistema/inicio`)**: la primera pantalla al ingresar; `/sistema` pide correo y contraseña en `/entrar` y, al entrar, vuelve a donde se iba. Quien aún no tiene cuenta la crea en `/registro` (nombre de la empresa, RUC, correo y contraseña de al menos 10 caracteres) y entra directo. El botón **Salir** cierra la sesión; la barra muestra el nombre de la empresa de la cuenta. Muestra en cuatro pasos (equipo, novedades, rol generado, pagos e IESS) en qué punto está el mes y ofrece el botón de lo que sigue.
+3. **Parámetros (`/sistema/parametros`)**: tres pestañas. *Año*: SBU y tabla del impuesto a la renta, con la opción de agregar un año nuevo copiando otro. *Regímenes laborales*: aportes, recargos, topes, vacaciones y beneficios de cada uno, con la fecha desde la que rige el cambio y la lista de versiones anteriores. *Escala salarial*: los grados de cada régimen.
+4. **Empleados**: alta con cédula validada (módulo 10), régimen, grado de la escala, beneficios, horas extras y fecha de salida opcional. Un clic carga seis empleados de ejemplo que cubren los tres regímenes.
+5. **Roles de pago**: se elige el mes en un calendario de doce meses que muestra cuál ya tiene rol y se digitan las novedades (horas suplementarias, extraordinarias, de sábado, domingo o feriado, y nocturnas; comisiones; anticipos). Quien no recibe horas extras tiene esas columnas deshabilitadas.
+6. **Generar**: el backend calcula a cada empleado activo con las reglas de su régimen y guarda una foto en `roles_detalle`. Avisa, sin bloquear, si alguien pasa el tope mensual de horas. El rol nace «calculado».
+7. **Rol**: dos ecuaciones (`ingresos − descuentos = neto` e `ingresos + provisiones = costo empleador`), la planilla por empleado, el costo empleador aparte y la **conciliación con el IESS**. Arriba, el **ciclo del rol**: un botón con el paso que sigue (validar, aprobar, publicar, marcar como pagado) y el historial de quién lo hizo.
+8. **Boleta individual** imprimible en una hoja, y **descarga en CSV** del rol y de los aportes al IESS.
+9. **Usuarios (`/sistema/usuarios`)**, solo para administradores: agregar personas con su rol, cambiar roles y contraseñas, eliminar usuarios y activar la separación de funciones. Quien entra como aprobador o lector ve un aviso con lo que puede hacer.
+10. **Préstamos (`/sistema/prestamos`)**: registrar los préstamos del IESS de un empleado, suspenderlos o eliminarlos; el rol del mes descuenta la cuota que toque.
+11. **Vacaciones (`/sistema/vacaciones`)**: el saldo de días de cada persona (devengados, gozados y los que le quedan), los periodos que ya tomó y un formulario para registrar otro. Avisa si toma más de lo devengado.
+12. **Liquidaciones (`/sistema/liquidaciones`)**: se elige a quien sale, la fecha, la causa y la región, y el sistema muestra cada rubro con su fórmula y sus números, más los avisos. Solo al confirmar se registra y se da de salida al empleado.
+13. **Cuenta (`/sistema/cuenta`)**, solo para administradores: descargar todos los datos de la empresa en un archivo JSON o eliminarla para siempre.
 
 ---
 
@@ -624,7 +643,7 @@ Cada valor del rol puede explicarse: de dónde salió, con qué fórmula y con q
 
 | Concepto | Cómo funciona |
 |---|---|
-| Correos | Salen por SMTP (`nodemailer`), que ofrecen todos los proveedores: no hay uno obligatorio. Sin `CORREO_SMTP_URL`, el mensaje se escribe en la consola del servidor, útil para trabajar en local |
+| Correos | Salen por SMTP (`nodemailer`), que ofrecen todos los proveedores: no hay uno obligatorio. En producción se usa Resend por el puerto 2587 (ver Despliegue). Sin `CORREO_SMTP_URL`, el mensaje se escribe en la consola del servidor, útil para trabajar en local |
 | Enlaces | Un token aleatorio de 256 bits en la dirección. La base guarda solo su hash (SHA-256), así que quien lea la tabla `tokens_usuario` no puede usarlos. Cada token sirve una vez; pedir otro anula el anterior |
 | Vigencia | Recuperar la contraseña: 1 hora. Verificar el correo: 48 horas |
 | Recuperar | Pantalla `/recuperar` pide el correo; `/restablecer?token=…` elige la contraseña nueva. Quien recibe el correo es dueño del buzón, así que su correo también queda verificado. La auditoría registra `usuario.clave_restablecida` |
@@ -680,6 +699,7 @@ El esquema vive en `backend/src/migraciones/NNN_nombre.sql`. Las aplicadas queda
 | 022 | Préstamos del IESS: tabla `prestamos_iess` (por empleado y cuenta) y `descuento_prestamos` en el detalle del rol |
 | 023 | Vacaciones gozadas: tabla `vacaciones_gozadas` (periodo con sus días, por empleado y cuenta) |
 | 024 | Liquidaciones por salida: tabla `liquidaciones` (una por empleado, con los rubros en JSON y la foto del empleado) |
+| 025 | Textos de los datos de ejemplo: vacía las notas de investigación de los regímenes, quita «aportes: página del IESS» de la base legal del Código del Trabajo y cambia la fuente «por confirmar» de la escala a «Escala de ejemplo». Solo toca los textos de fábrica |
 
 Los roles ya generados guardan una foto del régimen, de las tasas y de la modalidad con que se calcularon: si luego se editan las reglas, el historial no cambia.
 
@@ -759,6 +779,8 @@ Verifica todas las cifras con la norma y con el IESS antes de usar el sistema en
 - [x] Préstamos del IESS: cuota mensual descontada en el rol, con su pantalla y su historial.
 - [x] Vacaciones gozadas: periodos registrados y saldo de días por empleado.
 - [x] Liquidaciones por salida: rubros por causa, revisión antes de registrar y salida del empleado.
+- [x] Interfaz centrada en quien usa el sistema: sin la página de investigación ni los avisos «por confirmar» en pantalla.
+- [x] Integración continua en GitHub Actions y releases etiquetadas.
 - [ ] Confirmar con las normas vigentes los datos marcados «por confirmar».
 
 ---
@@ -770,13 +792,13 @@ Lista de contribuidores que han aportado commits al desarrollo de este repositor
 | Nombre | Commits |
 | :--- | :--- |
 | **kiramman-mp3** | 263 |
-| **Johan Rodríguez** | 40 |
+| **Johan Rodríguez** | 63 |
 
 ---
 
 ## 📚 Fuentes
 
-Esta lista es la misma que muestra la página de información del sistema (`/informacion`) y sale de `frontend/src/app/core/fuentes.ts`. Son 56 enlaces. Las 11 marcadas como **leída** se abrieron y se leyeron; de las demás solo se tomó el dato que indica cada una, a partir de los resultados de una búsqueda. Los textos legales pesan más que los blogs: cuando discrepan, mandan las normas.
+Son las fuentes que respaldan las reglas del sistema. La aplicación ya no las muestra: se quedan aquí, como documentación del proyecto. Son 56 enlaces. Las 11 marcadas como **leída** se abrieron y se leyeron; de las demás solo se tomó el dato que indica cada una, a partir de los resultados de una búsqueda. Los textos legales pesan más que los blogs: cuando discrepan, mandan las normas.
 
 <details>
 <summary><b>Ver las fuentes por tema</b></summary>
