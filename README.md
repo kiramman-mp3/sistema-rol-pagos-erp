@@ -3,9 +3,9 @@
 [![Angular](https://img.shields.io/badge/Angular-22-dd0031?style=flat-square&logo=angular&logoColor=white)](https://angular.dev/)
 [![Express](https://img.shields.io/badge/Express-5-000000?style=flat-square&logo=express&logoColor=white)](https://expressjs.com/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-6-blue?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Supabase-3ecf8e?style=flat-square&logo=supabase&logoColor=white)](https://supabase.com/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-4169e1?style=flat-square&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![Node](https://img.shields.io/badge/Node-%3E%3D%2024-339933?style=flat-square&logo=nodedotjs&logoColor=white)](https://nodejs.org/)
-[![Deploy](https://img.shields.io/badge/Deploy-Vercel-000000?style=flat-square&logo=vercel&logoColor=white)](https://vercel.com/)
+[![Deploy](https://img.shields.io/badge/Deploy-Docker_Compose-2496ed?style=flat-square&logo=docker&logoColor=white)](https://docs.docker.com/compose/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
 
 **Rol de Pagos Ecuador** es un sistema de nómina para Ecuador cuyas reglas de ley se **parametrizan** desde la propia aplicación: régimen laboral, salario básico, escala salarial, décimos, fondos de reserva, horas extras y aportes al IESS. Una API en **Express**, una aplicación en **Angular**, una página de inicio pública y, detrás del botón **Registrar mi empresa**, el sistema completo: cada empresa crea su cuenta y todos sus datos (empleados, roles, orgánico, escala y reglas de ley) son solo suyos.
@@ -13,7 +13,7 @@
 Se hizo como práctica de la guía APE, que pide un rol de pagos parametrizable: escoger el régimen laboral (Código del Trabajo, LOSEP o LOEP), el salario básico, la escala salarial, si el trabajador recibe décimo tercero, décimo cuarto y horas extras, y ver si el IESS, que se hace a mano en Excel, se puede automatizar.
 
 > [!TIP]
-> **¿Quieres verlo funcionando?** No necesitas instalar ninguna base de datos: con dos comandos queda corriendo en `http://localhost:3000`. El seed crea la cuenta `demo@empresa.com` con 12 empleados y nueve meses de roles de ejemplo; entras con ese correo y la contraseña que pongas.
+> **¿Quieres verlo funcionando?** La versión publicada está en [nomina.madebyjohan.xyz](https://nomina.madebyjohan.xyz/). Para correrlo en tu máquina no necesitas instalar ninguna base de datos: con dos comandos queda corriendo en `http://localhost:3000`. El seed crea la cuenta `demo@empresa.com` con 12 empleados y nueve meses de roles de ejemplo; entras con ese correo y la contraseña que pongas.
 > ```bash
 > npm run instalar && npm --prefix backend run seed -- demo@empresa.com --clave "una-clave-larga" && npm start
 > ```
@@ -84,11 +84,11 @@ Para el área de talento humano o contabilidad de una empresa pequeña o mediana
 *   **Frontend:** Angular 22 (componentes standalone, señales, sin zone.js) y TypeScript
 *   **Backend:** Express 5 y TypeScript, ejecutado directamente por Node 24 (sin paso de compilación)
 *   **Base de datos:** PostgreSQL sin ORM
-    *   `pg` contra **Supabase** en producción
+    *   `pg` contra un **PostgreSQL 17** propio en producción
     *   `PGlite` (un Postgres dentro del proceso) en las pruebas y para trabajar en local sin instalar nada
 *   **Cálculo:** `decimal.js`
 *   **Pruebas:** `node:test` (backend, incluida la API completa) y Vitest (frontend)
-*   **Despliegue:** Vercel (frontend y backend como servicios de un mismo proyecto)
+*   **Despliegue:** Docker Compose en un servidor propio, detrás de Caddy y un túnel de Cloudflare, con despliegue continuo desde `main`
 
 ---
 
@@ -110,7 +110,7 @@ graph TD
     Reglas --> DB["db.ts · consultas, transacciones y migraciones"]
     Rutas --> DB
     Ciclo --> DB
-    DB -->|DATABASE_URL| Supabase[("PostgreSQL · Supabase")]
+    DB -->|DATABASE_URL| Postgres[("PostgreSQL 17 · servidor propio")]
     DB -->|sin DATABASE_URL, y en pruebas| PGlite[("PGlite · en memoria o en backend/data")]
 ```
 
@@ -144,8 +144,7 @@ rol-pagos-ecuador/
 │   │   ├── rutas/             # auth, cuenta, empleados, préstamos, vacaciones, liquidaciones, roles, parámetros, regímenes, escala y puestos
 │   │   ├── migraciones/       # Esquema versionado: 001 a 024 (SQL numerado)
 │   │   ├── validaciones.ts    # Cédula, RUC, correo, números y fechas
-│   │   ├── server.ts          # Arranque local
-│   │   └── vercel.ts          # Entrada del backend en Vercel
+│   │   └── server.ts          # Arranque del servidor: local y producción
 │   └── test/                  # node:test, incluida la API completa
 ├── frontend/                  # Angular 22
 │   ├── src/app/landing/       # Página de inicio con el simulador
@@ -156,7 +155,6 @@ rol-pagos-ecuador/
 │   ├── src/app/core/          # Cliente de la API, sesión, avisos, pipe de dinero, modelos y fuentes
 │   └── src/styles.css         # Sistema visual global
 ├── docs/capturas/             # Capturas de pantalla de este README
-├── vercel.json                # Servicios de Vercel: frontend y backend
 └── package.json               # Scripts de la raíz
 ```
 
@@ -166,7 +164,8 @@ rol-pagos-ecuador/
 
 *   **Node.js:** versión `>= 24`
 *   **Gestor de paquetes:** `npm`
-*   **Base de datos (solo para producción):** un PostgreSQL, por ejemplo un proyecto de [Supabase](https://supabase.com/). Para desarrollar no hace falta nada: se usa PGlite.
+*   **Base de datos (solo para producción):** un PostgreSQL. Para desarrollar no hace falta nada: se usa PGlite.
+*   **Servidor (solo para producción):** Docker con Docker Compose.
 
 ---
 
@@ -185,11 +184,11 @@ rol-pagos-ecuador/
 
 3.  **Elegir la base de datos.** La base es **PostgreSQL**:
     *   **Sin configurar nada**, se usa una base PGlite en `backend/data/pglite`. Borrar esa carpeta reinicia la base local.
-    *   **Con Supabase u otro Postgres**, define `DATABASE_URL` con su cadena de conexión:
+    *   **Con un servidor Postgres**, define `DATABASE_URL` con su cadena de conexión:
         ```bash
-        export DATABASE_URL='postgresql://usuario:contraseña@host:6543/postgres'
+        export DATABASE_URL='postgresql://usuario:contraseña@host:5432/base'
         ```
-        En Supabase usa la cadena del **pooler** (puerto 6543): el host directo `db.<proyecto>.supabase.co` solo tiene IPv6 y Vercel no lo alcanza. Nunca guardes la cadena en el repositorio.
+        Nunca guardes la cadena en el repositorio.
 
     El esquema se crea y se actualiza solo al arrancar (ver Migraciones, más abajo).
 
@@ -201,9 +200,9 @@ rol-pagos-ecuador/
 
     | Variable | Para qué sirve |
     |---|---|
-    | `DATABASE_URL` | Cadena de conexión de Postgres (Supabase). Sin ella se usa PGlite |
-    | `DATABASE_SSL_CA` | Certificado de la autoridad de la base (el texto PEM o la ruta del archivo). Supabase firma con su propia CA (`prod-ca-2021.crt`, en *Database Settings*): sin él, la conexión se rechaza |
-    | `DATABASE_SSL_INSECURE` | `1` desactiva la verificación del certificado. Solo como salida de emergencia: permite que un intermediario lea la conexión |
+    | `DATABASE_URL` | Cadena de conexión de Postgres. Sin ella se usa PGlite |
+    | `DATABASE_SSL_CA` | Certificado de la autoridad de la base (el texto PEM o la ruta del archivo). Hace falta si el servidor firma con una CA que Node no trae de fábrica (por ejemplo Supabase): sin él, la conexión se rechaza |
+    | `DATABASE_SSL_INSECURE` | `1` desactiva la verificación del certificado. Solo cuando la base está en una red privada con un certificado autofirmado, o como salida de emergencia: fuera de esa red permite que un intermediario lea la conexión |
     | `SESION_SECRETO` | Firma las sesiones. Obligatorio con una base remota |
     | `CORREO_SMTP_URL` | Servidor SMTP para los correos (`smtp://usuario:clave@servidor:587`; `smtps://` para el puerto 465). Sin él, los correos se escriben en la consola del servidor |
     | `CORREO_REMITENTE` | Quién firma los correos, por ejemplo `Rol de pagos <no-responder@tu-dominio.com>`. Va junto con `CORREO_SMTP_URL` |
@@ -250,19 +249,38 @@ npm run dev
 
 ## ☁️ Despliegue
 
-El proyecto se despliega en **Vercel** como un solo proyecto con dos servicios (`vercel.json`): el frontend Angular y el backend Express, que atiende `/api/*`. La base es la de Supabase.
+La aplicación publicada corre en un servidor propio con **Docker Compose**, en [nomina.madebyjohan.xyz](https://nomina.madebyjohan.xyz/). Son tres contenedores:
 
-```bash
-vercel env add DATABASE_URL production --sensitive       # cadena del pooler de Supabase
-vercel env add DATABASE_SSL_CA production --sensitive    # certificado de Supabase (prod-ca-2021.crt)
-vercel env add SESION_SECRETO production --sensitive     # al menos 32 caracteres aleatorios
-vercel env add CORREO_SMTP_URL production --sensitive    # servidor SMTP de tu proveedor de correo
-vercel env add CORREO_REMITENTE production               # "Rol de pagos <no-responder@tu-dominio.com>"
-vercel env add APP_URL production                        # https://tu-dominio.com
-vercel deploy --prod
-```
+| Servicio | Imagen | Qué hace |
+|---|---|---|
+| `db` | `postgres:17` | La base de datos, con su volumen. Solo se alcanza desde la red interna de Docker |
+| `api` | Construida del repositorio | Compila Angular y arranca `backend/src/server.ts`, que sirve la API y el frontend en el puerto 3000 |
+| `web` | `caddy:2` | Recibe el tráfico del túnel de Cloudflare y lo pasa a `api` con las cabeceras `X-Forwarded-*` |
 
-El backend no arranca en Vercel sin `DATABASE_URL` y `SESION_SECRETO`, ni con `CORREO_SMTP_URL` sin `APP_URL`. Sin las variables de correo la aplicación arranca, pero recuperar la contraseña no llega a nadie (el mensaje queda en el registro de la función): defínelas antes de dar acceso a otras personas. Las empresas no se configuran en la plataforma: se registran desde la página y quedan guardadas en la base. Si la conexión a la base se rechaza por el certificado, define `DATABASE_SSL_CA`.
+El HTTPS lo pone Cloudflare: Caddy atiende HTTP y el servidor no abre puertos a internet. El `Dockerfile`, el `compose.yaml`, el `Caddyfile` y el `.env` viven en el servidor, no en este repositorio.
+
+### Despliegue continuo
+
+No hay que desplegar a mano. Cada 5 minutos, un script del servidor revisa si `main` tiene commits nuevos en GitHub. Si los hay, actualiza el código, reconstruye los contenedores con `docker compose up -d --build` y espera a que la página responda. Si no responde en 3 minutos, vuelve al commit anterior. Por eso a `main` solo llegan versiones probadas: publicar es integrar `develop` en `main` y subirlo.
+
+Las migraciones pendientes se aplican solas cuando arranca el contenedor `api`. Mientras se cambia el contenedor, la página puede responder 502 durante unos segundos.
+
+### Variables del servidor
+
+Se definen en el `compose.yaml` y el `.env` del servidor, nunca en el repositorio:
+
+| Variable | Valor en producción |
+|---|---|
+| `DATABASE_URL` | La base del contenedor `db`, por la red interna |
+| `DATABASE_SSL_INSECURE` | `1`: la base usa TLS con un certificado autofirmado y solo se alcanza desde la red interna |
+| `SESION_SECRETO` | Al menos 32 caracteres aleatorios |
+| `APP_URL` | `https://nomina.madebyjohan.xyz` |
+| `PORT` | `3000` |
+| `CORREO_SMTP_URL` y `CORREO_REMITENTE` | El servidor SMTP. Sin ellas, recuperar la contraseña no llega a nadie: el mensaje queda en el registro del contenedor |
+
+Detrás de Caddy y del túnel, Express tiene que confiar en el proxy (`confiarEnProxy`) para leer el https y la IP real del cliente; si no, la cookie de sesión no sale con `Secure` y el límite de intentos ve una sola IP. La imagen de producción lo activa al construirse.
+
+El backend no arranca con `DATABASE_URL` y sin `SESION_SECRETO`, ni con `CORREO_SMTP_URL` y sin `APP_URL`. Las empresas no se configuran en el servidor: se registran desde la página y quedan guardadas en la base.
 
 ---
 
@@ -698,13 +716,13 @@ Verifica todas las cifras con la norma y con el IESS antes de usar el sistema en
 
 - Los usuarios se agregan sin invitación por correo: el administrador define la contraseña inicial. La separación de funciones viene apagada, así que por defecto la misma persona puede generar, aprobar y publicar un rol; cada paso queda registrado con su correo.
 - La reliquidación corrige a los empleados que estaban en el rol: no agrega a quien se omitió por completo, y usa su fecha de salida y si recibe horas extras tal como están hoy. El ajuste no altera la planilla del IESS ya presentada: sus aportes salen como diferencias en su propio archivo.
-- El límite de intentos de contraseña y de registros vive en memoria: en Vercel cada instancia lleva su propia cuenta, así que frena el abuso pero no lo impide.
+- El límite de intentos de contraseña y de registros vive en memoria: se vacía cada vez que se reinicia o se vuelve a desplegar el contenedor, y si algún día corren varias instancias cada una llevará su propia cuenta. Frena el abuso, pero no lo impide.
 - Cambiar la contraseña por el enlace del correo no cierra las sesiones que ya estaban abiertas: son cookies firmadas sin registro en el servidor y valen hasta que vencen (8 horas). Verificar el correo no bloquea nada: solo informa.
 - `POST /api/auth/recuperar` no tarda lo mismo si el correo existe (manda un mensaje) que si no: el tiempo de respuesta podría delatar qué correos tienen cuenta.
 - El administrador sigue definiendo la contraseña inicial de los usuarios que agrega. Con la sesión abierta, una persona no cambia su propia contraseña: lo hace el administrador desde **Usuarios**, o ella misma con «¿Olvidaste tu contraseña?».
 - El RUC se valida por su forma y su dígito verificador, no contra el SRI: cualquiera puede registrar un RUC que no es suyo.
 - Las sesiones no se guardan en el servidor: una sesión firmada vale hasta que vence (8 horas) o se cambia `SESION_SECRETO`; no hay forma de cerrarla desde otro lado.
-- Eliminar una cuenta no deja ningún rastro, ni siquiera de que existió: la auditoría se va con ella. Quien necesite conservar un comprobante debe descargar el archivo antes. Las copias de seguridad de la base (por ejemplo las de Supabase) siguen teniendo los datos hasta que ellas mismas vencen.
+- Eliminar una cuenta no deja ningún rastro, ni siquiera de que existió: la auditoría se va con ella. Quien necesite conservar un comprobante debe descargar el archivo antes. Las copias de seguridad de la base siguen teniendo los datos hasta que ellas mismas vencen.
 - La exportación es un archivo JSON con los nombres de las tablas; no hay un formato para volver a importarlo.
 - Los gastos personales los declara el empleado una sola vez en su ficha y valen para todos los meses: el sistema no revisa facturas, no controla topes por categoría y no distingue la proyección de febrero de sus actualizaciones. El impuesto mensual sigue proyectando el año (×12) y dividiendo entre 12, sin las cuotas de febrero a diciembre del SRI.
 - La liquidación no calcula el aporte al IESS ni el impuesto sobre lo que paga, no cubre la jubilación patronal ni los casos del sector público, y no genera el acta de finiquito que se firma ante el Ministerio del Trabajo. El décimo cuarto usa el SBU del año de la salida aunque el periodo cruce dos años. La base de las indemnizaciones es el sueldo base, sin horas extras ni comisiones.
@@ -726,8 +744,8 @@ Verifica todas las cifras con la norma y con el IESS antes de usar el sistema en
 - [x] Décimos y fondos de reserva: no, mensual o acumulado, por empleado.
 - [x] Horas extras por tipo, con recargo y tope por régimen.
 - [x] Conciliación con el IESS, boleta imprimible y CSV.
-- [x] Migraciones versionadas y base PostgreSQL en Supabase.
-- [x] Despliegue en Vercel.
+- [x] Migraciones versionadas y base PostgreSQL.
+- [x] Despliegue en un servidor propio con Docker Compose y despliegue continuo desde `main`.
 - [x] Cuentas por empresa: registro, inicio de sesión con correo y datos aislados por cuenta.
 - [x] Fecha de salida del empleado y roles de meses pasados que respetan quién estaba en nómina.
 - [x] Dinero exacto también en la base de datos (`NUMERIC`).
@@ -752,7 +770,7 @@ Lista de contribuidores que han aportado commits al desarrollo de este repositor
 | Nombre | Commits |
 | :--- | :--- |
 | **kiramman-mp3** | 263 |
-| **Johan Rodríguez** | 34 |
+| **Johan Rodríguez** | 40 |
 
 ---
 

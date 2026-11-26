@@ -26,7 +26,7 @@ interface Opciones {
   carpetaFrontend?: string;
   /** Firma las sesiones (`SESION_SECRETO`). Toda la API, salvo el registro, la entrada y las rutas públicas, exige sesión. */
   secreto: string;
-  /** Detrás de un proxy (Vercel): la IP y el https del cliente vienen en las cabeceras X-Forwarded-*. */
+  /** Detrás de un proxy (Caddy y el túnel de Cloudflare en producción): la IP y el https del cliente vienen en las cabeceras X-Forwarded-*. */
   confiarEnProxy?: boolean;
   /** Por dónde salen los correos (recuperar contraseña, verificar). Por defecto, la consola del servidor. */
   correo?: Correo;

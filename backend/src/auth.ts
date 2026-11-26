@@ -82,7 +82,7 @@ export function leerSesion(token: string | undefined, secreto: string, ahora = D
 
 /**
  * Frena la adivinanza de contraseñas: tras `MAXIMO` fallos desde una misma IP, la bloquea hasta que
- * pase la ventana. Vive en memoria: en Vercel cada instancia lleva su propia cuenta, así que es un
+ * pase la ventana. Vive en memoria: se vacía al reiniciar y cada instancia lleva su propia cuenta, así que es un
  * freno, no una garantía.
  */
 export class LimiteIntentos {
