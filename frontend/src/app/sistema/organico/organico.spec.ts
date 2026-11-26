@@ -41,6 +41,7 @@ describe('Organico', () => {
     fixture.detectChanges();
     http.expectOne('/api/puestos').flush(PUESTOS);
     http.expectOne('/api/escala').flush([NIVEL_A, NIVEL_B1]);
+    http.expectOne('/api/parametros').flush({ regimenes: [{ codigo: 'CODIGO_TRABAJO', nombre: 'Código del Trabajo' }] });
     await fixture.whenStable();
     fixture.detectChanges();
     return { fixture, el: fixture.nativeElement as HTMLElement };
@@ -146,5 +147,13 @@ describe('Organico', () => {
     envio.flush(PUESTOS[0]);
     await new Promise((resolver) => setTimeout(resolver));
     http.match('/api/puestos').forEach((r) => r.flush(PUESTOS));
+  });
+
+  it('agrupa los niveles salariales bajo el nombre del régimen, no su código', async () => {
+    const { el } = await abrir();
+    const grupos = [...el.querySelectorAll<HTMLOptGroupElement>('#puesto-escala optgroup')];
+    expect(grupos.map((g) => g.label)).toEqual(['Código del Trabajo']);
+    expect(grupos[0].querySelectorAll('option').length).toBe(2);
+    expect(el.querySelector('#puesto-escala')!.textContent).not.toContain('CODIGO_TRABAJO');
   });
 });

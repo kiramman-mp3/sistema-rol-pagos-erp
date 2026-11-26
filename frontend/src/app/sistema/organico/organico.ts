@@ -3,7 +3,7 @@ import { NgTemplateOutlet } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 
-import { Api, valorSeguro } from '../../core/api';
+import { Api, ParametrosLey, valorSeguro } from '../../core/api';
 import type { DatosPuesto } from '../../core/api';
 import { Avisos } from '../../core/avisos';
 import { Sesion } from '../../core/sesion';
@@ -200,10 +200,14 @@ interface Nodo {
             <label for="puesto-escala">Referencia salarial</label>
             <select class="entrada" id="puesto-escala" (change)="cambiar('escalaId', $any($event.target).value)">
               <option value="" [selected]="borrador().escalaId === ''">Elige un nivel de la escala</option>
-              @for (g of niveles(); track g.id) {
-                <option [value]="g.id" [selected]="borrador().escalaId === '' + g.id">
-                  {{ g.regimen }} · {{ g.denominacion }} ({{ g.esMinimo ? 'mínimo ' : '' }}{{ g.rmu | dinero }})
-                </option>
+              @for (grupo of nivelesPorRegimen(); track grupo.regimen) {
+                <optgroup [label]="grupo.nombre">
+                  @for (g of grupo.niveles; track g.id) {
+                    <option [value]="g.id" [selected]="borrador().escalaId === '' + g.id">
+                      {{ g.denominacion }} ({{ g.esMinimo ? 'mínimo ' : '' }}{{ g.rmu | dinero }})
+                    </option>
+                  }
+                </optgroup>
               }
             </select>
           </div>
@@ -224,6 +228,7 @@ export class Organico {
   private readonly api = inject(Api);
   private readonly avisos = inject(Avisos);
   protected readonly sesion = inject(Sesion);
+  private readonly parametros = inject(ParametrosLey).valor;
 
   protected readonly puestos = httpResource<Puesto[]>(() => '/api/puestos');
   private readonly todos = valorSeguro(this.puestos);
@@ -231,6 +236,14 @@ export class Organico {
 
   /** Los niveles que un puesto puede tomar como referencia: todos los de la escala. */
   protected readonly niveles = computed(() => this.escala() ?? []);
+
+  /** Los niveles agrupados por régimen, con su nombre (no el código interno) como título del grupo. */
+  protected readonly nivelesPorRegimen = computed(() => {
+    const nombres = new Map((this.parametros()?.regimenes ?? []).map((r) => [r.codigo, r.nombre]));
+    const grupos = new Map<string, Grado[]>();
+    for (const g of this.niveles()) grupos.set(g.regimen, [...(grupos.get(g.regimen) ?? []), g]);
+    return [...grupos].map(([regimen, niveles]) => ({ regimen, nombre: nombres.get(regimen) ?? regimen, niveles }));
+  });
 
   /** Puesto elegido en el organigrama; mientras no se elija ninguno, la cabeza del organigrama. */
   private readonly elegidoId = signal<number | null>(null);
