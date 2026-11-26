@@ -812,8 +812,7 @@ Lista de contribuidores que han aportado commits al desarrollo de este repositor
 
 | Nombre | Commits |
 | :--- | :--- |
-| **kiramman-mp3** | 263 |
-| **Johan Rodríguez** | 63 |
+| **Johan Rodríguez** | 347 |
 
 ---
 
