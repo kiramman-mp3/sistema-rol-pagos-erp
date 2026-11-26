@@ -33,8 +33,7 @@ const VACIO: Borrador = { id: null, grado: '', denominacion: '', rmu: '', rmuMax
         <p>
           Al crear un empleado se elige un grado de esta tabla y el sueldo sale de él. En la LOSEP el sueldo es la
           remuneración del grado; en los niveles de «mínimo» (Código del Trabajo) puede ser mayor, nunca menor.
-          Las escalas de ejemplo son de fuentes secundarias o de clase: están <strong>por confirmar</strong> con el
-          Ministerio del Trabajo.
+          Las escalas que trae el sistema son de ejemplo: ajústalas a las de tu empresa.
         </p>
       </div>
 

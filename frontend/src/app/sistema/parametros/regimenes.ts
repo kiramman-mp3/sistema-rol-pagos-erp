@@ -91,10 +91,6 @@ const porcentaje = (fraccion: number | null): string => (fraccion === null ? '�
         <label [for]="id('notas')">Notas</label>
         <textarea class="entrada" [id]="id('notas')" rows="3" maxlength="1000" formControlName="notas"></textarea>
       </div>
-      <label class="casilla c6">
-        <input type="checkbox" formControlName="verificado" />
-        Los valores están confirmados con la norma o el IESS
-      </label>
 
       <div class="acciones">
         <button class="boton" [disabled]="guardando() || !sesion.puede('editar')">
@@ -312,17 +308,11 @@ export class EditorRegimen {
   selector: 'app-regimenes-laborales',
   imports: [EditorRegimen],
   template: `
-    <p class="apoyo">
-      Cada empleado se rige por un régimen. Los marcados «por confirmar» tienen valores que salen de fuentes
-      secundarias: revísalos con la norma antes de usar el sistema en una nómina real.
-    </p>
+    <p class="apoyo">Cada empleado se rige por un régimen. Abre uno para ver o cambiar sus tasas, recargos y beneficios.</p>
     @for (r of regimenes(); track r.codigo) {
       <details class="hoja regimen" [open]="r.codigo === 'CODIGO_TRABAJO'">
         <summary>
           <strong>{{ r.nombre }}</strong>
-          <span class="estado" [class.estado-activo]="r.verificado" [class.estado-inactivo]="!r.verificado">
-            {{ r.verificado ? 'Confirmado' : 'Por confirmar' }}
-          </span>
           <span class="apoyo pequeno">{{ r.descripcion }}</span>
         </summary>
         <div class="hoja-cuerpo">

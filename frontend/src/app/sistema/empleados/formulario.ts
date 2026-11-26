@@ -54,10 +54,7 @@ const familiaDeNivel = (g: Grado) => g.denominacion.trim().charAt(0).toUpperCase
               }
             </select>
             @if (regimenElegido(); as r) {
-              <span class="ayuda">
-                {{ r.descripcion }}
-                @if (!r.verificado) { <strong>Algunos valores de este régimen están por confirmar.</strong> }
-              </span>
+              <span class="ayuda">{{ r.descripcion }}</span>
             }
           </div>
           @if (esMixto()) {

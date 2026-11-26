@@ -53,7 +53,6 @@ interface Nodo {
         <p>
           Cada recuadro es un puesto, con el nombre de su responsable. Toca uno para ver su función,
           su responsabilidad, el sector económico y la referencia salarial, o para cambiar a su responsable.
-          Los niveles de ejemplo salen de una tabla de clase y están <strong>por confirmar</strong>.
         </p>
       </div>
       <div class="hoja-cuerpo">
