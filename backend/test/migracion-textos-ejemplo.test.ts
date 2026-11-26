@@ -24,6 +24,8 @@ describe("migración 025: textos de los datos de ejemplo", () => {
       for (const r of notas) {
         assert.equal(r.notas, r.codigo === "LOEP" ? "Nota propia de la empresa" : "", `notas de ${r.codigo}`);
       }
+      const ct = await uno(db, "SELECT base_legal FROM regimenes WHERE cuenta_id = 1 AND codigo = 'CODIGO_TRABAJO'");
+      assert.equal(ct?.base_legal, "Código del Trabajo arts. 49, 55, 69, 71, 111, 113 y 196.");
       const fuentes = (await consultar(db, "SELECT DISTINCT fuente FROM escala_salarial WHERE cuenta_id = 1")).map((f) => f.fuente);
       assert.ok(!fuentes.some((f) => String(f).includes("por confirmar")));
       assert.ok(fuentes.includes("Escala de ejemplo"));
