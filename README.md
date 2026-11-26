@@ -1,4 +1,4 @@
-# 💼 Rol de Pagos Ecuador 2026
+# 💼 Cuadra
 
 [![Angular](https://img.shields.io/badge/Angular-22-dd0031?style=flat-square&logo=angular&logoColor=white)](https://angular.dev/)
 [![Express](https://img.shields.io/badge/Express-5-000000?style=flat-square&logo=express&logoColor=white)](https://expressjs.com/)
@@ -8,7 +8,7 @@
 [![Deploy](https://img.shields.io/badge/Deploy-Docker_Compose-2496ed?style=flat-square&logo=docker&logoColor=white)](https://docs.docker.com/compose/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
 
-**Rol de Pagos Ecuador** es un sistema de nómina para Ecuador cuyas reglas de ley se **parametrizan** desde la propia aplicación: régimen laboral, salario básico, escala salarial, décimos, fondos de reserva, horas extras y aportes al IESS. Una API en **Express**, una aplicación en **Angular**, una página de inicio pública y, detrás del botón **Registrar mi empresa**, el sistema completo: cada empresa crea su cuenta y todos sus datos (empleados, roles, orgánico, escala y reglas de ley) son solo suyos.
+**Cuadra**, el rol de pagos que cuadra, es un sistema de rol de pagos para Ecuador cuyas reglas de ley se **parametrizan** desde la propia aplicación: régimen laboral, salario básico, escala salarial, décimos, fondos de reserva, horas extras y aportes al IESS. Una API en **Express**, una aplicación en **Angular**, una página de inicio pública y, detrás del botón **Registrar mi empresa**, el sistema completo: cada empresa crea su cuenta y todos sus datos (empleados, roles, orgánico, escala y reglas de ley) son solo suyos.
 
 Se hizo como práctica de la guía APE, que pide un rol de pagos parametrizable: escoger el régimen laboral (Código del Trabajo, LOSEP o LOEP), el salario básico, la escala salarial, si el trabajador recibe décimo tercero, décimo cuarto y horas extras, y ver si el IESS, que se hace a mano en Excel, se puede automatizar.
 
@@ -24,7 +24,7 @@ Se hizo como práctica de la guía APE, que pide un rol de pagos parametrizable:
 ## 🛡️ Descripción
 
 ### ¿Qué problema resuelve?
-En muchas empresas el rol de pagos se arma a mano en Excel: hay que acordarse de qué recargo lleva cada tipo de hora extra, de qué décimos se pagan cada mes y cuáles se acumulan, de la tabla del impuesto a la renta del año y de qué aportes corresponden al régimen de cada persona. Un cambio de ley obliga a revisar todas las fórmulas. **Rol de Pagos Ecuador** guarda esas reglas como datos que se editan en pantalla, así que un cambio normativo es un cambio de parámetros y no de código.
+En muchas empresas el rol de pagos se arma a mano en Excel: hay que acordarse de qué recargo lleva cada tipo de hora extra, de qué décimos se pagan cada mes y cuáles se acumulan, de la tabla del impuesto a la renta del año y de qué aportes corresponden al régimen de cada persona. Un cambio de ley obliga a revisar todas las fórmulas. **Cuadra** guarda esas reglas como datos que se editan en pantalla, así que un cambio normativo es un cambio de parámetros y no de código.
 
 ### ¿Qué hace?
 Cada empresa se registra con su nombre, su RUC, un correo y una contraseña, y trabaja en su propia cuenta. Para cada mes, la persona encargada anota las novedades (horas extras, comisiones, anticipos) y el sistema:
@@ -151,10 +151,17 @@ rol-pagos-ecuador/
 │   ├── src/app/landing/       # Página de inicio con el simulador
 │   ├── src/app/entrar/        # Inicio de sesión
 │   ├── src/app/registro/      # Registro de una empresa
+│   ├── src/app/acceso/        # Recuperar contraseña, restablecerla y verificar el correo
+│   ├── src/app/marca/         # Logo (concha), Galo, el escalón y el logo de las pantallas de acceso
+│   ├── src/app/no-encontrada/ # Página 404 con Galo
 │   ├── src/app/sistema/       # Shell, inicio del mes, empleados, préstamos, vacaciones, liquidaciones, orgánico, roles, parámetros y usuarios
 │   ├── src/app/core/          # Cliente de la API, sesión, avisos, pipe de dinero y modelos
+│   ├── public/                # Tipografías, favicon, ícono táctil e imagen para compartir
 │   └── src/styles.css         # Sistema visual global
-├── docs/capturas/             # Capturas de pantalla de este README
+├── docs/
+│   ├── capturas/              # Capturas de pantalla de este README
+│   ├── marca/og.html          # Fuente de la imagen para compartir (1200 x 630)
+│   └── marca.md               # Guía de marca: nombre, logo, color, Galo, motivos y lenguaje
 └── package.json               # Scripts de la raíz
 ```
 
@@ -205,7 +212,7 @@ rol-pagos-ecuador/
     | `DATABASE_SSL_INSECURE` | `1` desactiva la verificación del certificado. Solo cuando la base está en una red privada con un certificado autofirmado, o como salida de emergencia: fuera de esa red permite que un intermediario lea la conexión |
     | `SESION_SECRETO` | Firma las sesiones. Obligatorio con una base remota |
     | `CORREO_SMTP_URL` | Servidor SMTP para los correos (`smtp://usuario:clave@servidor:587`; `smtps://` para el puerto 465). Sin él, los correos se escriben en la consola del servidor |
-    | `CORREO_REMITENTE` | Quién firma los correos, por ejemplo `Rol de pagos <no-responder@tu-dominio.com>`. Va junto con `CORREO_SMTP_URL` |
+    | `CORREO_REMITENTE` | Quién firma los correos, por ejemplo `Cuadra <no-responder@tu-dominio.com>`. Va junto con `CORREO_SMTP_URL` |
     | `APP_URL` | Dirección pública de la aplicación (`https://rol.tu-dominio.com`), para los enlaces de los correos. Obligatoria si hay `CORREO_SMTP_URL` |
 
 5.  **Cargar los datos de ejemplo** (opcional): crea la cuenta de una empresa de ejemplo, con 12 empleados y los roles de enero a septiembre de 2026. Con tu correo y una contraseña de al menos 10 caracteres:
@@ -711,6 +718,19 @@ Cuatro colores con significado fijo en toda la app: azul para ingresos, ladrillo
 
 Las tipografías (Bricolage Grotesque y Figtree) van incluidas en `frontend/public/fonts`; la aplicación funciona sin internet.
 
+### Marca
+
+La marca gira en torno a una idea, «que cuadre»: el rol de pagos se puede comprobar contra la ley y contra el comprobante del IESS. El año de la ley ya no va en el nombre, sino en el sello **Ley 2026** de la barra.
+
+| Pieza | Qué es | Dónde está |
+| :--- | :--- | :--- |
+| Logo | El caparazón de Galo como gráfico de cuatro piezas: ingresos, descuentos, neto y provisiones | `frontend/src/app/marca/concha.ts` |
+| Galo | Tortuga de Galápagos con cuatro estados animados: atento, calculando, cuadró y no cuadra. Un clic la esconde en su caparazón y con «reducir movimiento» queda quieta | `frontend/src/app/marca/galo.ts` |
+| El escalón | La escala salarial dibujada, como separador y en la boleta | `frontend/src/app/marca/escalon.ts` |
+| Íconos | Favicon, ícono táctil e imagen para compartir | `frontend/public/` |
+
+Galo aparece en la portada, en los estados vacíos, cargas y errores de las listas, al validar o publicar un rol y en la página 404. Nunca aparece junto a montos, en la boleta ni en errores de ley o de pago. La guía completa, con colores, contrastes y lenguaje, está en [`docs/marca.md`](docs/marca.md).
+
 ---
 
 ## ⚠️ Lo que Queda por Confirmar
@@ -781,6 +801,7 @@ Verifica todas las cifras con la norma y con el IESS antes de usar el sistema en
 - [x] Liquidaciones por salida: rubros por causa, revisión antes de registrar y salida del empleado.
 - [x] Interfaz centrada en quien usa el sistema: sin la página de investigación ni los avisos «por confirmar» en pantalla.
 - [x] Integración continua en GitHub Actions y releases etiquetadas.
+- [x] Marca Cuadra: logo, mascota Galo con animaciones, motivos gráficos, íconos, página 404 y guía de lenguaje.
 - [ ] Confirmar con las normas vigentes los datos marcados «por confirmar».
 
 ---
