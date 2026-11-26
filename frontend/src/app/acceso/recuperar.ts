@@ -4,13 +4,15 @@ import { RouterLink } from '@angular/router';
 
 import { Sesion } from '../core/sesion';
 import { mensajeDeError } from './mensaje';
+import { MarcaAcceso } from '../marca/marca-acceso';
 
 /** Pide el correo con el enlace para elegir otra contraseña. */
 @Component({
   selector: 'app-recuperar',
-  imports: [ReactiveFormsModule, RouterLink],
+  imports: [MarcaAcceso, ReactiveFormsModule, RouterLink],
   template: `
     <main class="pagina entrar">
+      <app-marca-acceso />
       <div class="hoja">
         <div class="hoja-titulo">
           <h1>Recuperar la contraseña</h1>

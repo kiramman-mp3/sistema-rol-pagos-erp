@@ -3,19 +3,24 @@ import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/rou
 
 import { Avisos } from '../core/avisos';
 import { ParametrosLey } from '../core/api';
+import { Concha } from '../marca/concha';
+import { Galo } from '../marca/galo';
 import { Sesion } from '../core/sesion';
 
 /** Barra superior, navegación y avisos de todas las pantallas del sistema. */
 @Component({
   selector: 'app-shell',
-  imports: [RouterLink, RouterLinkActive, RouterOutlet],
+  imports: [Concha, Galo, RouterLink, RouterLinkActive, RouterOutlet],
   template: `
     <header class="barra">
       <div class="barra-interior">
-        <a class="marca" routerLink="/" title="Volver a la página de inicio">
-          <span class="bandera" aria-hidden="true"><i></i><i></i><i></i></span>
-          Rol de pagos<small>Ecuador 2026</small>
+        <a class="marca" routerLink="/" title="Volver a la página de inicio" aria-label="Cuadra, volver a la página de inicio">
+          <app-concha ancho="2.6rem" linea="#f3f6ff" borde="#f3f6ff" />
+          Cuadra<small>Rol de pagos</small>
         </a>
+        @if (parametros()?.anio; as anio) {
+          <span class="sello-ley" title="Año de las reglas de ley cargadas">Ley {{ anio }}</span>
+        }
         <nav class="navegacion" aria-label="Principal">
           <a routerLink="/sistema/inicio" routerLinkActive ariaCurrentWhenActive="page">Inicio</a>
           <a routerLink="/sistema/empleados" routerLinkActive ariaCurrentWhenActive="page">Empleados</a>
@@ -63,7 +68,12 @@ import { Sesion } from '../core/sesion';
         </div>
       }
       @for (aviso of avisos.lista(); track aviso.id) {
-        <div class="aviso aviso-{{ aviso.tipo }} no-imprimir" role="status">{{ aviso.texto }}</div>
+        <div class="aviso aviso-{{ aviso.tipo }} no-imprimir" [class.aviso-con-galo]="aviso.galo" role="status">
+          @if (aviso.galo) {
+            <app-galo estado="cuadro" ancho="5rem" />
+          }
+          <span>{{ aviso.texto }}</span>
+        </div>
       }
       <router-outlet />
     </main>

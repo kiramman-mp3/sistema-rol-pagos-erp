@@ -46,9 +46,11 @@ describe('rutas', () => {
     http.match(() => true);
   });
 
-  it('una ruta desconocida vuelve a la landing', async () => {
+  it('una ruta desconocida muestra la página 404 con Galo', async () => {
     await harness.navigateByUrl('/no-existe');
-    expect(TestBed.inject(Router).url).toBe('/');
+    expect(TestBed.inject(Router).url).toBe('/no-existe');
+    expect(harness.routeNativeElement?.textContent).toContain('Esta página no está en el rol');
+    expect(harness.routeNativeElement?.querySelector('app-galo')).not.toBeNull();
     http.match(() => true);
   });
 });

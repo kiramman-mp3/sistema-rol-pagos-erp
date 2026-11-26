@@ -49,6 +49,12 @@ main { max-width: 1180px; margin: 0 auto; padding: 0 1rem; }
 .desglose .provision { border-bottom: 0; color: var(--provision); }
 .desglose .provision dt { color: var(--provision); font-weight: 600; }
 
+/* Galo acompaña al simulador desde el título de la hoja */
+.titulo-con-galo { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding-bottom: .6rem; }
+.galo-simulador { flex: none; margin-top: -.4rem; }
+
+.separador { margin-block: 1.5rem .9rem; }
+
 /* ---- Secciones ---- */
 .seccion { padding: 3.5rem 0; }
 .seccion > h2, .cierre h2 { font-size: clamp(1.6rem, 2vw + 1rem, 2.3rem); max-width: 24ch; }
@@ -90,6 +96,10 @@ main { max-width: 1180px; margin: 0 auto; padding: 0 1rem; }
 .cierre::before { content: ""; position: absolute; left: -3rem; bottom: -5rem; width: 12rem; height: 12rem; border-radius: 50%; background: var(--sol); }
 .cierre::after { content: ""; position: absolute; right: 3rem; top: -3rem; width: 7rem; height: 7rem; border-radius: 50%; background: #ef4b3c; }
 .cierre > * { position: relative; z-index: 1; }
+.medallon {
+  width: 12.5rem; aspect-ratio: 1; margin: 0 auto 1.5rem; border-radius: 50%; background: var(--papel);
+  display: grid; place-items: center; box-shadow: 0 0 0 6px rgba(255, 255, 255, .18);
+}
 .cierre h2 { color: #fff; margin: 0 auto; }
 .cierre p { color: #e4e8ff; margin: .75rem 0 1.75rem; }
 

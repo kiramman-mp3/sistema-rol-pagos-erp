@@ -92,7 +92,7 @@ export async function enviarRecuperacion(db: Base, correo: Correo, usuario: Usua
   const token = await crearToken(db, usuario.id, "recuperar");
   await correo.enviar({
     para: usuario.email,
-    asunto: "Restablecer tu contraseña · Rol de pagos Ecuador",
+    asunto: "Restablecer tu contraseña · Cuadra",
     texto: [
       "Recibimos una solicitud para restablecer tu contraseña.",
       "",
@@ -108,7 +108,7 @@ export async function enviarVerificacion(db: Base, correo: Correo, usuario: Usua
   const token = await crearToken(db, usuario.id, "verificar");
   await correo.enviar({
     para: usuario.email,
-    asunto: "Confirma tu correo · Rol de pagos Ecuador",
+    asunto: "Confirma tu correo · Cuadra",
     texto: [
       "Confirma que este correo es tuyo abriendo este enlace (vale 48 horas):",
       enlace(urlPublica, "verificar", token),

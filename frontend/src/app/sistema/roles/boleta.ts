@@ -7,11 +7,12 @@ import { ParametrosLey, valorSeguro } from '../../core/api';
 import { DineroPipe } from '../../core/dinero.pipe';
 import type { Modalidad, RolCompleto, RolDetalle } from '../../core/modelos';
 import { etiquetaRegimen } from '../../core/regimen';
+import { Escalon } from '../../marca/escalon';
 
 /** Comprobante individual, pensado para imprimirse en una sola hoja. */
 @Component({
   selector: 'app-boleta',
-  imports: [RouterLink, DineroPipe, PercentPipe],
+  imports: [Escalon, RouterLink, DineroPipe, PercentPipe],
   template: `
     <div class="acciones no-imprimir" style="margin-bottom: 1.25rem">
       <a class="boton boton-claro" [routerLink]="['/sistema/roles', id()]">Volver al rol</a>
@@ -22,6 +23,7 @@ import { etiquetaRegimen } from '../../core/regimen';
       @if (d(); as d) {
         <article class="hoja boleta">
           <header class="boleta-cabecera">
+            <app-escalon class="boleta-escalon" />
             <div class="empresa-nombre">{{ parametros()?.empresa?.nombre }}</div>
             <div class="apoyo pequeno">RUC {{ parametros()?.empresa?.ruc }}</div>
             <h1>Rol de pagos de {{ nombreMes() }} {{ r.anio }}</h1>

@@ -6,11 +6,14 @@ import { RouterLink } from '@angular/router';
 import { ParametrosLey, valorSeguro } from '../core/api';
 import { DineroPipe } from '../core/dinero.pipe';
 import type { ResultadoSimulacion } from '../core/modelos';
+import { Concha } from '../marca/concha';
+import { Escalon } from '../marca/escalon';
+import { Galo, type EstadoGalo } from '../marca/galo';
 
 /** Página de inicio pública: explica el sistema y lleva a /sistema. */
 @Component({
   selector: 'app-landing',
-  imports: [RouterLink, DineroPipe, PercentPipe],
+  imports: [Concha, Escalon, Galo, RouterLink, DineroPipe, PercentPipe],
   templateUrl: './landing.html',
   styleUrl: './landing.css',
 })
@@ -56,20 +59,31 @@ export class Landing {
 
   protected readonly resultado = valorSeguro(this.simulacion);
 
+  /** Verdadero desde que se toca un campo hasta que se envía la consulta (ya esperó a que terminaras de escribir). */
+  private readonly escribiendo = signal(true);
+
+  /** Galo acompaña al simulador: calcula mientras esperas y celebra cuando el rol cuadra. */
+  protected readonly estadoGalo = computed<EstadoGalo>(() => {
+    if (!this.entradaValida()) return 'atento';
+    if (this.escribiendo() || this.simulacion.isLoading()) return 'calculando';
+    if (this.simulacion.error()) return 'no-cuadra';
+    return this.resultado() ? 'cuadro' : 'atento';
+  });
+
   constructor() {
     effect((alLimpiar) => {
+      this.escribiendo.set(true);
       const sueldo = Number(this.sueldo().replace(',', '.'));
       const horasSuplementarias = Number(this.horas().replace(',', '.')) || 0;
       const regimen = this.regimen();
       const categoriaLoep = this.categoria();
       const decimos = this.decimos();
-      const temporizador = setTimeout(
-        () =>
-          this.consulta.set({
-            sueldo: Number.isFinite(sueldo) ? sueldo : 0, horasSuplementarias, regimen, categoriaLoep, decimos,
-          }),
-        250,
-      );
+      const temporizador = setTimeout(() => {
+        this.consulta.set({
+          sueldo: Number.isFinite(sueldo) ? sueldo : 0, horasSuplementarias, regimen, categoriaLoep, decimos,
+        });
+        this.escribiendo.set(false);
+      }, 250);
       alLimpiar(() => clearTimeout(temporizador));
     });
   }

@@ -4,6 +4,7 @@ import { RouterLink } from '@angular/router';
 
 import { Sesion } from '../core/sesion';
 import { mensajeDeError } from './mensaje';
+import { MarcaAcceso } from '../marca/marca-acceso';
 
 const CLAVE_MINIMA = 10;
 
@@ -14,9 +15,10 @@ function clavesIguales(grupo: AbstractControl): ValidationErrors | null {
 /** Elige la contraseña nueva con el enlace que llegó por correo (`?token=`). */
 @Component({
   selector: 'app-restablecer',
-  imports: [ReactiveFormsModule, RouterLink],
+  imports: [MarcaAcceso, ReactiveFormsModule, RouterLink],
   template: `
     <main class="pagina entrar">
+      <app-marca-acceso />
       <div class="hoja">
         <div class="hoja-titulo">
           <h1>Elegir una contraseña nueva</h1>

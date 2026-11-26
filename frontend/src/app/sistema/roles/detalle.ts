@@ -20,7 +20,7 @@ type Accion = 'validar' | 'aprobar' | 'publicar' | 'pagar';
 
 /** Qué paso sigue en cada estado y cómo se llama su botón. */
 const SIGUIENTE: Record<string, { accion: Accion; permiso: Permiso; texto: string; trabajando: string; hecho: string } | undefined> = {
-  calculado: { accion: 'validar', permiso: 'validar', texto: 'Validar el rol', trabajando: 'Validando…', hecho: 'Rol validado.' },
+  calculado: { accion: 'validar', permiso: 'validar', texto: 'Validar el rol', trabajando: 'Validando…', hecho: 'Rol validado: todo cuadra.' },
   validado: { accion: 'aprobar', permiso: 'aprobar', texto: 'Aprobar', trabajando: 'Aprobando…', hecho: 'Rol aprobado.' },
   aprobado: { accion: 'publicar', permiso: 'publicar', texto: 'Publicar', trabajando: 'Publicando…', hecho: 'Rol publicado. Ya no se puede recalcular.' },
   publicado: { accion: 'pagar', permiso: 'pagar', texto: 'Marcar como pagado', trabajando: 'Guardando…', hecho: 'Rol marcado como pagado.' },
@@ -685,7 +685,7 @@ export class DetalleRol {
       if (paso.accion === 'validar') {
         const r = await firstValueFrom(this.api.validarRol(id));
         this.revision.set(r);
-        if (r.valido) this.avisos.exito(paso.hecho);
+        if (r.valido) this.avisos.exito(paso.hecho, true);
       } else {
         await firstValueFrom(
           paso.accion === 'aprobar'
@@ -695,7 +695,7 @@ export class DetalleRol {
               : this.api.pagarRol(id),
         );
         this.revision.set(null);
-        this.avisos.exito(paso.hecho);
+        this.avisos.exito(paso.hecho, paso.accion === 'publicar');
       }
     } catch (error) {
       this.avisos.errorHttp(error);

@@ -3,13 +3,15 @@ import { RouterLink } from '@angular/router';
 
 import { Sesion } from '../core/sesion';
 import { mensajeDeError } from './mensaje';
+import { MarcaAcceso } from '../marca/marca-acceso';
 
 /** Confirma el correo con el enlace que llegó (`?token=`). Se confirma al abrirlo: no hay que pulsar nada. */
 @Component({
   selector: 'app-verificar',
-  imports: [RouterLink],
+  imports: [MarcaAcceso, RouterLink],
   template: `
     <main class="pagina entrar">
+      <app-marca-acceso />
       <div class="hoja">
         <div class="hoja-titulo">
           <h1>Verificar el correo</h1>

@@ -4,6 +4,7 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 
 import { Sesion } from '../core/sesion';
+import { MarcaAcceso } from '../marca/marca-acceso';
 
 /** Solo se vuelve a una pantalla del sistema: nunca a una dirección que venga de fuera. */
 export function destinoSeguro(volver: string | undefined): string {
@@ -13,9 +14,10 @@ export function destinoSeguro(volver: string | undefined): string {
 /** Inicio de sesión de una empresa registrada. */
 @Component({
   selector: 'app-entrar',
-  imports: [ReactiveFormsModule, RouterLink],
+  imports: [MarcaAcceso, ReactiveFormsModule, RouterLink],
   template: `
     <main class="pagina entrar">
+      <app-marca-acceso />
       <div class="hoja">
         <div class="hoja-titulo">
           <h1>Ingresar al sistema</h1>

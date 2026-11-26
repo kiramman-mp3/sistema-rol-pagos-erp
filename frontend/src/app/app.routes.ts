@@ -5,32 +5,32 @@ import { conPermiso, sesionActiva } from './core/sesion';
 export const routes: Routes = [
   {
     path: '',
-    title: 'Rol de pagos Ecuador 2026',
+    title: 'Cuadra · Rol de pagos Ecuador',
     loadComponent: () => import('./landing/landing').then((m) => m.Landing),
   },
   {
     path: 'entrar',
-    title: 'Ingresar | Rol de pagos Ecuador',
+    title: 'Ingresar | Cuadra',
     loadComponent: () => import('./entrar/entrar').then((m) => m.Entrar),
   },
   {
     path: 'recuperar',
-    title: 'Recuperar contraseña | Rol de pagos Ecuador',
+    title: 'Recuperar contraseña | Cuadra',
     loadComponent: () => import('./acceso/recuperar').then((m) => m.Recuperar),
   },
   {
     path: 'restablecer',
-    title: 'Nueva contraseña | Rol de pagos Ecuador',
+    title: 'Nueva contraseña | Cuadra',
     loadComponent: () => import('./acceso/restablecer').then((m) => m.Restablecer),
   },
   {
     path: 'verificar',
-    title: 'Verificar correo | Rol de pagos Ecuador',
+    title: 'Verificar correo | Cuadra',
     loadComponent: () => import('./acceso/verificar').then((m) => m.Verificar),
   },
   {
     path: 'registro',
-    title: 'Registrar mi empresa | Rol de pagos Ecuador',
+    title: 'Registrar mi empresa | Cuadra',
     loadComponent: () => import('./registro/registro').then((m) => m.Registro),
   },
   {
@@ -41,84 +41,88 @@ export const routes: Routes = [
       { path: '', pathMatch: 'full', redirectTo: 'inicio' },
       {
         path: 'inicio',
-        title: 'Inicio | Rol de pagos',
+        title: 'Inicio | Cuadra',
         loadComponent: () => import('./sistema/inicio/inicio').then((m) => m.Inicio),
       },
       {
         path: 'empleados',
-        title: 'Empleados | Rol de pagos',
+        title: 'Empleados | Cuadra',
         loadComponent: () => import('./sistema/empleados/lista').then((m) => m.ListaEmpleados),
       },
       {
         path: 'empleados/nuevo',
-        title: 'Nuevo empleado | Rol de pagos',
+        title: 'Nuevo empleado | Cuadra',
         loadComponent: () =>
           import('./sistema/empleados/formulario').then((m) => m.FormularioEmpleado),
       },
       {
         path: 'empleados/:id/editar',
-        title: 'Editar empleado | Rol de pagos',
+        title: 'Editar empleado | Cuadra',
         loadComponent: () =>
           import('./sistema/empleados/formulario').then((m) => m.FormularioEmpleado),
       },
       {
         path: 'prestamos',
-        title: 'Préstamos del IESS | Rol de pagos',
+        title: 'Préstamos del IESS | Cuadra',
         loadComponent: () => import('./sistema/prestamos/prestamos').then((m) => m.Prestamos),
       },
       {
         path: 'vacaciones',
-        title: 'Vacaciones | Rol de pagos',
+        title: 'Vacaciones | Cuadra',
         loadComponent: () => import('./sistema/vacaciones/vacaciones').then((m) => m.Vacaciones),
       },
       {
         path: 'liquidaciones',
-        title: 'Liquidaciones | Rol de pagos',
+        title: 'Liquidaciones | Cuadra',
         loadComponent: () => import('./sistema/liquidaciones/liquidaciones').then((m) => m.Liquidaciones),
       },
       {
         path: 'organico',
-        title: 'Orgánico funcional | Rol de pagos',
+        title: 'Orgánico funcional | Cuadra',
         loadComponent: () => import('./sistema/organico/organico').then((m) => m.Organico),
       },
       {
         path: 'parametros',
-        title: 'Parámetros | Rol de pagos',
+        title: 'Parámetros | Cuadra',
         loadComponent: () => import('./sistema/parametros/parametros').then((m) => m.PaginaParametros),
       },
       {
         path: 'usuarios',
-        title: 'Usuarios | Rol de pagos',
+        title: 'Usuarios | Cuadra',
         canActivate: [conPermiso('usuarios')],
         loadComponent: () => import('./sistema/usuarios/usuarios').then((m) => m.Usuarios),
       },
       {
         path: 'cuenta',
-        title: 'Cuenta | Rol de pagos',
+        title: 'Cuenta | Cuadra',
         canActivate: [conPermiso('usuarios')],
         loadComponent: () => import('./sistema/cuenta/cuenta').then((m) => m.Cuenta),
       },
       {
         path: 'roles',
-        title: 'Roles de pago | Rol de pagos',
+        title: 'Roles de pago | Cuadra',
         loadComponent: () => import('./sistema/roles/lista').then((m) => m.ListaRoles),
       },
       {
         path: 'roles/novedades/:anio/:mes',
-        title: 'Novedades del mes | Rol de pagos',
+        title: 'Novedades del mes | Cuadra',
         loadComponent: () => import('./sistema/roles/novedades').then((m) => m.NovedadesMes),
       },
       {
         path: 'roles/:id',
-        title: 'Rol de pagos | Rol de pagos',
+        title: 'Rol de pagos | Cuadra',
         loadComponent: () => import('./sistema/roles/detalle').then((m) => m.DetalleRol),
       },
       {
         path: 'roles/:id/boleta/:detalleId',
-        title: 'Boleta | Rol de pagos',
+        title: 'Boleta | Cuadra',
         loadComponent: () => import('./sistema/roles/boleta').then((m) => m.Boleta),
       },
     ],
   },
-  { path: '**', redirectTo: '' },
+  {
+    path: '**',
+    title: 'Página no encontrada | Cuadra',
+    loadComponent: () => import('./no-encontrada/no-encontrada').then((m) => m.NoEncontrada),
+  },
 ];
