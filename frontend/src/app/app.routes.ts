@@ -120,5 +120,9 @@ export const routes: Routes = [
       },
     ],
   },
-  { path: '**', redirectTo: '' },
+  {
+    path: '**',
+    title: 'Página no encontrada | Cuadra',
+    loadComponent: () => import('./no-encontrada/no-encontrada').then((m) => m.NoEncontrada),
+  },
 ];
