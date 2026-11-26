@@ -1,4 +1,6 @@
-import { ChangeDetectionStrategy, Component, OnDestroy, computed, input, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy, Component, ElementRef, OnDestroy, afterNextRender, computed, inject, input, signal,
+} from '@angular/core';
 
 export type EstadoGalo = 'atento' | 'calculando' | 'cuadro' | 'no-cuadra';
 
@@ -36,6 +38,7 @@ let contador = 0;
     '[attr.aria-label]': 'interactivo() ? "Toca a Galo para que se esconda en su caparazón" : null',
     '[class.interactivo]': 'interactivo()',
     '[class.escondido]': 'escondido()',
+    '[class.pausado]': '!visible()',
     '(click)': 'esconder()',
     '(keydown.enter)': 'esconder()',
     '(keydown.space)': 'esconder(); $event.preventDefault()',
@@ -56,6 +59,9 @@ let contador = 0;
     .pata-b { transform-origin: 143px 130px; }
     .cola { transform-origin: 30px 140px; transition: transform .3s ease; }
     .ojo { transform-origin: 218px 98px; }
+
+    /* Fuera de pantalla no se mueve: la celebración empieza cuando Galo aparece. */
+    :host(.pausado) * { animation-play-state: paused !important; }
 
     /* Click: se esconde en el caparazón. */
     :host(.escondido) .cabeza, :host(.escondido) .cuello { transform: translate(-6px, 8px) scale(.18); }
@@ -80,13 +86,13 @@ let contador = 0;
       .calculando .punto-2 { animation-delay: .2s; }
 
       /* Cuadró: salta de alegría y suelta confeti. */
-      .cuadro .cuerpo { animation: salto 1.8s cubic-bezier(.3, .7, .4, 1) infinite; }
+      .cuadro .cuerpo { animation: salto 1.8s cubic-bezier(.3, .7, .4, 1) 3; }
       .cuadro .burbuja { animation: aparece .5s cubic-bezier(.34, 1.56, .64, 1) both; }
-      .cuadro .confeti > * { animation: cae 2.2s ease-in infinite; }
+      .cuadro .confeti > * { animation: cae 2.2s ease-in 2 backwards; }
       .cuadro .confeti > *:nth-child(2) { animation-delay: .35s; }
       .cuadro .confeti > *:nth-child(3) { animation-delay: .7s; }
       .cuadro .confeti > *:nth-child(4) { animation-delay: 1.05s; }
-      .cuadro .suelo { animation: sombra-salto 1.8s cubic-bezier(.3, .7, .4, 1) infinite; }
+      .cuadro .suelo { animation: sombra-salto 1.8s cubic-bezier(.3, .7, .4, 1) 3; }
 
       /* No cuadra: niega con la cabeza, sin dramatismo. */
       .no-cuadra .cabeza { animation: niega 2.6s ease-in-out infinite; }
@@ -225,7 +231,19 @@ export class Galo implements OnDestroy {
   protected readonly idCaparazon = `${this.id}-caparazon`;
 
   protected readonly escondido = signal(false);
+  protected readonly visible = signal(true);
   private temporizador: ReturnType<typeof setTimeout> | undefined;
+
+  private observador: IntersectionObserver | undefined;
+
+  constructor() {
+    const host = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
+    afterNextRender(() => {
+      if (typeof IntersectionObserver === 'undefined') return;
+      this.observador = new IntersectionObserver(([entrada]) => this.visible.set(entrada.isIntersecting));
+      this.observador.observe(host);
+    });
+  }
 
   protected esconder() {
     if (!this.interactivo() || this.escondido()) return;
@@ -235,5 +253,6 @@ export class Galo implements OnDestroy {
 
   ngOnDestroy() {
     clearTimeout(this.temporizador);
+    this.observador?.disconnect();
   }
 }

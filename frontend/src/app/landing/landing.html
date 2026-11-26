@@ -17,7 +17,7 @@
 <main>
   <section class="portada">
     <div class="portada-texto">
-      <h1>El rol de pagos del mes, con la ley de 2026 ya aplicada</h1>
+      <h1>El rol de pagos que cuadra, con la ley de {{ ley()?.anio ?? 2026 }} ya aplicada</h1>
       <p class="entrada-texto">
         Registra a tus empleados, anota las horas extras y genera el rol. El sistema calcula el aporte al IESS,
         el impuesto a la renta, los décimos y los fondos de reserva, y te entrega una boleta para cada trabajador.
@@ -30,9 +30,12 @@
     </div>
 
     <section class="hoja simulador" aria-labelledby="titulo-simulador">
-      <div class="hoja-titulo">
-        <h2 id="titulo-simulador">Pruébalo con un sueldo</h2>
-        <p>El cálculo lo hace el mismo motor que genera el rol del mes.</p>
+      <div class="hoja-titulo titulo-con-galo">
+        <div>
+          <h2 id="titulo-simulador">Pruébalo con un sueldo</h2>
+          <p>El cálculo lo hace el mismo motor que genera el rol del mes.</p>
+        </div>
+        <app-galo class="galo-simulador" [estado]="estadoGalo()" ancho="6.5rem" />
       </div>
       <div class="hoja-cuerpo">
         <div class="campos">
@@ -116,6 +119,8 @@
       </div>
     </section>
   </section>
+
+  <app-escalon class="separador" />
 
   <section class="seccion" id="como-funciona" aria-labelledby="titulo-pasos">
     <h2 id="titulo-pasos">De la lista de empleados al rol impreso, en tres pasos</h2>
@@ -219,7 +224,10 @@
     }
   </section>
 
+  <app-escalon class="separador" />
+
   <section class="cierre" aria-labelledby="titulo-cierre">
+    <div class="medallon"><app-galo estado="cuadro" ancho="10rem" [interactivo]="true" /></div>
     <h2 id="titulo-cierre">Genera tu primer rol en un par de minutos</h2>
     <p>Registra tu empresa, carga los empleados de ejemplo con un clic y elige el mes.</p>
     <a class="boton boton-sol boton-grande" routerLink="/registro">Registrar mi empresa</a>

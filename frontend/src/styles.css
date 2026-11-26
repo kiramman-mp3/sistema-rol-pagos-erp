@@ -91,9 +91,9 @@ a:hover { color: var(--noche); }
 .marca small { font: 600 .78rem var(--cuerpo); color: #c5ccf5; letter-spacing: 0; margin-left: .1rem; }
 
 /* Filete de tres franjas bajo la barra: sol doble, azul y coral, los colores de la marca. */
-.barra { position: relative; border-bottom: 0; padding-bottom: 6px; }
+.barra { position: relative; border-bottom: 0; padding-bottom: 8px; }
 .barra::after {
-  content: ""; position: absolute; inset: auto 0 0 0; height: 6px;
+  content: ""; position: absolute; inset: auto 0 0 0; height: 8px;
   background: linear-gradient(to bottom, var(--sol) 0 50%, #3d63ff 50% 75%, #ef4b3c 75% 100%);
   print-color-adjust: exact; -webkit-print-color-adjust: exact;
 }
