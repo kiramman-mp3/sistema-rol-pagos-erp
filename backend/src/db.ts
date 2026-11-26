@@ -2,7 +2,8 @@
  * PostgreSQL: `pg` contra un servidor PostgreSQL o PGlite, un Postgres que corre dentro del proceso,
  * para las pruebas (en memoria) y para trabajar en local sin instalar nada (en una carpeta).
  */
-import { readdirSync, readFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync } from "node:fs";
+import { dirname } from "node:path";
 
 import type { PGlite } from "@electric-sql/pglite";
 import pg from "pg";
@@ -138,7 +139,10 @@ export async function abrirBase(destino: string, { hasta }: { hasta?: number } =
     }));
   } else {
     const { PGlite: Motor } = await import("@electric-sql/pglite");
-    db = baseDePglite(new Motor(destino === ":memory:" ? undefined : destino));
+    const enMemoria = destino === ":memory:";
+    // PGlite crea su carpeta, pero no las de arriba: en un clon recién hecho `backend/data` todavía no existe.
+    if (!enMemoria) mkdirSync(dirname(destino), { recursive: true });
+    db = baseDePglite(new Motor(enMemoria ? undefined : destino));
   }
   await migrar(db, hasta);
   return db;

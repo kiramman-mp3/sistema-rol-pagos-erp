@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readdirSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 
@@ -109,6 +111,19 @@ describe("destino de la base", () => {
     assert.equal(esBaseRemota("postgres://u:p@host/db"), true);
     assert.equal(esBaseRemota(":memory:"), false);
     assert.equal(esBaseRemota("C:/datos/pglite"), false);
+  });
+
+  it("crea la carpeta de PGlite aunque no existan las de arriba (un clon recién hecho)", async () => {
+    const raiz = mkdtempSync(join(tmpdir(), "rol-pglite-"));
+    try {
+      const destino = join(raiz, "data", "pglite");
+      const db = await abrirBase(destino);
+      assert.ok(existsSync(destino));
+      assert.ok((await versionEsquema(db)) > 0);
+      await db.cerrar();
+    } finally {
+      rmSync(raiz, { recursive: true, force: true });
+    }
   });
 
   it("describe la URL sin usuario ni contraseña", () => {
