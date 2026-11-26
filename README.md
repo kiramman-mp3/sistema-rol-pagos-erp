@@ -87,7 +87,7 @@ Para el área de talento humano o contabilidad de una empresa pequeña o mediana
     *   `pg` contra un **PostgreSQL 17** propio en producción
     *   `PGlite` (un Postgres dentro del proceso) en las pruebas y para trabajar en local sin instalar nada
 *   **Cálculo:** `decimal.js`
-*   **Pruebas:** `node:test` (backend, incluida la API completa) y Vitest (frontend)
+*   **Pruebas:** `node:test` (backend, incluida la API completa) y Vitest (frontend), corridas por GitHub Actions en cada push y pull request
 *   **Despliegue:** Docker Compose en un servidor propio, detrás de Caddy y un túnel de Cloudflare, con despliegue continuo desde `main`
 
 ---
@@ -120,6 +120,7 @@ graph TD
 
 ```bash
 rol-pagos-ecuador/
+├── .github/workflows/ci.yml   # CI: lint, pruebas y build en cada push a main o develop y en cada pull request
 ├── backend/                   # API REST (Express 5, TypeScript, PostgreSQL)
 │   ├── src/
 │   │   ├── calculos.ts        # Motor de cálculo: funciones puras. Empezar a leer aquí
@@ -261,6 +262,12 @@ El HTTPS lo pone Cloudflare: Caddy atiende HTTP y el servidor no abre puertos a 
 ### Despliegue continuo
 
 No hay que desplegar a mano. Cada 5 minutos, un script del servidor revisa si `main` tiene commits nuevos en GitHub. Si los hay, actualiza el código, reconstruye los contenedores con `docker compose up -d --build` y espera a que la página responda. Si no responde en 3 minutos, vuelve al commit anterior. Por eso a `main` solo llegan versiones probadas: publicar es integrar `develop` en `main` y subirlo.
+
+### Integración continua
+
+`.github/workflows/ci.yml` corre en GitHub Actions, con Node 24, en cada push a `main` o `develop` y en cada pull request hacia ellas. Hace lo mismo que `npm run lint`, `npm test` y `npm run build`. El despliegue continuo del servidor no espera a la CI: sondea `main` por su cuenta, así que conviene que la CI de `develop` esté en verde antes de integrarla en `main`.
+
+Cada versión publicada lleva su etiqueta (`v0.5.0`, por ejemplo) y su release en GitHub.
 
 Las migraciones pendientes se aplican solas cuando arranca el contenedor `api`. Mientras se cambia el contenedor, la página puede responder 502 durante unos segundos.
 
@@ -692,7 +699,7 @@ El esquema vive en `backend/src/migraciones/NNN_nombre.sql`. Las aplicadas queda
 | 022 | Préstamos del IESS: tabla `prestamos_iess` (por empleado y cuenta) y `descuento_prestamos` en el detalle del rol |
 | 023 | Vacaciones gozadas: tabla `vacaciones_gozadas` (periodo con sus días, por empleado y cuenta) |
 | 024 | Liquidaciones por salida: tabla `liquidaciones` (una por empleado, con los rubros en JSON y la foto del empleado) |
-| 025 | Textos de los datos de ejemplo: vacía las notas de investigación de los regímenes y cambia la fuente «por confirmar» de la escala a «Escala de ejemplo». Solo toca los textos de fábrica |
+| 025 | Textos de los datos de ejemplo: vacía las notas de investigación de los regímenes, quita «aportes: página del IESS» de la base legal del Código del Trabajo y cambia la fuente «por confirmar» de la escala a «Escala de ejemplo». Solo toca los textos de fábrica |
 
 Los roles ya generados guardan una foto del régimen, de las tasas y de la modalidad con que se calcularon: si luego se editan las reglas, el historial no cambia.
 
@@ -773,6 +780,7 @@ Verifica todas las cifras con la norma y con el IESS antes de usar el sistema en
 - [x] Vacaciones gozadas: periodos registrados y saldo de días por empleado.
 - [x] Liquidaciones por salida: rubros por causa, revisión antes de registrar y salida del empleado.
 - [x] Interfaz centrada en quien usa el sistema: sin la página de investigación ni los avisos «por confirmar» en pantalla.
+- [x] Integración continua en GitHub Actions y releases etiquetadas.
 - [ ] Confirmar con las normas vigentes los datos marcados «por confirmar».
 
 ---
