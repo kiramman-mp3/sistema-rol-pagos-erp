@@ -276,11 +276,25 @@ Se definen en el `compose.yaml` y el `.env` del servidor, nunca en el repositori
 | `SESION_SECRETO` | Al menos 32 caracteres aleatorios |
 | `APP_URL` | `https://nomina.madebyjohan.xyz` |
 | `PORT` | `3000` |
-| `CORREO_SMTP_URL` y `CORREO_REMITENTE` | El servidor SMTP. Sin ellas, recuperar la contraseña no llega a nadie: el mensaje queda en el registro del contenedor |
+| `CORREO_SMTP_URL` | `smtp://resend:<API key>@smtp.resend.com:2587` (ver «Correo en producción», más abajo) |
+| `CORREO_REMITENTE` | `Rol de pagos <no-responder@madebyjohan.xyz>` |
 
 Detrás de Caddy y del túnel, Express tiene que confiar en el proxy (`confiarEnProxy`) para leer el https y la IP real del cliente; si no, la cookie de sesión no sale con `Secure` y el límite de intentos ve una sola IP. La imagen de producción lo activa al construirse.
 
 El backend no arranca con `DATABASE_URL` y sin `SESION_SECRETO`, ni con `CORREO_SMTP_URL` y sin `APP_URL`. Las empresas no se configuran en el servidor: se registran desde la página y quedan guardadas en la base.
+
+### Correo en producción
+
+El proveedor de internet del servidor bloquea la salida por los puertos de correo habituales (25, 465 y 587), así que no sirve un SMTP cualquiera, ni siquiera el del registrador del dominio. Los correos salen por [Resend](https://resend.com/), que acepta SMTP también en el puerto **2587**, y ese sí sale. No hizo falta cambiar el código: es el mismo `nodemailer` de siempre con otra `CORREO_SMTP_URL`.
+
+| Pieza | Cómo está |
+|---|---|
+| Dominio remitente | `madebyjohan.xyz`, verificado en Resend |
+| Registros DNS | En Cloudflare, que maneja el DNS del dominio: TXT `resend._domainkey` (DKIM), CNAME `send` y `rsend` (SPF, en «DNS only», sin proxy) y TXT `_dmarc` con `v=DMARC1; p=none;` |
+| API key | Solo con permiso de envío. Va dentro de `CORREO_SMTP_URL`, en el `.env` del servidor, nunca en el repositorio |
+| Puerto | `2587` con `smtp://`: la conexión empieza en texto y pasa a TLS con STARTTLS |
+
+`CORREO_SMTP_URL` y `CORREO_REMITENTE` van siempre juntas: con una sola, el backend no arranca. Para cambiar la clave basta editar el `.env` y recrear el contenedor con `docker compose up -d api`. Cada envío, con su estado de entrega, se ve en la sección *Emails* de Resend.
 
 ---
 
@@ -624,7 +638,7 @@ Cada valor del rol puede explicarse: de dónde salió, con qué fórmula y con q
 
 | Concepto | Cómo funciona |
 |---|---|
-| Correos | Salen por SMTP (`nodemailer`), que ofrecen todos los proveedores: no hay uno obligatorio. Sin `CORREO_SMTP_URL`, el mensaje se escribe en la consola del servidor, útil para trabajar en local |
+| Correos | Salen por SMTP (`nodemailer`), que ofrecen todos los proveedores: no hay uno obligatorio. En producción se usa Resend por el puerto 2587 (ver Despliegue). Sin `CORREO_SMTP_URL`, el mensaje se escribe en la consola del servidor, útil para trabajar en local |
 | Enlaces | Un token aleatorio de 256 bits en la dirección. La base guarda solo su hash (SHA-256), así que quien lea la tabla `tokens_usuario` no puede usarlos. Cada token sirve una vez; pedir otro anula el anterior |
 | Vigencia | Recuperar la contraseña: 1 hora. Verificar el correo: 48 horas |
 | Recuperar | Pantalla `/recuperar` pide el correo; `/restablecer?token=…` elige la contraseña nueva. Quien recibe el correo es dueño del buzón, así que su correo también queda verificado. La auditoría registra `usuario.clave_restablecida` |
