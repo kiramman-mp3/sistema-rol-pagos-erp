@@ -6,7 +6,7 @@ import { ErrorApi } from "./validaciones.ts";
 
 /** Tablas con `cuenta_id` propio, en el orden en que salen en la exportación. */
 const TABLAS_DE_LA_CUENTA = [
-  "regimenes", "parametros_anuales", "escala_salarial", "puestos", "empleados", "prestamos_iess", "roles_cabecera", "audit_logs",
+  "regimenes", "parametros_anuales", "escala_salarial", "puestos", "empleados", "prestamos_iess", "vacaciones_gozadas", "liquidaciones", "roles_cabecera", "audit_logs",
 ] as const;
 
 /** Un campo de texto que guarda JSON sale ya como objeto, para que el archivo se lea. */

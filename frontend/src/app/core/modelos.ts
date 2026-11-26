@@ -402,3 +402,100 @@ export interface Prestamo {
 
 /** Lo que se envía al registrar un préstamo. */
 export type DatosPrestamo = Pick<Prestamo, 'empleadoId' | 'tipo' | 'cuota' | 'cuotas' | 'primerAnio' | 'primerMes' | 'observacion'>;
+
+/** Cuántos días de vacaciones lleva devengados, gozados y le quedan a un empleado. */
+export interface SaldoVacaciones {
+  empleadoId: number;
+  nombres: string;
+  cedula: string;
+  fechaIngreso: string;
+  /** Días de vacaciones al año del régimen que se le aplica */
+  diasPorAnio: number;
+  devengados: number;
+  gozados: number;
+  /** Puede ser negativo: tomó más de lo devengado */
+  saldo: number;
+}
+
+/** Un periodo de vacaciones gozadas. */
+export interface PeriodoVacaciones {
+  id: number;
+  empleadoId: number;
+  nombres: string;
+  cedula: string;
+  desde: string;
+  hasta: string;
+  /** Días calendario, con el primero y el último incluidos */
+  dias: number;
+  observacion: string;
+}
+
+/** Lo que se envía al registrar un periodo de vacaciones. */
+export type DatosVacaciones = Pick<PeriodoVacaciones, 'empleadoId' | 'desde' | 'hasta' | 'observacion'>;
+
+export type CausaSalida =
+  | 'renuncia' | 'acuerdo' | 'desahucio' | 'despido_intempestivo'
+  | 'visto_bueno_empleador' | 'visto_bueno_trabajador' | 'fin_contrato';
+
+/** Define el periodo del décimo cuarto: Sierra y Amazonía de agosto a julio, Costa y Galápagos de marzo a febrero. */
+export type RegionDecimo = 'sierra' | 'costa';
+
+/** Un renglón de la liquidación, con su fórmula y los números del empleado. */
+export interface RubroLiquidacion {
+  clave: 'decimoTercero' | 'decimoCuarto' | 'vacaciones' | 'bonificacionDesahucio' | 'indemnizacion';
+  concepto: string;
+  formula: string;
+  detalle: string;
+  valor: number;
+  fuente?: string;
+}
+
+/** Una liquidación calculada, todavía sin registrar. */
+export interface VistaLiquidacion {
+  empleadoId: number;
+  nombres: string;
+  cedula: string;
+  fechaIngreso: string;
+  fechaSalida: string;
+  causa: CausaSalida;
+  causaEtiqueta: string;
+  region: RegionDecimo;
+  regimenAplicado: string;
+  sueldoBase: number;
+  aniosServicio: number;
+  diasServicio: number;
+  rubros: RubroLiquidacion[];
+  total: number;
+  /** Cuotas de préstamos del IESS que quedaban: se informan, no se descuentan */
+  prestamosPendientes: { cuotas: number; valor: number };
+  avisos: string[];
+}
+
+/** Una liquidación registrada. `empleadoId` es null si luego se eliminó al empleado. */
+export interface Liquidacion {
+  id: number;
+  empleadoId: number | null;
+  cedula: string;
+  nombres: string;
+  cargo: string;
+  regimenAplicado: string;
+  sueldoBase: number;
+  fechaIngreso: string;
+  fechaSalida: string;
+  causa: CausaSalida;
+  causaEtiqueta: string;
+  region: RegionDecimo;
+  aniosServicio: number;
+  total: number;
+  rubros: RubroLiquidacion[];
+  prestamosCuotas: number;
+  prestamosValor: number;
+}
+
+/** Lo que se envía para calcular o registrar una liquidación. */
+export interface DatosLiquidacion {
+  empleadoId: number;
+  fechaSalida: string;
+  causa: CausaSalida;
+  region: RegionDecimo;
+}

@@ -3,11 +3,15 @@ import { Injectable, computed, inject } from '@angular/core';
 
 import type {
   DatosEmpleado,
+  DatosLiquidacion,
   DatosPrestamo,
+  DatosVacaciones,
   Empleado,
   EntradaSimulacion,
+  Liquidacion,
   Grado,
   Parametros,
+  PeriodoVacaciones,
   Prestamo,
   DatosCuenta,
   Puesto,
@@ -15,6 +19,7 @@ import type {
   Regimen,
   RevisionRol,
   RolCabecera,
+  VistaLiquidacion,
   UsuarioCuenta,
   ResultadoSimulacion,
   TramoIr,
@@ -77,6 +82,23 @@ export class Api {
   }
   eliminarPrestamo(id: number) {
     return this.http.delete<void>(`/api/prestamos/${id}`);
+  }
+
+  registrarVacaciones(datos: DatosVacaciones) {
+    return this.http.post<PeriodoVacaciones & { avisos: string[] }>('/api/vacaciones', datos);
+  }
+  eliminarVacaciones(id: number) {
+    return this.http.delete<void>(`/api/vacaciones/${id}`);
+  }
+
+  calcularLiquidacion(datos: DatosLiquidacion) {
+    return this.http.post<VistaLiquidacion>('/api/liquidaciones/calcular', datos);
+  }
+  registrarLiquidacion(datos: DatosLiquidacion) {
+    return this.http.post<Liquidacion & { avisos: string[] }>('/api/liquidaciones', datos);
+  }
+  eliminarLiquidacion(id: number) {
+    return this.http.delete<void>(`/api/liquidaciones/${id}`);
   }
 
   generarRol(anio: number, mes: number, novedades: NovedadEnviada[]) {

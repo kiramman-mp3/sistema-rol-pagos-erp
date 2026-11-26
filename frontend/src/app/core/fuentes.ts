@@ -66,8 +66,8 @@ export const GRUPOS_FUENTES: GrupoFuentes[] = [
       {
         titulo: 'Ministerio del Trabajo: Código del Trabajo (PDF)',
         url: 'https://www.trabajo.gob.ec/wp-content/uploads/downloads/2024/01/CODIGO_DEL_TRABAJO.pdf',
-        uso: 'Confirmación del art. 49 (jornada nocturna, de 19h00 a 06h00, con 25 % de recargo).',
-        leida: false,
+        uso: 'Texto oficial (última reforma: R.O. 309-S, 12-V-2023). Confirma el art. 49 (jornada nocturna, de 19h00 a 06h00, con 25 % de recargo) y, para la liquidación, los arts. 71, 113, 169, 184, 185 y 188.',
+        leida: true,
       },
     ],
   },
@@ -435,6 +435,56 @@ export const GRUPOS_FUENTES: GrupoFuentes[] = [
         url: 'https://www.contapp.ec/blogs/planilla-iess-ecuador',
         uso: 'Apareció al buscar el formato de la planilla; no se abrió.',
         leida: false,
+      },
+    ],
+  },
+  {
+    id: 'liquidacion',
+    titulo: 'Liquidación por salida (por confirmar)',
+    descripcion:
+      'Bonificación por desahucio, indemnización por despido, décimos proporcionales y vacaciones no gozadas. El texto del Código del Trabajo está confirmado en la copia oficial del Ministerio (ver arriba); queda por confirmar cómo se aplica la bonificación a la renuncia (las sentencias y la demanda siguen abiertas) y la fracción de año del art. 185, que el artículo no menciona.',
+    fuentes: [
+      {
+        titulo: 'Ecuador Legal Online: el desahucio',
+        url: 'https://www.ecuadorlegalonline.com/laboral/el-desahucio',
+        uso: 'Cita completo el art. 185: el 25 % de la última remuneración por año de servicio, también por acuerdo de las partes.',
+        leida: true,
+      },
+      {
+        titulo: 'Derecho Ecuador: despido intempestivo',
+        url: 'https://www.derechoecuador.com/despido-intempestivo',
+        uso: 'Resume el art. 188: tres remuneraciones hasta tres años, una por año desde ahí, tope de 25 y la fracción de año como año completo.',
+        leida: true,
+      },
+      {
+        titulo: 'Hacecuentas: fin de la relación laboral',
+        url: 'https://hacecuentas.com/ec/trabajo/liquidacion-y-despido',
+        uso: 'Vacaciones no gozadas a un treintavo de la remuneración por día; el visto bueno del empleador paga solo los proporcionales.',
+        leida: true,
+      },
+      {
+        titulo: 'NMS Law: bonificación por desahucio en el retiro voluntario',
+        url: 'https://nmslaw.com.ec/blog/2025/02/03/corte-nacional-bonificacion-desahucio-retiro-voluntario-ecuador/',
+        uso: 'Resolución 03-2025 de la Corte Nacional: el retiro voluntario no da bonificación por desahucio.',
+        leida: true,
+      },
+      {
+        titulo: 'Primicias: la resolución del desahucio por retiro voluntario solo aplica al sector público',
+        url: 'https://primicias.ec/economia/resolucion-pago-desahucio-retiro-voluntario-sector-publico-89686',
+        uso: 'Una jueza de la Corte Nacional dice que en el sector privado la renuncia aceptada sí da desahucio.',
+        leida: true,
+      },
+      {
+        titulo: 'Primicias: demanda de inconstitucionalidad contra la resolución del desahucio',
+        url: 'https://primicias.ec/economia/ministra-trabajo-demanda-inconstitucionalidad-corte-desahucio-93097',
+        uso: 'La demanda se presentó en abril de 2025; no se encontró cómo terminó.',
+        leida: true,
+      },
+      {
+        titulo: 'Vistazo: qué pasa con el décimo si renuncias',
+        url: 'https://www.vistazo.com/2026-02-25-pasa-decimo-renuncias-debes-saber-antes-dejar-trabajo-OG10700187',
+        uso: 'Fechas de pago del décimo cuarto por región; coincide con el art. 113 del Código (Costa e Insular, Sierra y Amazónica).',
+        leida: true,
       },
     ],
   },
