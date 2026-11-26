@@ -282,16 +282,13 @@ describe("simulación según el régimen", () => {
 });
 
 describe("notas de la LOSEP", () => {
-  it("registran el aporte IESS confirmado y dejan por confirmar solo el recargo nocturno", async () => {
+  it("conservan el aporte IESS de la LOSEP y ya no traen las notas de la investigación", async () => {
     const api = await iniciar();
     try {
       const losep = (await api.get("/api/regimenes")).json.find((r: { codigo: string }) => r.codigo === "LOSEP");
       assert.equal(losep.iessPersonal, 0.1145);
       assert.equal(losep.iessPatronal, 0.0915);
-      assert.equal(losep.verificado, false);
-      assert.match(losep.notas, /Aporte IESS confirmado en el cuadro "Tasas de aportación" del IESS/);
-      assert.match(losep.notas, /Por confirmar: el recargo nocturno/);
-      assert.doesNotMatch(losep.notas, /fuentes secundarias/);
+      assert.equal(losep.notas, "");
     } finally {
       await api.cerrar();
     }

@@ -9,11 +9,6 @@ export const routes: Routes = [
     loadComponent: () => import('./landing/landing').then((m) => m.Landing),
   },
   {
-    path: 'informacion',
-    title: 'Información | Rol de pagos Ecuador',
-    loadComponent: () => import('./informacion/informacion').then((m) => m.Informacion),
-  },
-  {
     path: 'entrar',
     title: 'Ingresar | Rol de pagos Ecuador',
     loadComponent: () => import('./entrar/entrar').then((m) => m.Entrar),

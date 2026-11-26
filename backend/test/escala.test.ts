@@ -24,7 +24,7 @@ describe("API de escala salarial", () => {
       assert.equal(escala[0].grado, 1);
       assert.equal(escala[0].rmu, 527);
       assert.equal(escala[21].rmu, 4500);
-      assert.ok(escala.every((g: { fuente: string }) => g.fuente.includes("por confirmar")));
+      assert.ok(escala.every((g: { fuente: string }) => g.fuente === "Escala de ejemplo"));
     }));
 
   it("filtra por régimen", () =>
