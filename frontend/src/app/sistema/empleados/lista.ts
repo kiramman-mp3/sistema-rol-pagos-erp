@@ -7,11 +7,12 @@ import { Api, ParametrosLey, valorSeguro } from '../../core/api';
 import { Avisos } from '../../core/avisos';
 import { Sesion } from '../../core/sesion';
 import { DineroPipe } from '../../core/dinero.pipe';
+import { AvisoGalo } from '../../marca/aviso-galo';
 import type { Empleado } from '../../core/modelos';
 
 @Component({
   selector: 'app-lista-empleados',
-  imports: [RouterLink, DineroPipe],
+  imports: [AvisoGalo, RouterLink, DineroPipe],
   styles: `
     .persona > span:last-child { min-width: 9.5rem; }
     @media (max-width: 720px) { .ocultar-movil { display: none; } }
@@ -119,15 +120,19 @@ import type { Empleado } from '../../core/modelos';
               <tr>
                 <td colspan="8" class="tabla-vacia">
                   @if (empleados.isLoading()) {
-                    Cargando empleados…
+                    <app-aviso-galo estado="calculando">Cargando empleados…</app-aviso-galo>
                   } @else if (empleados.error()) {
-                    No se pudo cargar la lista. Revisa que el servidor esté encendido y
-                    <button class="boton-texto" type="button" (click)="empleados.reload()">vuelve a intentar</button>.
+                    <app-aviso-galo estado="no-cuadra">
+                      No se pudo cargar la lista. Revisa que el servidor esté encendido y
+                      <button class="boton-texto" type="button" (click)="empleados.reload()">vuelve a intentar</button>.
+                    </app-aviso-galo>
                   } @else if (lista().length) {
                     Nadie coincide con esa búsqueda.
                     <button class="boton-texto" type="button" (click)="limpiarFiltros()">Ver a todos</button>
                   } @else {
-                    Todavía no hay empleados. Agrega el primero o carga los datos de ejemplo para probar el rol.
+                    <app-aviso-galo>
+                      Todavía no hay empleados. Agrega el primero o carga los datos de ejemplo para probar el rol.
+                    </app-aviso-galo>
                   }
                 </td>
               </tr>
