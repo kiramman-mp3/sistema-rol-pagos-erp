@@ -7,7 +7,7 @@
  *       agrega un usuario a una cuenta que ya existe (por ejemplo «Empresa anterior», la que
  *       recibió los datos de antes de que hubiera cuentas y no tiene a nadie que entre)
  *
- * Con DATABASE_URL en el entorno usa la base de Supabase; sin ella, la de PGlite en backend/data.
+ * Con DATABASE_URL en el entorno usa esa base PostgreSQL; sin ella, la de PGlite en backend/data.
  * Una empresa nueva se registra desde la página, no con este script.
  */
 import { fileURLToPath } from "node:url";

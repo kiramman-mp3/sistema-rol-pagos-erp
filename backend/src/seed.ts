@@ -8,9 +8,9 @@
  *       llena la cuenta de un correo que ya existe, si todavía no tiene empleados ni roles
  *   npm --prefix backend run seed -- demo@empresa.com --reiniciar
  *       antes borra los empleados, roles y novedades de esa cuenta y empieza de cero
- *       (contra Supabase pide además --confirmo-produccion). Las demás cuentas no se tocan.
+ *       (contra un servidor Postgres pide además --confirmo-produccion). Las demás cuentas no se tocan.
  *
- * Con DATABASE_URL en el entorno carga la base de Supabase; sin ella, la de PGlite en backend/data.
+ * Con DATABASE_URL en el entorno carga esa base PostgreSQL; sin ella, la de PGlite en backend/data.
  */
 import { fileURLToPath } from "node:url";
 
@@ -34,7 +34,7 @@ const salir = (mensaje: string): never => {
 
 if (!email) salir("Indica el correo de la cuenta: seed -- <correo> [--clave <contraseña>] [--reiniciar]");
 
-// Contra un servidor Postgres (Supabase) --reiniciar borra datos reales: exige una confirmación explícita.
+// Contra un servidor Postgres --reiniciar borra datos reales: exige una confirmación explícita.
 if (reiniciar && esBaseRemota(destino) && !argumentos.includes("--confirmo-produccion")) {
   salir(
     `--reiniciar borraría los empleados, roles y novedades de la cuenta de ${email} en ${descripcionDeDestino(destino)}.\n` +
